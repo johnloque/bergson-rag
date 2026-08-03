@@ -12,7 +12,7 @@ venv/
 .env
 .env.*
 
-# Données volumineuses (corpus brut, index, poids de modèles)
+# Large data (raw corpus, indexes, model weights)
 data/raw/*
 !data/raw/.gitkeep
 data/processed/*
@@ -23,7 +23,7 @@ models_cache/
 # Notebooks
 .ipynb_checkpoints/
 
-# OS / éditeurs
+# OS / editors
 .DS_Store
 .vscode/
 .idea/

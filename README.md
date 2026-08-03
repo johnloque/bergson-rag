@@ -1,23 +1,17 @@
-# bergson-rag
+# Bergson-RAG
 
-Bergson-RAG is a local, French-language chatbot built on the complete
-works of philosopher Henri Bergson. Its purpose is to help users
-understand Bergson's thought on any specific notion he addressed.
+Bergson-RAG is a local, French-language chatbot built on the complete works of philosopher Henri Bergson, answering researchers' questions on Bergson's thought with sourced, concise responses.
 
-Hybrid retrieval (BM25 + dense + neighborhood search), reranking, and
-anti-hallucination guardrails with systematic source citation.
-
-Data scientist / ML engineer NLP portfolio project.
+Features : hybrid retrieval (BM25 + dense + neighborhood search), reranking, and anti-hallucination guardrails with systematic source citation.
 
 ## Status
 
-🚧 In development — Sprint 0 (scoping). See [`docs/ROADMAP.md`](docs/ROADMAP.md)
+🚧 In development — Sprint 0. See [`docs/ROADMAP.md`](docs/ROADMAP.md)
 for architecture details, evaluation methodology, and sprint breakdown.
 
 ## Stack
 
-Python · Qdrant (dense + sparse) · BGE-M3 · FastAPI · Docker Compose ·
-Kubernetes (optional deployment, documented) · MCP (exposure layer)
+Python · Qdrant (dense + sparse) · BGE-M3 · FastAPI · Docker Compose / Kubernetes · MCP (exposure layer)
 
 ## Repo structure
 

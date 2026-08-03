@@ -50,10 +50,7 @@ for a recruiter browsing the git history.
 
 - One PR = one issue = one topic, deliberately small and focused.
 - PR title in Conventional Commits format.
-- Description: what/why, linked issue (`Closes #12`), and — ML-specific —
-  **before/after metrics** whenever the PR touches retrieval, chunking, or
-  generation (recall@k, RAGAS faithfulness, etc.). A PR that changes
-  pipeline behavior without supporting numbers is not mergeable.
+- Description: what/why (all in one section).
 - Self-review before merge (checklist below); Claude Code can be used for
   automated diff review, worth mentioning as a practice in the portfolio
   README.

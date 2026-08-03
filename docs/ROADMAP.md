@@ -1,15 +1,5 @@
 # Chatbot RAG — Complete works of Henri Bergson
 
-Data scientist / ML engineer NLP portfolio project. Local RAG chatbot
-answering researchers' questions on Bergson's thought with sourced,
-concise responses, built from an XML corpus of the 8 major works
-(paragraph and word+lemma+POS granularity).
-
-## Status
-
-🚧 In development — Sprint 0 (scoping). Repo scaffold and corpus access
-in place; gold dataset and XML audit in progress.
-
 ## Validated architecture decisions
 
 - **Source data**: two aligned XML granularities, both kept — paragraph
@@ -51,7 +41,7 @@ distinct evaluation regimes:
   passages? does it flag the absence of consensus?), not the correctness
   of an interpretation.
 
-Inspired by HistoRAG (Kim-Baumann & Hiltmann, 2026) — a RAG architecture
+Inspired by HistoRAG ([Kim-Baumann & Hiltmann, 2026](https://arxiv.org/abs/2606.18103)) — a RAG architecture
 designed for history, adapted here to philosophy. Documented differences:
 LLM-judge rubric criteria to be defined specifically for Bergson (no
 published standard for philosophy to date); no temporal windowing (the

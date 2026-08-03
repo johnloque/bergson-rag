@@ -1,22 +1,22 @@
-## Quoi
+## What
 
-<!-- Ce que fait cette PR, en une phrase -->
+<!-- What this PR does, in one sentence -->
 
-## Pourquoi
+## Why
 
-<!-- Le problème ou l'objectif du sprint que ça résout -->
+<!-- The problem or sprint objective it addresses -->
 
 Closes #
 
-## Métriques (si retrieval / chunking / génération impacté)
+## Metrics (if retrieval / chunking / generation is impacted)
 
-| Métrique | Avant | Après |
+| Metric | Before | After |
 |---|---|---|
 | recall@5 | | |
 | faithfulness | | |
 
 ## Checklist
 
-- [ ] Tests passent
-- [ ] Pas de secrets commités
-- [ ] `docs/ROADMAP.md` mis à jour si nécessaire
+- [ ] Tests pass
+- [ ] No secrets committed
+- [ ] `docs/ROADMAP.md` updated if needed

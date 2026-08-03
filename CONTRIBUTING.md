@@ -1,81 +1,78 @@
-# Conventions de développement
+# Development conventions
 
-Projet solo, mais workflow de PR maintenu volontairement pour la rigueur et
-la démonstration de pratique d'ingénierie (portfolio).
+Solo project, but a PR workflow is deliberately maintained for rigor and
+as a demonstration of engineering practice (portfolio).
 
-## Organisation Sprint → Issue → Branche → PR
+## Sprint → Issue → Branch → PR organization
 
-- Un **sprint** = un GitHub Milestone (`Sprint 0`, `Sprint 1`, ...),
-  correspondant au découpage documenté dans `docs/ROADMAP.md`.
-- Chaque objectif d'un sprint = une **Issue**, rattachée au Milestone.
-  Un sprint contient plusieurs issues (plusieurs features/objectifs).
-- Chaque issue se développe sur sa propre **branche**, jamais directement
-  sur `main`.
-- Chaque branche se ferme par une **Pull Request** vers `main`, même en
-  solo.
+- A **sprint** = a GitHub Milestone (`Sprint 0`, `Sprint 1`, ...),
+  matching the breakdown documented in `docs/ROADMAP.md`.
+- Each sprint objective = an **Issue**, attached to the Milestone.
+  A sprint contains several issues (several features/objectives).
+- Each issue is developed on its own **branch**, never directly on
+  `main`.
+- Each branch is closed by a **Pull Request** to `main`, even solo.
 
-Le sprint est donc une métadonnée de gestion de projet (Milestone), pas
-une information encodée dans le nom de branche — les branches restent
-nommées d'après la feature qu'elles portent, pas d'après le sprint, pour
-rester lisibles même si le découpage en sprints est réajusté en cours de
-route.
+The sprint is thus a project management metadatum (Milestone), not
+information encoded in the branch name — branches remain named after the
+feature they carry, not the sprint, so they stay readable even if the
+sprint breakdown is adjusted along the way.
 
-## Nommage des branches
+## Branch naming
 
-Convention : `<type>/<description-courte-en-kebab-case>`
+Convention: `<type>/<short-kebab-case-description>`
 
-Types utilisés :
-- `feat/` — nouvelle fonctionnalité (ex. `feat/hierarchical-chunking`)
-- `fix/` — correction de bug
-- `exp/` — expérimentation ML à comparer (ex. `exp/bge-m3-vs-e5-embeddings`)
-  — spécifique aux projets ML : une branche par variante testée, avec ses
-  métriques dans la PR, avant de décider ce qui devient la baseline
-- `docs/` — documentation uniquement
-- `chore/` — tooling, CI, dépendances
-- `refactor/` — sans changement de comportement
+Types used:
+- `feat/` — new feature (e.g. `feat/hierarchical-chunking`)
+- `fix/` — bug fix
+- `exp/` — ML experiment to compare (e.g. `exp/bge-m3-vs-e5-embeddings`)
+  — specific to ML projects: one branch per tested variant, with its
+  metrics in the PR, before deciding what becomes the baseline
+- `docs/` — documentation only
+- `chore/` — tooling, CI, dependencies
+- `refactor/` — no behavior change
 
 ## Commits
 
-Convention [Conventional Commits](https://www.conventionalcommits.org/) :
-`type(scope): description au présent`
+[Conventional Commits](https://www.conventionalcommits.org/) convention:
+`type(scope): description in the present tense`
 
 ```
-feat(chunking): ajoute le decoupage hierarchique parent-enfant
-fix(retrieval): corrige la fusion RRF quand un des deux index est vide
-docs(readme): met a jour le statut du sprint 1
+feat(chunking): add hierarchical parent-child splitting
+fix(retrieval): fix RRF fusion when one of the two indexes is empty
+docs(readme): update sprint 1 status
 ```
 
-Permet un changelog automatisable et un historique lisible — un vrai plus
-pour un recruteur qui parcourt l'historique git.
+Enables an automatable changelog and a readable history — a genuine plus
+for a recruiter browsing the git history.
 
-## Pull Requests
+## Pull requests
 
-- Une PR = une issue = un sujet, volontairement petite et focalisée.
-- Titre de PR au format Conventional Commits.
-- Description : quoi/pourquoi, issue liée (`Closes #12`), et — spécificité
-  ML — **métriques avant/après** dès que la PR touche au retrieval, au
-  chunking ou à la génération (recall@k, faithfulness RAGAS, etc.). Une PR
-  qui change le comportement du pipeline sans chiffre à l'appui n'est pas
-  mergeable.
-- Auto-review avant merge (checklist ci-dessous) ; possibilité d'utiliser
-  Claude Code pour une revue de diff automatisée, à mentionner comme
-  pratique dans le README du portfolio.
-- **Squash merge** vers `main` : un commit propre par feature dans
-  l'historique de `main`, quel que soit le nombre de commits intermédiaires
-  sur la branche.
-- `main` protégée : pas de push direct, PR obligatoire (à activer dans les
-  paramètres GitHub du repo).
+- One PR = one issue = one topic, deliberately small and focused.
+- PR title in Conventional Commits format.
+- Description: what/why, linked issue (`Closes #12`), and — ML-specific —
+  **before/after metrics** whenever the PR touches retrieval, chunking, or
+  generation (recall@k, RAGAS faithfulness, etc.). A PR that changes
+  pipeline behavior without supporting numbers is not mergeable.
+- Self-review before merge (checklist below); Claude Code can be used for
+  automated diff review, worth mentioning as a practice in the portfolio
+  README.
+- **Squash merge** into `main`: one clean commit per feature in `main`'s
+  history, regardless of how many intermediate commits sit on the branch.
+- `main` is protected: no direct push, PR required (to be enabled in the
+  repo's GitHub settings).
 
-## Checklist avant merge
+## Pre-merge checklist
 
-- [ ] Tests passent (dès que la CI est en place, Sprint 1+)
-- [ ] Si retrieval/génération impacté : métriques d'évaluation jointes à la PR
-- [ ] Pas de secrets/clés API commités
-- [ ] `docs/ROADMAP.md` mis à jour si la portée du sprint a changé
+- [ ] Tests pass (once CI is in place, Sprint 1+)
+- [ ] If retrieval/generation is impacted: evaluation metrics attached to
+      the PR
+- [ ] No secrets/API keys committed
+- [ ] `docs/ROADMAP.md` updated if sprint scope has changed
 
-## Tags de release
+## Release tags
 
-Un tag léger à la clôture de chaque sprint (`sprint-0-done`, puis semver
-`v0.1.0` à partir d'un premier pipeline end-to-end fonctionnel) — permet de
-retrouver facilement l'état du projet à chaque étape pour une démo en
-entretien.
+A lightweight tag at the close of each sprint (`sprint-0-done`, then
+semver `v0.1.0` once a first end-to-end pipeline is functional) — makes
+it easy to revisit the project's state at any stage for an interview
+demo.

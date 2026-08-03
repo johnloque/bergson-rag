@@ -1,33 +1,34 @@
 # bergson-rag
 
-Chatbot RAG local sur les œuvres complètes d'Henri Bergson — retrieval
-hybride (BM25 + dense + voisinage), reranking, et garde-fous
-anti-hallucination avec citation systématique des sources.
+Bergson-RAG is a local, French-language chatbot built on the complete
+works of philosopher Henri Bergson. Its purpose is to help users
+understand Bergson's thought on any specific notion he addressed.
 
-Projet de portfolio data scientist / ML engineer NLP.
+Hybrid retrieval (BM25 + dense + neighborhood search), reranking, and
+anti-hallucination guardrails with systematic source citation.
 
-## Statut
+Data scientist / ML engineer NLP portfolio project.
 
-🚧 En développement — Sprint 0 (cadrage). Voir [`docs/ROADMAP.md`](docs/ROADMAP.md)
-pour le détail de l'architecture, de la méthodologie d'évaluation, et du
-découpage en sprints.
+## Status
+
+🚧 In development — Sprint 0 (scoping). See [`docs/ROADMAP.md`](docs/ROADMAP.md)
+for architecture details, evaluation methodology, and sprint breakdown.
 
 ## Stack
 
 Python · Qdrant (dense + sparse) · BGE-M3 · FastAPI · Docker Compose ·
-Kubernetes (déploiement optionnel documenté) · MCP (couche d'exposition)
+Kubernetes (optional deployment, documented) · MCP (exposure layer)
 
-## Structure du repo
+## Repo structure
 
-Voir [`docs/ROADMAP.md`](docs/ROADMAP.md#structure-du-repo-cible).
+See [`docs/ROADMAP.md`](docs/ROADMAP.md#target-repo-structure).
 
-## Licence
+## License
 
-MIT — voir [`LICENSE`](LICENSE). Le corpus source (œuvres d'Henri Bergson,
-mort en 1941) est dans le domaine public en France.
+MIT — see [`LICENSE`](LICENSE). The source corpus (the works of Henri
+Bergson, who died in 1941) is in the public domain in France.
 
-## Contribuer
+## Contributing
 
-Ce dépôt suit un workflow de PR même en développement solo, à but de
-démonstration de pratique d'ingénierie. Voir
-[`CONTRIBUTING.md`](CONTRIBUTING.md).
+This repo follows a PR workflow even in solo development, as a
+demonstration of engineering practice. See [`CONTRIBUTING.md`](CONTRIBUTING.md).

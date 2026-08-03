@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Env / secrets
+.env
+.env.*
+
+# Données volumineuses (corpus brut, index, poids de modèles)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+*.qdrant/
+models_cache/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS / éditeurs
+.DS_Store
+.vscode/
+.idea/
+
+# Docker
+*.log

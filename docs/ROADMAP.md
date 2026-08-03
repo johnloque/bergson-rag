@@ -7,10 +7,15 @@ concise responses, built from an XML corpus of the 8 major works
 
 ## Status
 
-Sprint 0 — scoping and foundations. No application code yet.
+🚧 In development — Sprint 0 (scoping). Repo scaffold and corpus access
+in place; gold dataset and XML audit in progress.
 
 ## Validated architecture decisions
 
+- **Source data**: two aligned XML granularities, both kept — paragraph
+  level as the canonical text source (display, chunking, embedding,
+  citation), word+lemma+POS level as the lexical index source (BM25 on
+  lemmas, lemma-based lookup), joined by paragraph id.
 - **Chunking**: hierarchical (parent/child), leveraging the existing XML
   structure rather than a generic splitter.
 - **Retrieval**: hybrid BM25 (on lemmas) + dense (BGE-M3) + neighborhood
@@ -54,25 +59,124 @@ corpus is not a diachronic press corpus but the corpus of a single
 author — the relevant analogue would rather be windowing by work/period
 of Bergson's thought, to be evaluated).
 
-## Sprint 0 checklist
+## Sprint breakdown
 
-- [ ] Audit the XML schema (see `docs/xml_audit_checklist.md`)
-- [ ] Confirm copyright status (Bergson, died 1941 — public domain in
-      France since 2011; to be confirmed for any critical editions under
-      separate rights)
-- [ ] Build gold dataset v0 (`gold_dataset_template.csv`) — 50 to 100
-      annotated, stratified questions, **before** any retrieval code
-- [ ] Set up environment (poetry/uv), pre-commit, Docker Compose skeleton
-- [ ] Technical README detailing the repo structure
+Each sprint targets 1–2 weeks of part-time work and ends with a
+demonstrable deliverable. From Sprint 3 onward, each sprint closes with a
+measured metric (not just "it works") — the point being to demonstrate
+*how* each improvement was validated, not just that it happened.
+
+### Sprint 0 — Scoping and foundations
+
+- Finalize the data schema from the XML: which tags, which granularity
+  per use case (paragraph for retrieval, word/lemma/POS for lexical
+  indexing)
+- Confirm and document the corpus's copyright status
+- Build the evaluation gold dataset (50–100 annotated questions with
+  expected sources) — **before** any retrieval code is written, not after
+- Repo setup: project structure, environment, pre-commit, Docker Compose
+  skeleton, initial README
+- **Deliverable**: structured repo, corpus inventoried, gold dataset v0,
+  reproducible environment
+
+### Sprint 1 — Ingestion and chunking
+
+- Parse XML into structured Python objects (metadata: work, chapter,
+  section, position)
+- Implement hierarchical chunking (parent/child), aligning the paragraph
+  and word-level sources by paragraph id
+- Unit tests on chunking (no mid-argument cuts, consistent sizes)
+- **Deliverable**: tested ingestion pipeline, chunks stored (JSON/Parquet)
+  ready for indexing
+
+### Sprint 2 — Hybrid indexing
+
+- Qdrant setup locally (Docker), dense + sparse collections
+- Embedding generation (BGE-M3), BM25/sparse indexing from lemmas
+- Idempotent indexing script (safely rerunnable if the corpus changes)
+- **Deliverable**: populated vector store, working raw queries (no
+  reformulation, no reranking yet)
+
+### Sprint 3 — Hybrid retrieval + query reformulation
+
+- BM25/dense fusion (RRF or weighting)
+- Neighborhood search in source texts (retrieving the parent context
+  around a matched chunk)
+- Query reformulation/expansion module (multi-query, possibly HyDE)
+- Retrieval-only evaluation on the gold dataset (recall@k, MRR) — first
+  objective quality measurement
+- **Deliverable**: evaluated, versioned retrieval engine
+
+### Sprint 4 — Reranking and generation
+
+- Cross-encoder reranker integration
+- Prompt engineering for generation (synthesis + source citation)
+- LLM integration (local via Ollama, with an API fallback)
+- Preliminary end-to-end evaluation (RAGAS: faithfulness, answer
+  relevancy)
+- **Deliverable**: functional end-to-end RAG pipeline (CLI/notebook)
+
+### Sprint 5 — Anti-hallucination guardrails
+
+- Post-generation validation layer (verify every claim ties back to an
+  actually retrieved source passage)
+- Explicit handling of "no reliable answer in the corpus" instead of
+  forcing a response
+- Systematic citation formatting (work, section/page)
+- Iterate on the gold dataset with guardrails active, measure the
+  improvement
+- **Deliverable**: hardened pipeline, before/after metrics on the test
+  set
+
+### Sprint 6 — API and interface
+
+- FastAPI exposing the pipeline (retrieval, generation, health check
+  endpoints)
+- Streamlit/Gradio frontend displaying sources
+- Full dockerization, working end-to-end Docker Compose
+- Bootstrap script (`Makefile` with a `quickstart` target chaining
+  fetch-data → build-index → run) so the whole application can be
+  launched locally in one command — written only now, once every
+  component it chains together actually exists
+- **Deliverable**: usable end-to-end application, demoable locally
+
+### Sprint 7 — MCP layer
+
+- Expose key capabilities (hybrid search, exact-reference lookup) as MCP
+  tools
+- Test with an MCP client (Claude Desktop)
+- **Deliverable**: functional, documented MCP server
+
+### Sprint 8 — Kubernetes (optional extension)
+
+- Kubernetes manifests (Deployment, Service, StatefulSet+PVC for Qdrant,
+  ConfigMap/Secrets)
+- Local testing on kind/minikube
+- Architecture note justifying Compose vs. Kubernetes
+- **Deliverable**: working manifests + documented rationale
+
+### Sprint 9 — Portfolio polish
+
+- Complete README with architecture, justified technical choices, known
+  limitations
+- Evaluation results presented clearly (before/after tables/charts per
+  improvement)
+- Possibly a technical blog post detailing the challenges encountered
+  (Bergsonian terminology, argumentative chunking, etc.)
+- Demo deployed somewhere accessible (even in a limited form)
+- **Deliverable**: interview-ready project with a clear narrative of the
+  decisions made
 
 ## Target repo structure
 
 ```
 bergson-rag/
 ├── data/
-│   ├── raw/              # source XML (not versioned if large)
+│   ├── raw/              # source XML (gitignored, fetched via script)
 │   └── processed/        # chunks, index
 ├── docs/                 # audits, methodology notes
+├── scripts/
+│   └── fetch_corpus.sh   # sparse-checkout of the corpus repo
 ├── src/
 │   ├── ingestion/         # XML parsing, chunking
 │   ├── indexing/          # BM25, embeddings, Qdrant
@@ -84,5 +188,6 @@ bergson-rag/
 │   └── scripts/           # RAGAS, recall@k, etc.
 ├── k8s/                   # optional manifests (Sprint 8)
 ├── docker-compose.yml
+├── Makefile                # quickstart target (Sprint 6)
 └── pyproject.toml
 ```

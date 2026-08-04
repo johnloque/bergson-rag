@@ -20,7 +20,9 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md#target-repo-structure).
 ## License
 
 MIT — see [`LICENSE`](LICENSE). The source corpus (the works of Henri
-Bergson, who died in 1941) is in the public domain in France.
+Bergson, who died in January 1941) has been in the public domain in
+France since January 1, 2012, under the standard 70-years-post-mortem
+rule. This is not legal advice; independent verification is recommended before any commercial use.
 
 ## Contributing
 

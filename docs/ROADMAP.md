@@ -1,74 +1,79 @@
 # Chatbot RAG — Complete works of Henri Bergson
 
+## Scope decision
+
+Rationale, reached after an empirical check
+against real Bergson secondary literature: doctrinal/conceptual
+questions ("what is Bergson's theory of X") tend to be anchored in one
+canonical text and are well served by top-k retrieval + synthesis;
+recurring-image questions and questions about concepts whose meaning
+shifts across the corpus tend to be genuinely dispersed and are not
+reliably solved by this architecture, regardless of prompt design —
+documented multi-document aggregation and long-context reliability
+limits apply, not just a context-window-size problem. This class of
+question is the subject of a separate, complementary project (graph
+propagation over a paragraph graph and a lexicon graph), not of
+bergson-rag.
+
 ## Validated architecture decisions
 
 - **Source data**: two aligned XML granularities, both kept — paragraph
   level as the canonical text source (display, chunking, embedding,
   citation), word+lemma+POS level as the lexical index source (BM25 on
-  lemmas, lemma-based lookup), joined by paragraph id.
+  lemmas), joined by paragraph id.
 - **Chunking**: hierarchical (parent/child), leveraging the existing XML
-  structure rather than a generic splitter.
-- **Retrieval**: hybrid BM25 (on lemmas) + dense (BGE-M3) + neighborhood
-  search in the source text, fused via RRF. FastText embeddings trained
-  on the corpus are a candidate addition for query expansion and
-  vocabulary verification, to be validated as an `exp/` branch against
-  the vocabulary-drift subset of the gold dataset before adoption.
-- **Query reformulation**: multi-query / decomposition before retrieval,
-  to absorb the gap between contemporary vocabulary and Bergson's own
-  vocabulary (*vocabulary drift*).
+  structure. A separate positional neighborhood-window mechanism was
+  considered and dropped: the parent context already covers the
+  "explanatory passage 2–3 paragraphs away" case within the anchored
+  scope this project now targets.
+- **Retrieval**: hybrid BM25 (on lemmas) + dense (BGE-M3), fused via RRF.
+  Corpus-trained FastText query expansion was considered and dropped —
+  it targeted vocabulary drift on the kind of broad/exploratory question
+  now out of scope; a single LLM-based query reformulation covers
+  vocabulary drift well enough for anchored questions, without an
+  additional model to train, version, and evaluate.
+- **Query reformulation**: single-query reformulation (one LLM rewrite,
+  optionally with synonym enrichment). Multi-query decomposition was
+  planned for comparative/multi-hop questions and is dropped along with
+  that category.
 - **Scoring**: cross-encoder reranker (bge-reranker-v2-m3) as the
-  default, always-on relevance score. A separate, more expensive
-  LLM-as-judge relevance judgment (a short textual justification per
-  chunk) is available on demand only, not computed by default — reserved
-  for the UI's "explain" action. Reasoned about by rank rather than
-  absolute calibration when aggregated over the gold dataset; not needed
-  for the single-query, on-demand UI case, where the justification is
-  shown as-is.
-- **Generation**: the prompt is conditioned on observable properties of
-  the retrieved, reranked evidence (does it span one work or several,
-  does it converge or diverge) rather than on a question category label
-  — no such label exists in production. Question categories
-  (factual/definitional/comparative/contested) exist only in the gold
-  dataset, as a held-out field for stratified evaluation, the same way
-  the work/paragraph ground truth is held out from the system's input.
+  default, always-on relevance score. A separate, on-demand LLM relevance
+  judgment (`judge_chunks`) provides a short textual justification per
+  chunk, computed only when the user requests it. Kept deliberately: it
+  is what makes answer fidelity checkable by a non-specialist reviewer,
+  a central argument for staying on the Bergson corpus at all.
+- **Generation**: single synthesis mode over a small, bounded evidence
+  set, with mandatory citations. No evidence-conditioned branching by
+  question category — not needed once evidence sets are consistently
+  small by construction.
 - **Anti-hallucination guardrails**: post-generation validation layer +
   mandatory citations; generated syntheses are treated as interpretive
   proposals to verify, not as definitive answers.
-- **API decomposition** (Sprint 6): three independent endpoints rather
-  than one monolithic call —
+- **API decomposition**: three independent endpoints —
   - `retrieve(query)` — hybrid search + reranking, returns chunks
   - `generate_from_chunks(query, chunks)` — synthesis from a given,
     possibly user-curated, chunk selection
   - `judge_chunks(query, chunks)` — on-demand relevance judgment
-    (score + justification) per chunk, called only when the user
-    requests it
+    (score + justification) per chunk
 - **Infra**: Qdrant (dense + sparse), FastAPI, Docker Compose as the
-  reference setup, Kubernetes manifests as a documented option (no real
-  scaling need at this stage).
-- **MCP**: exposure layer (Sprint 9), deliberately a pure search tool —
-  returns chunks and metadata, no generation — mirroring the same
-  discovery/interpretation separation as the chatbot's own inspect step.
-  Two tools planned: hybrid search, exact-reference lookup (XPath
-  navigation + lemma search).
+  reference setup. Kubernetes is not built — a one-line note on the
+  natural scaling path suffices for this demo, not a dedicated sprint.
+- **MCP**: pure search tool (no generation), exposing hybrid search and
+  exact-reference lookup. Lowest priority of the remaining scope — the
+  first thing to cut if time runs short before target interview dates.
 
 ## Evaluation methodology
 
-The system does not aim to settle hermeneutic debates but to retrieve
-and faithfully restitute what the corpus says. The gold dataset is
-stratified by question type, with two distinct evaluation regimes:
+Outcome-based only, given the reduced scope: ground truth = one or more
+`(work, paragraph_id)` pairs (`ground_truth_type: single` or `multi`,
+where `multi` means any one of several valid passages suffices — no
+AND/OR sub-typing, judged not worth the added complexity at this
+project's scale). Metrics: recall@k, MRR, faithfulness, context
+precision/recall (RAGAS).
 
-- **Factual / definitional / comparative** (outcome-based): ground truth
-  = one or more `(work, paragraph_id)` pairs. Metrics: recall@k, MRR,
-  faithfulness, context precision/recall (RAGAS). Comparative items may
-  additionally be scored on a process-based criterion (does the answer
-  stay anchored to the cited passages rather than asserting an
-  unsupported linear evolution).
-- **Contested / interpretive** (process-based): no content ground truth.
-  Evaluates the system's behavior (does it cite several contrasting
-  passages, does it flag the absence of consensus), not the correctness
-  of an interpretation.
-
-Full annotation protocol: `docs/gold_dataset_protocol.md`.
+Full annotation protocol: `docs/gold_dataset_protocol.md` — pending the
+follow-up pass noted in "Status" above to drop the
+comparative/contested quotas.
 
 ## Sprint breakdown
 
@@ -89,15 +94,12 @@ Qdrant setup, dense + sparse collections, embedding generation, BM25
 indexing from lemmas.
 
 ### Sprint 3 — Hybrid retrieval + query reformulation
-RRF fusion, neighborhood search, multi-query reformulation. `exp/`
-branch evaluating FastText query expansion against the vocabulary-drift
-subset of the gold dataset. First retrieval-only evaluation (recall@k,
-MRR).
+RRF fusion, single-query LLM reformulation. First retrieval-only
+evaluation (recall@k, MRR).
 
 ### Sprint 4 — Reranking and generation
-Cross-encoder integration, evidence-conditioned prompt design (not
-category-conditioned), LLM integration (local + API fallback),
-preliminary end-to-end evaluation (RAGAS).
+Cross-encoder integration, single-mode prompt design, LLM integration
+(local + API fallback), preliminary end-to-end evaluation (RAGAS).
 
 ### Sprint 5 — Anti-hallucination guardrails
 Post-generation validation, explicit "no reliable answer" handling,
@@ -106,18 +108,16 @@ citation formatting, before/after metrics on the gold dataset.
 ### Sprint 6 — Backend API and persistence
 - Three-endpoint FastAPI (`retrieve` / `generate_from_chunks` /
   `judge_chunks`)
-- SQLite schema and persistence: questions, answers, curated chunk
-  selections, requested relevance judgments
-- API-level tests (no UI yet — exercised via pytest / curl / Postman)
+- API-level tests (no UI yet)
+- SQLite persistence as fast-follow, not a blocker for this sprint's
+  deliverable
 - **Deliverable**: fully functional, tested API, usable independently of
   any frontend
 
 ### Sprint 7 — Frontend
 - React (Vite) + Tailwind + TanStack Query, consuming the Sprint 6 API
-- Inspect → explain → curate → regenerate loop, with independent
-  per-chunk async state for on-demand relevance judgments
+- Inspect → explain → curate → regenerate loop
 - **Deliverable**: working UI against the real API, demoable locally
-  (frontend + API running side by side, not yet containerized together)
 
 ### Sprint 8 — Integration and bootstrap
 - Full dockerization (API, frontend, Qdrant) via Docker Compose
@@ -126,15 +126,13 @@ citation formatting, before/after metrics on the gold dataset.
 
 ### Sprint 9 — MCP layer
 Pure search tools (hybrid search, exact-reference lookup), tested with
-an MCP client.
+an MCP client. First to drop if time is constrained.
 
-### Sprint 10 — Kubernetes (optional extension)
-Manifests, local testing on kind/minikube, documented Compose vs. K8s
-rationale.
-
-### Sprint 11 — Portfolio polish
-Complete README, evaluation results presented clearly, technical blog
-post, accessible demo.
+### Sprint 10 — Portfolio polish
+Complete README, "Known limitations & scope" section finalized,
+evaluation results presented clearly, technical blog post, accessible
+demo, curated set of demo questions drawn from the gold dataset for live
+presentation.
 
 ## Target repo structure
 
@@ -156,7 +154,6 @@ bergson-rag/
 ├── eval/
 │   ├── gold_dataset.csv
 │   └── scripts/           # RAGAS, recall@k, etc.
-├── k8s/                   # optional manifests (Sprint 10)
 ├── docker-compose.yml
 ├── Makefile                # quickstart target (Sprint 8)
 └── pyproject.toml

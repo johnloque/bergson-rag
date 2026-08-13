@@ -26,14 +26,33 @@ synthesized, cited and explainable answer.
    selection only.
 
 This flow keeps source discovery and interpretation as two distinct,
-user-visible steps rather than one opaque pass — the user is never
-forced through a manual curation step to get a first answer, but always
-has the option to refine one, so the generation pipeline does not remain a black box. See `docs/ROADMAP.md` for the technical
-decisions behind each step.
+user-visible steps rather than one opaque pass. See `docs/ROADMAP.md`
+for the technical decisions behind each step.
+
+## Known limitations & scope
+
+This system is designed and evaluated for questions answerable from a
+small, boundable set of passages (factual and definitional questions).
+It deliberately does not attempt:
+
+- **Transversal/distributional questions** — e.g. tracing a recurring
+  image or a concept whose meaning shifts across the corpus. Verified
+  empirically (see `docs/ROADMAP.md`) rather than assumed: doctrinal
+  questions tend to be anchored in one canonical text; recurring-image
+  and evolving-term questions tend to be genuinely dispersed and are out
+  of reach for top-k retrieval + single-pass LLM synthesis, regardless
+  of prompt quality.
+- **Comparative and open-interpretive questions** (comparing concepts
+  across works, contested philosophical positions) — deferred to a
+  separate, complementary project using a different architecture
+  (graph-based propagation over the corpus).
+- **Exhaustive lexical/concordance analysis** — a mature, specialized
+  tool (TXM) already exists for this and is not being rebuilt here.
 
 ## Status
 
-🚧 In development — Sprint 0 (scoping). See [`docs/ROADMAP.md`](docs/ROADMAP.md) for architecture details, evaluation methodology, and sprint breakdown.
+🚧 In development — Sprint 0 (scoping). See [`docs/ROADMAP.md`](docs/ROADMAP.md)
+for architecture details, evaluation methodology, and sprint breakdown.
 
 ## Stack
 
@@ -41,18 +60,19 @@ decisions behind each step.
 - Qdrant — dense + sparse vector store, hybrid search backend
 - BGE-M3 — multilingual dense embeddings
 - BM25 (on lemmas) — sparse/lexical matching
-- FastText *(candidate, `exp/` branch)* — query expansion, vocabulary-drift mitigation
 
 **Reranking & generation**
 - bge-reranker-v2-m3 — default, always-on cross-encoder relevance score
-- LLM (local via Ollama, API fallback) — answer generation, and on-demand
-  per-chunk relevance judgments (`judge_chunks`)
+- LLM (local via Ollama, API fallback) — answer generation, single-query
+  reformulation, and on-demand per-chunk relevance judgments
+  (`judge_chunks`)
 
 **Backend & API**
 - FastAPI — three-endpoint API (`retrieve` / `generate_from_chunks` /
   `judge_chunks`)
-- SQLite — conversation history: questions, answers, curated chunk
-  selections, requested relevance judgments
+- SQLite — conversation history (questions, answers, curated chunk
+  selections, requested relevance judgments); fast-follow, not required
+  for the first working version
 
 **Frontend**
 - React (Vite) — inspect → explain → curate → regenerate flow
@@ -62,10 +82,12 @@ decisions behind each step.
 
 **Deployment**
 - Docker Compose — reference local setup
-- Kubernetes — optional, documented deployment path
+- Kubernetes — not implemented; would be the natural path to scale in
+  production, out of scope for this demo
 
 **Exposure layer**
-- MCP — pure search tool, no generation, usable from any MCP client
+- MCP — pure search tool, no generation; lowest priority, first to drop
+  if time is short
 
 ## Repo structure
 
@@ -76,7 +98,8 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md#target-repo-structure).
 MIT — see [`LICENSE`](LICENSE). The source corpus (the works of Henri
 Bergson, who died in January 1941) has been in the public domain in
 France since January 1, 2012, under the standard 70-years-post-mortem
-rule. This is not legal advice; independent verification is recommended before any commercial use.
+rule. This is not legal advice;
+independent verification is recommended before any commercial use.
 
 ## Contributing
 

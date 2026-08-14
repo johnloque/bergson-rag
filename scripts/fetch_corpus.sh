@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Fetches only the paragraph- and word-level XML sources from the
-# bergson-synoptique corpus repo, using a partial + sparse checkout so we
-# never download unrelated repo content or history.
+# Fetches only the paragraph-level XML source from the bergson-synoptique
+# corpus repo, using a partial + sparse checkout so we never download
+# unrelated repo content or history.
+#
+# Single source only: paragraph IDs are assigned at ingestion time, and
+# lemma/POS annotations are regenerated with spaCy + a French stemmer at
+# indexing time — tag/src is no longer a dependency of this project.
 #
 # Uses HTTPS (not SSH) so this script runs for anyone on a public repo,
 # without requiring the runner to have their own SSH key configured.
@@ -13,7 +17,7 @@ set -euo pipefail
 REPO_URL="https://github.com/johnloque/bergson-synoptique.git"
 BRANCH="master"
 TARGET_DIR="data/raw/corpus"
-SPARSE_PATHS=("raw/src" "tag/src")
+SPARSE_PATHS=("raw/src")
 
 if [ -d "${TARGET_DIR}/.git" ]; then
   echo "Corpus already present in ${TARGET_DIR}, updating..."

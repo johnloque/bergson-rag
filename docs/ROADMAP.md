@@ -17,10 +17,39 @@ bergson-rag.
 
 ## Validated architecture decisions
 
-- **Source data**: two aligned XML granularities, both kept — paragraph
-  level as the canonical text source (display, chunking, embedding,
-  citation), word+lemma+POS level as the lexical index source (BM25 on
-  lemmas), joined by paragraph id.
+- **Source data**: single source (`raw/src`, paragraph-level XML) rather
+  than two aligned sources. Paragraph IDs are assigned automatically at
+  ingestion time, making the corpus its own single source of truth for
+  paragraph identity — no cross-file alignment, no dependency on
+  `tag/src`'s existing numbering. Lemma and POS annotations are
+  regenerated at indexing time with a current spaCy model rather than
+  reused from the 5-year-old `tag/src` encoding. This also makes three
+  previously logged data-quality issues on `bergson-synoptique` (POS
+  `nan` values in 1919_ES, inconsistent apostrophes in 1907_EC, no
+  shared paragraph identifier between sources) non-blocking for this
+  project — they remain valid to fix on `bergson-synoptique` for other
+  uses (TXM, in particular), just no longer a dependency here.
+  A prior manual POS correction pass exists for the `possible`/`virtuel`
+  lemmas specifically (from earlier master's research) — too narrow in
+  scope to justify keeping the old encoding as this project's source of
+  truth, but preserved as an asset for the companion graph project's
+  validation case study.
+- **Text normalization for retrieval — two separate pipelines, not one**:
+  - Lemmatization (spaCy, current model, version-pinned in
+    `pyproject.toml`) — produces the canonical dictionary form used for
+    display, the MCP exact-lemma lookup tool, and the lexicon graph in
+    the companion project. Linguistically motivated, not a retrieval
+    optimization.
+  - Stemming (French Snowball / Savoy algorithm, via the
+    `snowballstemmer` package) — used specifically to build the BM25
+    sparse index. Rule-based suffix stripping, not a trained model:
+    more robust to period-specific (1889–1932) French than a
+    lemmatizer trained on contemporary text, and directly addresses the
+    morphological-variant conflation that a lemmatizer can miss.
+  - Whether stemming or spaCy lemmas produce better BM25 recall on this
+    specific corpus is not assumed — validated empirically via an `exp/`
+    branch in Sprint 2–3 against the gold dataset, same discipline as
+    other retrieval choices in this project.
 - **Chunking**: hierarchical (parent/child), leveraging the existing XML
   structure. A separate positional neighborhood-window mechanism was
   considered and dropped: the parent context already covers the
@@ -86,12 +115,20 @@ Data schema audit, copyright confirmation, gold dataset construction,
 dev environment setup.
 
 ### Sprint 1 — Ingestion and chunking
-Parse XML into structured objects, hierarchical chunking aligned across
-the two source granularities, unit tests on chunk boundaries.
+Parse `raw/src` XML into structured objects, auto-assign paragraph IDs
+at ingestion (single source of truth, no cross-file alignment needed),
+hierarchical chunking. Unit tests on chunk boundaries and on paragraph
+ID assignment stability (re-running ingestion on an unchanged corpus
+must not renumber paragraphs).
 
 ### Sprint 2 — Hybrid indexing
-Qdrant setup, dense + sparse collections, embedding generation, BM25
-indexing from lemmas.
+Qdrant setup, dense + sparse collections, embedding generation (BGE-M3).
+Text normalization: spaCy lemma+POS generation (canonical form, used
+outside the BM25 index) and French Snowball stemming (used for the BM25
+index specifically) as two separate outputs of the same indexing step.
+`exp/` branch: BM25-on-stems vs BM25-on-spaCy-lemmas, compared on
+recall@k against the gold dataset, to settle which normalization the
+sparse index actually uses going forward.
 
 ### Sprint 3 — Hybrid retrieval + query reformulation
 RRF fusion, single-query LLM reformulation. First retrieval-only

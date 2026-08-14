@@ -5,7 +5,14 @@ description = "Local RAG chatbot on the complete works of Henri Bergson"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
-dependencies = []
+dependencies = [
+    "fastembed==0.8.0",
+    "fr-core-news-lg==3.8.0",
+    "qdrant-client==1.19.0",
+    "sentence-transformers==5.7.0",
+    "snowballstemmer==3.1.1",
+    "spacy==3.8.15",
+]
 
 [dependency-groups]
 dev = [
@@ -26,3 +33,13 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.uv.sources]
+fr-core-news-lg = { url = "https://github.com/explosion/spacy-models/releases/download/fr_core_news_lg-3.8.0/fr_core_news_lg-3.8.0-py3-none-any.whl" }
+
+# Model versions not installable as Python packages, pinned here as the
+# single source of truth (read at runtime by src/indexing/embeddings.py).
+[tool.bergson.model-versions]
+# BAAI/bge-m3 dense embeddings — HF commit, since the model itself has no
+# package version.
+bge_m3_revision = "5617a9f61b028005a4858fdac845db406aefb181"

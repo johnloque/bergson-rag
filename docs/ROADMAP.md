@@ -115,12 +115,20 @@ Data schema audit, copyright confirmation, gold dataset construction,
 dev environment setup.
 
 ### Sprint 1 — Ingestion and chunking
-Parse XML into structured objects, hierarchical chunking aligned across
-the two source granularities, unit tests on chunk boundaries.
+Parse `raw/src` XML into structured objects, auto-assign paragraph IDs
+at ingestion (single source of truth, no cross-file alignment needed),
+hierarchical chunking. Unit tests on chunk boundaries and on paragraph
+ID assignment stability (re-running ingestion on an unchanged corpus
+must not renumber paragraphs).
 
 ### Sprint 2 — Hybrid indexing
-Qdrant setup, dense + sparse collections, embedding generation, BM25
-indexing from lemmas.
+Qdrant setup, dense + sparse collections, embedding generation (BGE-M3).
+Text normalization: spaCy lemma+POS generation (canonical form, used
+outside the BM25 index) and French Snowball stemming (used for the BM25
+index specifically) as two separate outputs of the same indexing step.
+`exp/` branch: BM25-on-stems vs BM25-on-spaCy-lemmas, compared on
+recall@k against the gold dataset, to settle which normalization the
+sparse index actually uses going forward.
 
 ### Sprint 3 — Hybrid retrieval + query reformulation
 RRF fusion, single-query LLM reformulation. First retrieval-only

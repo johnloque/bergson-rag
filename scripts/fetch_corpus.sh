@@ -22,6 +22,7 @@ SPARSE_PATHS=("raw/src")
 if [ -d "${TARGET_DIR}/.git" ]; then
   echo "Corpus already present in ${TARGET_DIR}, updating..."
   git -C "${TARGET_DIR}" fetch --depth 1 origin "${BRANCH}"
+  git -C "${TARGET_DIR}" sparse-checkout set "${SPARSE_PATHS[@]}"
   git -C "${TARGET_DIR}" checkout "${BRANCH}"
   git -C "${TARGET_DIR}" reset --hard "origin/${BRANCH}"
   echo "Corpus updated."

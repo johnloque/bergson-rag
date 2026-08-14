@@ -63,7 +63,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_query(method: str, text: str) -> tuple[models.types.Query, str]:
+def build_query(method: str, text: str) -> tuple[models.QueryInterface, str]:
     if method == "dense":
         vector = DenseEmbedder().embed([text])[0]
         return vector, DENSE_VECTOR_NAME

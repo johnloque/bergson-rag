@@ -92,14 +92,18 @@ def build_report(data: dict) -> str:
     # ---- 2. Corpus size ----
     a("## 2. Corpus size")
     a("")
-    a("| Work | Paragraphs | Words |")
-    a("|---|---|---|")
+    a("| Work | Paragraphs | Words | Words / paragraph |")
+    a("|---|---|---|---|")
     for w in works:
-        a(f"| {w['work_id']} | {w['raw_paragraph_count']} | {w['raw_word_count']} |")
-    a(
-        f"| **Total** | {sum(w['raw_paragraph_count'] for w in works)} "
-        f"| {sum(w['raw_word_count'] for w in works)} |"
-    )
+        ratio = w["raw_word_count"] / w["raw_paragraph_count"] if w["raw_paragraph_count"] else 0
+        a(
+            f"| {w['work_id']} | {w['raw_paragraph_count']} | {w['raw_word_count']} "
+            f"| {ratio:.1f} |"
+        )
+    total_paragraphs = sum(w["raw_paragraph_count"] for w in works)
+    total_words = sum(w["raw_word_count"] for w in works)
+    total_ratio = total_words / total_paragraphs if total_paragraphs else 0
+    a(f"| **Total** | {total_paragraphs} " f"| {total_words} | {total_ratio:.1f} |")
     a("")
 
     # ---- 3. Encoding ----

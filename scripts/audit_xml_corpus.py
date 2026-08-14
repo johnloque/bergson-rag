@@ -57,6 +57,7 @@ class WorkAudit:
 
     # 2. Corpus size
     raw_paragraph_count: int = 0
+    raw_word_count: int = 0
 
     # 3. Encoding
     straight_apostrophes: int = 0
@@ -147,10 +148,11 @@ def audit_work(meta_row: dict, raw_id: str) -> WorkAudit:
     w.max_div_depth = max_depth
 
     # 2. Corpus size
+    raw_text = "".join(raw_root.itertext())
     w.raw_paragraph_count = len(raw_root.findall(f".//{qn('p')}"))
+    w.raw_word_count = len(raw_text.split())
 
     # 3. Encoding
-    raw_text = "".join(raw_root.itertext())
     w.straight_apostrophes = raw_text.count("'")
     w.curly_apostrophes = raw_text.count("’")
     ligatures = Counter()

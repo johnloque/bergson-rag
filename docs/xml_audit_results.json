@@ -5,7 +5,6 @@
       "title": "Essai sur les données immédiates de la conscience",
       "first_pub_date": "1888",
       "raw_path": "data/raw/corpus/raw/src/1888_EDIC.xml",
-      "tag_path": "data/raw/corpus/tag/src/1888_EDIC_w.xml",
       "metadata_pages": "182",
       "raw_tags": {
         "TEI": 1,
@@ -36,106 +35,11 @@
         "div": 3,
         "back": 1
       },
-      "tag_tags": {
-        "TEI": 1,
-        "teiHeader": 1,
-        "fileDesc": 1,
-        "titleStmt": 1,
-        "title": 1,
-        "author": 1,
-        "persName": 2,
-        "forename": 2,
-        "surname": 2,
-        "respStmt": 1,
-        "resp": 1,
-        "publicationStmt": 1,
-        "publisher": 1,
-        "date": 1,
-        "pubPlace": 1,
-        "distributor": 1,
-        "availability": 1,
-        "licence": 1,
-        "sourceDesc": 1,
-        "p": 173,
-        "text": 1,
-        "front": 1,
-        "pb": 182,
-        "head": 5,
-        "w": 59777,
-        "pc": 7017,
-        "body": 1,
-        "div": 3,
-        "back": 1
-      },
-      "raw_attrs_by_tag": {
-        "TEI": [
-          "lang"
-        ],
-        "distributor": [
-          "facs"
-        ],
-        "pb": [
-          "facs",
-          "n"
-        ],
-        "div": [
-          "n",
-          "type"
-        ]
-      },
-      "tag_attrs_by_tag": {
-        "TEI": [
-          "lang"
-        ],
-        "distributor": [
-          "facs"
-        ],
-        "pb": [
-          "facs",
-          "n"
-        ],
-        "p": [
-          "n"
-        ],
-        "w": [
-          "lemma",
-          "pos"
-        ],
-        "div": [
-          "n",
-          "type"
-        ]
-      },
-      "pos_values": {
-        "PRON": 6813,
-        "VERB": 6933,
-        "ADV": 4540,
-        "ADP": 8524,
-        "DET": 9855,
-        "NOUN": 12284,
-        "CCONJ": 2184,
-        "ADJ": 4282,
-        "SCONJ": 2145,
-        "AUX": 1457,
-        "PROPN": 414,
-        "NUM": 271,
-        "PART": 37,
-        "X": 25,
-        "PUNCT": 11,
-        "INTJ": 2
-      },
-      "pos_suspicious": {},
-      "raw_paragraph_count": 173,
-      "tag_paragraph_count": 173,
-      "raw_word_count": 56137,
-      "tag_word_count": 59777,
       "div_types": {
         "chapter": 3
       },
       "max_div_depth": 1,
-      "app_div_count": 0,
-      "lemma_total": 59777,
-      "lemma_nonempty": 59777,
+      "raw_paragraph_count": 173,
       "straight_apostrophes": 4318,
       "curly_apostrophes": 0,
       "ligatures": {
@@ -144,9 +48,7 @@
       "double_quotes": 91,
       "guillemets": 0,
       "editorial_tags_found": {},
-      "raw_p_has_id": false,
-      "tag_p_count": 173,
-      "tag_p_ids_unique": true,
+      "app_div_count": 0,
       "pub_stmt_date": "1888",
       "source_desc_text": "144e édition de L'Energie spirituelle (1970), texte conforme obtenu sur le site de l'UQAC (Chicoutimi, Québec) : http://classiques.uqac.ca/classiques/bergson_henri/essai_conscience_immediate/conscience_imm.html",
       "source_desc_title_match": false,
@@ -158,7 +60,6 @@
       "title": "Matière et mémoire",
       "first_pub_date": "1896",
       "raw_path": "data/raw/corpus/raw/src/1896_MM.xml",
-      "tag_path": "data/raw/corpus/tag/src/1896_MM_w.xml",
       "metadata_pages": "278",
       "raw_tags": {
         "TEI": 1,
@@ -189,106 +90,11 @@
         "div": 4,
         "back": 1
       },
-      "tag_tags": {
-        "TEI": 1,
-        "teiHeader": 1,
-        "fileDesc": 1,
-        "titleStmt": 1,
-        "title": 1,
-        "author": 1,
-        "persName": 2,
-        "forename": 2,
-        "surname": 2,
-        "respStmt": 1,
-        "resp": 1,
-        "publicationStmt": 1,
-        "publisher": 1,
-        "date": 1,
-        "pubPlace": 1,
-        "distributor": 1,
-        "availability": 1,
-        "licence": 1,
-        "sourceDesc": 1,
-        "p": 287,
-        "text": 1,
-        "front": 1,
-        "pb": 278,
-        "head": 6,
-        "w": 82386,
-        "pc": 10141,
-        "body": 1,
-        "div": 4,
-        "back": 1
-      },
-      "raw_attrs_by_tag": {
-        "TEI": [
-          "lang"
-        ],
-        "distributor": [
-          "facs"
-        ],
-        "pb": [
-          "facs",
-          "n"
-        ],
-        "div": [
-          "n",
-          "type"
-        ]
-      },
-      "tag_attrs_by_tag": {
-        "TEI": [
-          "lang"
-        ],
-        "distributor": [
-          "facs"
-        ],
-        "pb": [
-          "facs",
-          "n"
-        ],
-        "p": [
-          "n"
-        ],
-        "w": [
-          "lemma",
-          "pos"
-        ],
-        "div": [
-          "n",
-          "type"
-        ]
-      },
-      "pos_values": {
-        "DET": 14116,
-        "NOUN": 17576,
-        "VERB": 9403,
-        "ADP": 11880,
-        "CCONJ": 2974,
-        "PRON": 8959,
-        "ADJ": 5946,
-        "AUX": 2047,
-        "ADV": 6283,
-        "SCONJ": 2435,
-        "NUM": 246,
-        "PROPN": 446,
-        "PART": 52,
-        "INTJ": 1,
-        "X": 20,
-        "PUNCT": 2
-      },
-      "pos_suspicious": {},
-      "raw_paragraph_count": 287,
-      "tag_paragraph_count": 287,
-      "raw_word_count": 77144,
-      "tag_word_count": 82386,
       "div_types": {
         "chapter": 4
       },
       "max_div_depth": 1,
-      "app_div_count": 0,
-      "lemma_total": 82386,
-      "lemma_nonempty": 82386,
+      "raw_paragraph_count": 287,
       "straight_apostrophes": 5912,
       "curly_apostrophes": 0,
       "ligatures": {
@@ -297,9 +103,7 @@
       "double_quotes": 177,
       "guillemets": 0,
       "editorial_tags_found": {},
-      "raw_p_has_id": false,
-      "tag_p_count": 287,
-      "tag_p_ids_unique": true,
+      "app_div_count": 0,
       "pub_stmt_date": "1896",
       "source_desc_text": "72e édition de Matière et Mémoire (1965), texte conforme obtenu sur le site de l'UQAC (Chicoutimi, Québec) : http://classiques.uqac.ca/classiques/bergson_henri/matiere_et_memoire/matiere_et_memoire.html",
       "source_desc_title_match": true,
@@ -311,7 +115,6 @@
       "title": "Le Rire",
       "first_pub_date": "1900",
       "raw_path": "data/raw/corpus/raw/src/1900_R.xml",
-      "tag_path": "data/raw/corpus/tag/src/1900_R_w.xml",
       "metadata_pages": "158",
       "raw_tags": {
         "TEI": 1,
@@ -344,109 +147,12 @@
         "l": 9,
         "back": 1
       },
-      "tag_tags": {
-        "TEI": 1,
-        "teiHeader": 1,
-        "fileDesc": 1,
-        "titleStmt": 1,
-        "title": 2,
-        "author": 1,
-        "persName": 2,
-        "forename": 2,
-        "surname": 2,
-        "respStmt": 1,
-        "resp": 1,
-        "publicationStmt": 1,
-        "publisher": 1,
-        "date": 1,
-        "pubPlace": 1,
-        "distributor": 1,
-        "availability": 1,
-        "licence": 1,
-        "sourceDesc": 1,
-        "p": 213,
-        "text": 1,
-        "front": 1,
-        "pb": 158,
-        "head": 6,
-        "w": 40144,
-        "pc": 5163,
-        "body": 1,
-        "div": 3,
-        "lg": 2,
-        "l": 9,
-        "back": 1
-      },
-      "raw_attrs_by_tag": {
-        "TEI": [
-          "lang"
-        ],
-        "distributor": [
-          "facs"
-        ],
-        "pb": [
-          "facs",
-          "n"
-        ],
-        "div": [
-          "n",
-          "type"
-        ]
-      },
-      "tag_attrs_by_tag": {
-        "TEI": [
-          "lang"
-        ],
-        "distributor": [
-          "facs"
-        ],
-        "pb": [
-          "facs",
-          "n"
-        ],
-        "p": [
-          "n"
-        ],
-        "w": [
-          "lemma",
-          "pos"
-        ],
-        "div": [
-          "n",
-          "type"
-        ]
-      },
-      "pos_values": {
-        "DET": 6409,
-        "NOUN": 8010,
-        "VERB": 4852,
-        "NUM": 130,
-        "ADP": 5447,
-        "CCONJ": 1194,
-        "ADV": 3310,
-        "PRON": 5239,
-        "AUX": 1346,
-        "PROPN": 342,
-        "SCONJ": 1205,
-        "ADJ": 2623,
-        "PART": 24,
-        "X": 10,
-        "INTJ": 2,
-        "PUNCT": 1
-      },
-      "pos_suspicious": {},
-      "raw_paragraph_count": 213,
-      "tag_paragraph_count": 213,
-      "raw_word_count": 37914,
-      "tag_word_count": 40144,
       "div_types": {
         "(untyped)": 1,
         "chapter": 2
       },
       "max_div_depth": 1,
-      "app_div_count": 0,
-      "lemma_total": 40144,
-      "lemma_nonempty": 40144,
+      "raw_paragraph_count": 213,
       "straight_apostrophes": 2848,
       "curly_apostrophes": 0,
       "ligatures": {
@@ -455,9 +161,7 @@
       "double_quotes": 214,
       "guillemets": 0,
       "editorial_tags_found": {},
-      "raw_p_has_id": false,
-      "tag_p_count": 213,
-      "tag_p_ids_unique": true,
+      "app_div_count": 0,
       "pub_stmt_date": "1932",
       "source_desc_text": "Édition de 1924 du Rire, texte conforme obtenu sur le site de l'UQAC (Chicoutimi, Québec) : http://classiques.uqac.ca/classiques/bergson_henri/le_rire/le_rire.html",
       "source_desc_title_match": true,
@@ -469,7 +173,6 @@
       "title": "L'Évolution créatrice",
       "first_pub_date": "1907",
       "raw_path": "data/raw/corpus/raw/src/1907_EC.xml",
-      "tag_path": "data/raw/corpus/tag/src/1907_EC_w.xml",
       "metadata_pages": "406",
       "raw_tags": {
         "TEI": 1,
@@ -499,105 +202,11 @@
         "body": 1,
         "div": 4
       },
-      "tag_tags": {
-        "TEI": 1,
-        "teiHeader": 1,
-        "fileDesc": 1,
-        "titleStmt": 1,
-        "title": 1,
-        "author": 1,
-        "persName": 2,
-        "forename": 2,
-        "surname": 2,
-        "respStmt": 1,
-        "resp": 1,
-        "publicationStmt": 1,
-        "publisher": 1,
-        "date": 1,
-        "pubPlace": 1,
-        "distributor": 1,
-        "availability": 1,
-        "licence": 1,
-        "sourceDesc": 1,
-        "p": 437,
-        "text": 1,
-        "front": 1,
-        "pb": 406,
-        "head": 5,
-        "w": 126323,
-        "pc": 15516,
-        "body": 1,
-        "div": 4
-      },
-      "raw_attrs_by_tag": {
-        "TEI": [
-          "lang"
-        ],
-        "distributor": [
-          "facs"
-        ],
-        "pb": [
-          "facs",
-          "n"
-        ],
-        "div": [
-          "n",
-          "type"
-        ]
-      },
-      "tag_attrs_by_tag": {
-        "TEI": [
-          "lang"
-        ],
-        "distributor": [
-          "facs"
-        ],
-        "pb": [
-          "facs",
-          "n"
-        ],
-        "p": [
-          "n"
-        ],
-        "w": [
-          "lemma",
-          "pos"
-        ],
-        "div": [
-          "n",
-          "type"
-        ]
-      },
-      "pos_values": {
-        "DET": 21139,
-        "NOUN": 25849,
-        "ADP": 17887,
-        "SCONJ": 4085,
-        "ADJ": 8809,
-        "PRON": 14559,
-        "AUX": 4076,
-        "ADV": 9942,
-        "VERB": 14261,
-        "CCONJ": 4227,
-        "PROPN": 792,
-        "NUM": 429,
-        "PART": 54,
-        "X": 40,
-        "INTJ": 2,
-        "PUNCT": 172
-      },
-      "pos_suspicious": {},
-      "raw_paragraph_count": 437,
-      "tag_paragraph_count": 437,
-      "raw_word_count": 116679,
-      "tag_word_count": 126323,
       "div_types": {
         "chapter": 4
       },
       "max_div_depth": 1,
-      "app_div_count": 0,
-      "lemma_total": 126323,
-      "lemma_nonempty": 126323,
+      "raw_paragraph_count": 437,
       "straight_apostrophes": 10080,
       "curly_apostrophes": 17,
       "ligatures": {
@@ -606,9 +215,7 @@
       "double_quotes": 162,
       "guillemets": 279,
       "editorial_tags_found": {},
-      "raw_p_has_id": false,
-      "tag_p_count": 437,
-      "tag_p_ids_unique": true,
+      "app_div_count": 0,
       "pub_stmt_date": "1907",
       "source_desc_text": "86e édition de L'Évolution créatrice (1959), texte conforme obtenu sur le site de l'UQAC (Chicoutimi, Québec) : http://classiques.uqac.ca/classiques/bergson_henri/evolution_creatrice/evolution_creatrice.html",
       "source_desc_title_match": true,
@@ -620,7 +227,6 @@
       "title": "L'énergie spirituelle",
       "first_pub_date": "1919",
       "raw_path": "data/raw/corpus/raw/src/1919_ES.xml",
-      "tag_path": "data/raw/corpus/tag/src/1919_ES_w.xml",
       "metadata_pages": "219",
       "raw_tags": {
         "TEI": 1,
@@ -649,108 +255,12 @@
         "pb": 219,
         "head": 7
       },
-      "tag_tags": {
-        "TEI": 1,
-        "teiHeader": 1,
-        "fileDesc": 1,
-        "titleStmt": 1,
-        "title": 1,
-        "author": 1,
-        "persName": 2,
-        "forename": 2,
-        "surname": 2,
-        "respStmt": 1,
-        "resp": 1,
-        "publicationStmt": 1,
-        "publisher": 1,
-        "date": 1,
-        "pubPlace": 1,
-        "distributor": 1,
-        "availability": 1,
-        "licence": 1,
-        "sourceDesc": 1,
-        "p": 231,
-        "text": 1,
-        "body": 1,
-        "div": 7,
-        "pb": 219,
-        "head": 7,
-        "w": 62458,
-        "pc": 8126
-      },
-      "raw_attrs_by_tag": {
-        "TEI": [
-          "lang"
-        ],
-        "distributor": [
-          "facs"
-        ],
-        "div": [
-          "id",
-          "type"
-        ],
-        "pb": [
-          "facs",
-          "n"
-        ]
-      },
-      "tag_attrs_by_tag": {
-        "TEI": [
-          "lang"
-        ],
-        "distributor": [
-          "facs"
-        ],
-        "div": [
-          "id",
-          "type"
-        ],
-        "pb": [
-          "facs",
-          "n"
-        ],
-        "p": [
-          "n"
-        ],
-        "w": [
-          "lemma",
-          "pos"
-        ]
-      },
-      "pos_values": {
-        "SCONJ": 2021,
-        "DET": 9976,
-        "NOUN": 12573,
-        "PRON": 7950,
-        "VERB": 7565,
-        "AUX": 2007,
-        "ADP": 8579,
-        "PROPN": 428,
-        "ADV": 4900,
-        "CCONJ": 2185,
-        "ADJ": 4056,
-        "INTJ": 5,
-        "X": 24,
-        "NUM": 154,
-        "PART": 30,
-        "PUNCT": 4,
-        "nan": 1
-      },
-      "pos_suspicious": {
-        "nan": 1
-      },
-      "raw_paragraph_count": 231,
-      "tag_paragraph_count": 231,
-      "raw_word_count": 58729,
-      "tag_word_count": 62458,
       "div_types": {
         "conf": 4,
         "art": 3
       },
       "max_div_depth": 1,
-      "app_div_count": 0,
-      "lemma_total": 62458,
-      "lemma_nonempty": 62458,
+      "raw_paragraph_count": 231,
       "straight_apostrophes": 4662,
       "curly_apostrophes": 0,
       "ligatures": {
@@ -759,9 +269,7 @@
       "double_quotes": 347,
       "guillemets": 0,
       "editorial_tags_found": {},
-      "raw_p_has_id": false,
-      "tag_p_count": 231,
-      "tag_p_ids_unique": true,
+      "app_div_count": 0,
       "pub_stmt_date": "1919",
       "source_desc_text": "132e édition de L'Energie spirituelle (1959), texte conforme obtenu sur le site de l'UQAC (Chicoutimi, Québec) : http://classiques.uqac.ca/classiques/bergson_henri/energie_spirituelle/energie_spirituelle.html",
       "source_desc_title_match": true,
@@ -773,7 +281,6 @@
       "title": "Durée et simultanéité",
       "first_pub_date": "1922",
       "raw_path": "data/raw/corpus/raw/src/1922_DS.xml",
-      "tag_path": "data/raw/corpus/tag/src/1922_DS_w.xml",
       "metadata_pages": "216",
       "raw_tags": {
         "TEI": 1,
@@ -804,98 +311,6 @@
         "body": 1,
         "back": 1
       },
-      "tag_tags": {
-        "TEI": 1,
-        "teiHeader": 1,
-        "fileDesc": 1,
-        "titleStmt": 1,
-        "title": 2,
-        "author": 1,
-        "persName": 2,
-        "forename": 2,
-        "surname": 2,
-        "respStmt": 1,
-        "resp": 1,
-        "publicationStmt": 1,
-        "publisher": 1,
-        "date": 1,
-        "pubPlace": 1,
-        "distributor": 1,
-        "availability": 1,
-        "licence": 1,
-        "sourceDesc": 1,
-        "p": 277,
-        "text": 1,
-        "front": 1,
-        "div": 12,
-        "pb": 216,
-        "head": 16,
-        "w": 65156,
-        "pc": 8642,
-        "body": 1,
-        "back": 1
-      },
-      "raw_attrs_by_tag": {
-        "TEI": [
-          "lang"
-        ],
-        "distributor": [
-          "facs"
-        ],
-        "pb": [
-          "facs",
-          "n"
-        ],
-        "div": [
-          "n",
-          "type"
-        ]
-      },
-      "tag_attrs_by_tag": {
-        "TEI": [
-          "lang"
-        ],
-        "distributor": [
-          "facs"
-        ],
-        "pb": [
-          "facs",
-          "n"
-        ],
-        "p": [
-          "n"
-        ],
-        "w": [
-          "lemma",
-          "pos"
-        ],
-        "div": [
-          "n",
-          "type"
-        ]
-      },
-      "pos_values": {
-        "DET": 10145,
-        "NOUN": 13936,
-        "ADP": 9356,
-        "VERB": 7398,
-        "PRON": 7342,
-        "AUX": 2172,
-        "ADV": 4699,
-        "ADJ": 4179,
-        "PROPN": 962,
-        "CCONJ": 2249,
-        "SCONJ": 2045,
-        "NUM": 575,
-        "X": 25,
-        "PART": 21,
-        "PUNCT": 52
-      },
-      "pos_suspicious": {},
-      "raw_paragraph_count": 277,
-      "tag_paragraph_count": 277,
-      "raw_word_count": 61858,
-      "tag_word_count": 65156,
       "div_types": {
         "(untyped)": 2,
         "chapter": 6,
@@ -903,9 +318,7 @@
         "app": 3
       },
       "max_div_depth": 1,
-      "app_div_count": 3,
-      "lemma_total": 65156,
-      "lemma_nonempty": 65156,
+      "raw_paragraph_count": 277,
       "straight_apostrophes": 5113,
       "curly_apostrophes": 0,
       "ligatures": {
@@ -914,9 +327,7 @@
       "double_quotes": 396,
       "guillemets": 0,
       "editorial_tags_found": {},
-      "raw_p_has_id": false,
-      "tag_p_count": 277,
-      "tag_p_ids_unique": true,
+      "app_div_count": 3,
       "pub_stmt_date": "1922",
       "source_desc_text": "7e édition de Durée et simultanéité (1968), texte conforme obtenu sur le site de l'UQAC (Chicoutimi, Québec) : http://classiques.uqac.ca/classiques/bergson_henri/duree_simultaneite/duree.html",
       "source_desc_title_match": true,
@@ -928,7 +339,6 @@
       "title": "Les Deux sources de la morale et de la religion",
       "first_pub_date": "1932",
       "raw_path": "data/raw/corpus/raw/src/1932_2S.xml",
-      "tag_path": "data/raw/corpus/tag/src/1932_2S_w.xml",
       "metadata_pages": "341",
       "raw_tags": {
         "TEI": 1,
@@ -957,104 +367,11 @@
         "pb": 341,
         "head": 5
       },
-      "tag_tags": {
-        "TEI": 1,
-        "teiHeader": 1,
-        "fileDesc": 1,
-        "titleStmt": 1,
-        "title": 1,
-        "author": 1,
-        "persName": 2,
-        "forename": 2,
-        "surname": 2,
-        "respStmt": 1,
-        "resp": 1,
-        "publicationStmt": 1,
-        "publisher": 1,
-        "date": 1,
-        "pubPlace": 1,
-        "distributor": 1,
-        "availability": 1,
-        "licence": 1,
-        "sourceDesc": 1,
-        "p": 238,
-        "text": 1,
-        "body": 1,
-        "div": 4,
-        "pb": 341,
-        "head": 5,
-        "w": 108501,
-        "pc": 13254
-      },
-      "raw_attrs_by_tag": {
-        "TEI": [
-          "lang"
-        ],
-        "distributor": [
-          "facs"
-        ],
-        "div": [
-          "n",
-          "type"
-        ],
-        "pb": [
-          "facs",
-          "n"
-        ]
-      },
-      "tag_attrs_by_tag": {
-        "TEI": [
-          "lang"
-        ],
-        "distributor": [
-          "facs"
-        ],
-        "div": [
-          "n",
-          "type"
-        ],
-        "pb": [
-          "facs",
-          "n"
-        ],
-        "p": [
-          "n"
-        ],
-        "w": [
-          "lemma",
-          "pos"
-        ]
-      },
-      "pos_values": {
-        "DET": 17139,
-        "NOUN": 20911,
-        "ADJ": 6931,
-        "AUX": 4481,
-        "PRON": 13880,
-        "VERB": 13070,
-        "ADP": 14732,
-        "ADV": 9081,
-        "SCONJ": 3639,
-        "CCONJ": 3475,
-        "PROPN": 831,
-        "NUM": 246,
-        "X": 25,
-        "PART": 56,
-        "INTJ": 2,
-        "PUNCT": 2
-      },
-      "pos_suspicious": {},
-      "raw_paragraph_count": 238,
-      "tag_paragraph_count": 238,
-      "raw_word_count": 100997,
-      "tag_word_count": 108501,
       "div_types": {
         "chapter": 4
       },
       "max_div_depth": 1,
-      "app_div_count": 0,
-      "lemma_total": 108501,
-      "lemma_nonempty": 108501,
+      "raw_paragraph_count": 238,
       "straight_apostrophes": 9028,
       "curly_apostrophes": 0,
       "ligatures": {
@@ -1063,9 +380,7 @@
       "double_quotes": 513,
       "guillemets": 0,
       "editorial_tags_found": {},
-      "raw_p_has_id": false,
-      "tag_p_count": 238,
-      "tag_p_ids_unique": true,
+      "app_div_count": 0,
       "pub_stmt_date": "1932",
       "source_desc_text": "58e édition des Deux sources de la morale et de la religion (1948), texte conforme obtenu sur le site de l'UQAC (Chicoutimi, Québec) : http://classiques.uqac.ca/classiques/bergson_henri/deux_sources_morale/deux_sources_morale.html",
       "source_desc_title_match": true,
@@ -1077,7 +392,6 @@
       "title": "La Pensée et le mouvant",
       "first_pub_date": "1934",
       "raw_path": "data/raw/corpus/raw/src/1934_PM.xml",
-      "tag_path": "data/raw/corpus/tag/src/1934_PM_w.xml",
       "metadata_pages": "313",
       "raw_tags": {
         "TEI": 1,
@@ -1107,98 +421,6 @@
         "body": 1,
         "div": 10
       },
-      "tag_tags": {
-        "TEI": 1,
-        "teiHeader": 1,
-        "fileDesc": 1,
-        "titleStmt": 1,
-        "title": 1,
-        "author": 1,
-        "persName": 2,
-        "forename": 2,
-        "surname": 2,
-        "respStmt": 1,
-        "resp": 1,
-        "publicationStmt": 1,
-        "publisher": 1,
-        "date": 1,
-        "pubPlace": 1,
-        "distributor": 1,
-        "availability": 1,
-        "licence": 1,
-        "sourceDesc": 1,
-        "p": 312,
-        "text": 1,
-        "front": 1,
-        "pb": 313,
-        "head": 14,
-        "w": 88703,
-        "pc": 11486,
-        "body": 1,
-        "div": 10
-      },
-      "raw_attrs_by_tag": {
-        "TEI": [
-          "lang"
-        ],
-        "distributor": [
-          "facs"
-        ],
-        "pb": [
-          "facs",
-          "n"
-        ],
-        "div": [
-          "id",
-          "type"
-        ]
-      },
-      "tag_attrs_by_tag": {
-        "TEI": [
-          "lang"
-        ],
-        "distributor": [
-          "facs"
-        ],
-        "pb": [
-          "facs",
-          "n"
-        ],
-        "p": [
-          "n"
-        ],
-        "w": [
-          "lemma",
-          "pos"
-        ],
-        "div": [
-          "id",
-          "type"
-        ]
-      },
-      "pos_values": {
-        "DET": 14170,
-        "ADJ": 5384,
-        "NOUN": 17738,
-        "VERB": 10416,
-        "ADP": 12324,
-        "ADV": 7307,
-        "NUM": 237,
-        "PRON": 11296,
-        "AUX": 3018,
-        "CCONJ": 3023,
-        "PROPN": 834,
-        "SCONJ": 2873,
-        "X": 30,
-        "PART": 46,
-        "PUNCT": 4,
-        "INTJ": 3
-      },
-      "pos_suspicious": {},
-      "raw_paragraph_count": 312,
-      "tag_paragraph_count": 312,
-      "raw_word_count": 83330,
-      "tag_word_count": 88703,
       "div_types": {
         "essai": 5,
         "conf": 3,
@@ -1206,9 +428,7 @@
         "notice": 1
       },
       "max_div_depth": 1,
-      "app_div_count": 0,
-      "lemma_total": 88703,
-      "lemma_nonempty": 88703,
+      "raw_paragraph_count": 312,
       "straight_apostrophes": 6645,
       "curly_apostrophes": 0,
       "ligatures": {
@@ -1218,9 +438,7 @@
       "double_quotes": 517,
       "guillemets": 0,
       "editorial_tags_found": {},
-      "raw_p_has_id": false,
-      "tag_p_count": 312,
-      "tag_p_ids_unique": true,
+      "app_div_count": 0,
       "pub_stmt_date": "1934",
       "source_desc_text": "79e édition de La Pensée et le Mouvant (1969), texte conforme obtenu sur le site de l'UQAC (Chicoutimi, Québec) : http://classiques.uqac.ca/classiques/bergson_henri/pensee_mouvant/pensee_mouvant.html",
       "source_desc_title_match": true,
@@ -1256,56 +474,13 @@
       "title",
       "titleStmt"
     ],
-    "common_tag_tags": [
-      "TEI",
-      "author",
-      "availability",
-      "body",
-      "date",
-      "distributor",
-      "div",
-      "fileDesc",
-      "forename",
-      "head",
-      "licence",
-      "p",
-      "pb",
-      "pc",
-      "persName",
-      "pubPlace",
-      "publicationStmt",
-      "publisher",
-      "resp",
-      "respStmt",
-      "sourceDesc",
-      "surname",
-      "teiHeader",
-      "text",
-      "title",
-      "titleStmt",
-      "w"
-    ],
     "drift_notes": [
-      "raw/1888_EDIC: extra tags not in all works: ['back', 'front']",
-      "raw/1896_MM: extra tags not in all works: ['back', 'front']",
-      "raw/1900_R: extra tags not in all works: ['back', 'front', 'l', 'lg']",
-      "raw/1907_EC: extra tags not in all works: ['front']",
-      "raw/1922_DS: extra tags not in all works: ['back', 'front']",
-      "raw/1934_PM: extra tags not in all works: ['front']",
-      "tag/1888_EDIC: extra tags not in all works: ['back', 'front']",
-      "tag/1896_MM: extra tags not in all works: ['back', 'front']",
-      "tag/1900_R: extra tags not in all works: ['back', 'front', 'l', 'lg']",
-      "tag/1907_EC: extra tags not in all works: ['front']",
-      "tag/1922_DS: extra tags not in all works: ['back', 'front']",
-      "tag/1934_PM: extra tags not in all works: ['front']",
-      "raw/1888_EDIC: <div> missing attributes ['id'] seen elsewhere",
-      "raw/1896_MM: <div> missing attributes ['id'] seen elsewhere",
-      "raw/1900_R: <div> missing attributes ['id'] seen elsewhere",
-      "raw/1907_EC: <div> missing attributes ['id'] seen elsewhere",
-      "raw/1919_ES: <div> missing attributes ['n'] seen elsewhere",
-      "raw/1922_DS: <div> missing attributes ['id'] seen elsewhere",
-      "raw/1932_2S: <div> missing attributes ['id'] seen elsewhere",
-      "raw/1934_PM: <div> missing attributes ['n'] seen elsewhere"
+      "1888_EDIC: extra tags not in all works: ['back', 'front']",
+      "1896_MM: extra tags not in all works: ['back', 'front']",
+      "1900_R: extra tags not in all works: ['back', 'front', 'l', 'lg']",
+      "1907_EC: extra tags not in all works: ['front']",
+      "1922_DS: extra tags not in all works: ['back', 'front']",
+      "1934_PM: extra tags not in all works: ['front']"
     ]
   }
 }

@@ -264,6 +264,20 @@ def save_work(work: Work, output_dir: Path) -> Path:
     return out_path
 
 
+def save_paragraph_correspondence(work: Work, output_dir: Path) -> Path:
+    """Export ``work``'s flat paragraph list for gold-dataset annotation.
+
+    Paragraph IDs are assigned only at parse time (see module docstring
+    in models.py), so this file is the lookup table annotators use to
+    find the ``paragraph_id`` for a given passage of text.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_path = output_dir / f"{work.work_id}.json"
+    records = [{"paragraph_id": p.paragraph_id, "text": p.text} for p in work.paragraphs]
+    out_path.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+    return out_path
+
+
 def parse_corpus(raw_src_dir: Path) -> list[Work]:
     """Parse every work listed in ``metadata.csv`` under ``raw_src_dir``."""
     meta = load_metadata(raw_src_dir / "metadata.csv")

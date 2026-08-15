@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 RECALL_KS = (1, 3, 5, 10)
-BREAKDOWN_ATTRS = ("category", "vocabulary_type", "difficulty", "query_style")
+BREAKDOWN_ATTRS = ("category", "vocabulary_type", "difficulty", "query_style", "footnote_related")
 
 
 @dataclass(frozen=True)

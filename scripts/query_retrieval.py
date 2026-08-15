@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from qdrant_client import QdrantClient, models  # noqa: E402
 
 from src.indexing.embeddings import DenseEmbedder, SparseEmbedder  # noqa: E402
-from src.indexing.normalize import stem  # noqa: E402
+from src.indexing.normalize import normalize_text  # noqa: E402
 from src.indexing.qdrant_index import (  # noqa: E402
     COLLECTION_NAME,
     DENSE_VECTOR_NAME,
@@ -68,7 +68,7 @@ def build_query(method: str, text: str) -> tuple[models.QueryInterface, str]:
         vector = DenseEmbedder().embed([text])[0]
         return vector, DENSE_VECTOR_NAME
 
-    bm25_text = " ".join(t.stem for t in stem(text))
+    bm25_text = normalize_text(text).bm25_text
     indices, values = SparseEmbedder().embed([bm25_text])[0]
     return models.SparseVector(indices=indices, values=values), SPARSE_VECTOR_NAME
 

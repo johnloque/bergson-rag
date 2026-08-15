@@ -46,7 +46,7 @@ def ensure_collection(client: QdrantClient) -> None:
             DENSE_VECTOR_NAME: models.VectorParams(size=DENSE_DIM, distance=models.Distance.COSINE),
         },
         sparse_vectors_config={
-            SPARSE_VECTOR_NAME: models.SparseVectorParams(),
+            SPARSE_VECTOR_NAME: models.SparseVectorParams(modifier=models.Modifier.IDF),
         },
     )
 

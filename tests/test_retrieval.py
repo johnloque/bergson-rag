@@ -76,7 +76,7 @@ def test_fusion_ranks_shared_chunk_at_least_as_high(client, dense_embedder, spar
 
     dense_vector = dense_embedder.embed([QUERY])[0]
     bm25_text = normalize_text(QUERY).bm25_text
-    sparse_indices, sparse_values = sparse_embedder.embed([bm25_text])[0]
+    sparse_indices, sparse_values = sparse_embedder.embed_query([bm25_text])[0]
 
     dense_rank = _single_channel_rank(client, DENSE_VECTOR_NAME, dense_vector, KNOWN_CHUNK_ID)
     sparse_rank = _single_channel_rank(

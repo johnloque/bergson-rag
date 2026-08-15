@@ -69,7 +69,7 @@ def build_query(method: str, text: str) -> tuple[models.QueryInterface, str]:
         return vector, DENSE_VECTOR_NAME
 
     bm25_text = normalize_text(text).bm25_text
-    indices, values = SparseEmbedder().embed([bm25_text])[0]
+    indices, values = SparseEmbedder().embed_query([bm25_text])[0]
     return models.SparseVector(indices=indices, values=values), SPARSE_VECTOR_NAME
 
 

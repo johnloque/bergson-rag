@@ -75,7 +75,7 @@ def hybrid_search(
     """
     dense_vector = dense_embedder.embed([query])[0]
     bm25_text = normalize_text(query).bm25_text
-    sparse_indices, sparse_values = sparse_embedder.embed([bm25_text])[0]
+    sparse_indices, sparse_values = sparse_embedder.embed_query([bm25_text])[0]
 
     response = client.query_points(
         collection_name=collection_name,

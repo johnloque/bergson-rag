@@ -50,6 +50,20 @@ class SparseEmbedder:
         )
 
     def embed(self, bm25_texts: list[str]) -> list[tuple[list[int], list[float]]]:
-        """`bm25_texts` must already be normalized (e.g.
-        `Normalization.bm25_text`) — this does not stem or lemmatize."""
+        """Document-side embedding: term frequency with length-saturation
+        weighting (`k`/`b`/`avg_len`). Use only for chunks being indexed —
+        `embed_query` is the counterpart for queries. `bm25_texts` must
+        already be normalized (e.g. `Normalization.bm25_text`) — this
+        does not stem or lemmatize."""
         return [(e.indices.tolist(), e.values.tolist()) for e in self._model.embed(bm25_texts)]
+
+    def embed_query(self, bm25_texts: list[str]) -> list[tuple[list[int], list[float]]]:
+        """Query-side embedding: flat presence weight (1.0) per term, no
+        TF-saturation or document-length normalization — in BM25, term
+        frequency weighting belongs to the document side only; the query
+        side just signals which terms are present (fastembed's
+        `Bm25.query_embed`, as opposed to `Bm25.embed` used for
+        indexing). `bm25_texts` must already be normalized."""
+        return [
+            (e.indices.tolist(), e.values.tolist()) for e in self._model.query_embed(bm25_texts)
+        ]

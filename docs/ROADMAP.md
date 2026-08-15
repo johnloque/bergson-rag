@@ -122,13 +122,24 @@ ID assignment stability (re-running ingestion on an unchanged corpus
 must not renumber paragraphs).
 
 ### Sprint 2 — Hybrid indexing
-Qdrant setup, dense + sparse collections, embedding generation (BGE-M3).
-Text normalization: spaCy lemma+POS generation (canonical form, used
-outside the BM25 index) and French Snowball stemming (used for the BM25
-index specifically) as two separate outputs of the same indexing step.
-`exp/` branch: BM25-on-stems vs BM25-on-spaCy-lemmas, compared on
-recall@k against the gold dataset, to settle which normalization the
-sparse index actually uses going forward.
+Qdrant setup, single collection with two named vectors per point (dense
+BGE-M3 + sparse BM25). Text normalization: spaCy lemma+POS generation
+(canonical form, used outside the BM25 index — stored but not indexed
+this sprint) and French Snowball stemming (used for the BM25 index
+specifically) as two separate outputs of the same indexing step
+(`src/indexing/normalize.py`). BM25 input is isolated behind a single
+`bm25_input()` seam so switching it from stems to lemmas later is a
+small change, not a rewrite.
+
+**Deferred, not skipped**: the `exp/` branch comparing BM25-on-stems vs
+BM25-on-spaCy-lemmas (recall@k against the gold dataset) did not happen
+in Sprint 2 as originally planned here — the gold dataset and a working
+retrieval/eval loop (Sprint 3) are prerequisites for a meaningful
+recall@k comparison. Moved to a later sprint, once retrieval and
+evaluation exist. Sprint 2 ships with stemming as the BM25 default in
+the meantime (rationale: rule-based, more robust to period-specific
+1889-1932 French than a lemmatizer trained on contemporary text,
+established IR practice for French).
 
 ### Sprint 3 — Hybrid retrieval + query reformulation
 RRF fusion, single-query LLM reformulation. First retrieval-only

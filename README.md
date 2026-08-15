@@ -59,7 +59,7 @@ for architecture details, evaluation methodology, and sprint breakdown.
 **Retrieval & indexing**
 - Qdrant — dense + sparse vector store, hybrid search backend
 - BGE-M3 — multilingual dense embeddings
-- BM25 (on lemmas) — sparse/lexical matching
+- BM25 (on French Snowball stems) — sparse/lexical matching
 
 **Reranking & generation**
 - bge-reranker-v2-m3 — default, always-on cross-encoder relevance score

@@ -151,11 +151,10 @@ established IR practice for French).
 
 ### Sprint 3 — Hybrid retrieval
 RRF fusion over the raw, un-reformulated query. First retrieval-only
-evaluation (recall@k, MRR).
+evaluation (recall@k, MRR, comparison between dense & sparse channels).
 
-### Sprint 4 — Reranking and generation
-Cross-encoder integration, single-mode prompt design, LLM integration
-(local + API fallback), preliminary end-to-end evaluation (RAGAS).
+### Sprint 4 — Reranking
+Cross-encoder integration. Retrieval-only evaluation (recall@k, MRR, results comparison with hybrid retrieval)
 
 **Reranking — implemented.** Cross-encoder reranking (`bge-reranker-v2-m3`)
 in `src/retrieval/reranking.py`, callable independently of
@@ -171,11 +170,16 @@ this sprint), and (2) a larger gold dataset, needed for a meaningful
 reranker-vs-reranker comparison. Revisit once both are met
 (`docs/gold_dataset_protocol.md`).
 
-### Sprint 5 — Anti-hallucination guardrails
+### Sprint 5 - LLM Integration
+
+Single-mode prompt design, LLM integration
+(local + API fallback), preliminary end-to-end evaluation (RAGAS).
+
+### Sprint 6 — Anti-hallucination guardrails
 Post-generation validation, explicit "no reliable answer" handling,
 citation formatting, before/after metrics on the gold dataset.
 
-### Sprint 6 — Backend API and persistence
+### Sprint 7 — Backend API and persistence
 - Three-endpoint FastAPI (`retrieve` / `generate_from_chunks` /
   `judge_chunks`)
 - API-level tests (no UI yet)
@@ -184,21 +188,21 @@ citation formatting, before/after metrics on the gold dataset.
 - **Deliverable**: fully functional, tested API, usable independently of
   any frontend
 
-### Sprint 7 — Frontend
-- React (Vite) + Tailwind + TanStack Query, consuming the Sprint 6 API
+### Sprint 8 — Frontend
+- React (Vite) + Tailwind + TanStack Query, consuming the Sprint 7 API
 - Inspect → explain → curate → regenerate loop
 - **Deliverable**: working UI against the real API, demoable locally
 
-### Sprint 8 — Integration and bootstrap
+### Sprint 9 — Integration and bootstrap
 - Full dockerization (API, frontend, Qdrant) via Docker Compose
 - Bootstrap script/Makefile chaining fetch-data → build-index → run
 - **Deliverable**: entire application launchable locally in one command
 
-### Sprint 9 — MCP layer
+### Sprint 10 — MCP layer
 Pure search tools (hybrid search, exact-reference lookup), tested with
 an MCP client. First to drop if time is constrained.
 
-### Sprint 10 — Portfolio polish
+### Sprint 11 — Portfolio polish
 Complete README, "Known limitations & scope" section finalized,
 evaluation results presented clearly, technical blog post, accessible
 demo, curated set of demo questions drawn from the gold dataset for live
@@ -219,12 +223,12 @@ bergson-rag/
 │   ├── indexing/          # BM25, embeddings, Qdrant
 │   ├── retrieval/         # reformulation, hybrid, reranking
 │   ├── generation/         # prompts, anti-hallucination validation
-│   └── mcp_server/         # Sprint 9
-├── frontend/               # React (Vite) UI — Sprint 7
+│   └── mcp_server/         # Sprint 10
+├── frontend/               # React (Vite) UI — Sprint 8
 ├── eval/
 │   ├── gold_dataset.csv
 │   └── scripts/           # RAGAS, recall@k, etc.
 ├── docker-compose.yml
-├── Makefile                # quickstart target (Sprint 8)
+├── Makefile                # quickstart target (Sprint 9)
 └── pyproject.toml
 ```

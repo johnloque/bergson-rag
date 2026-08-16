@@ -2,7 +2,7 @@
 
 - Dense: BGE-M3 (`BAAI/bge-m3`), raw chunk text only — no title/section
   prefixing. Contextual enrichment was considered and deliberately
-  deferred to the generation step (docs/ROADMAP.md, Sprint 4).
+  deferred to the generation step (docs/ROADMAP.md, Sprint 5).
 - Sparse: BM25 via FastEmbed's built-in `Qdrant/bm25` sparse embedder,
   rather than hand-rolled document-frequency/BM25-weighting code — a
   solved problem. FastEmbed's own stemming step is disabled: the caller

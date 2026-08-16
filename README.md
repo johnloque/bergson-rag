@@ -51,7 +51,7 @@ It deliberately does not attempt:
 
 ## Status
 
-🚧 In development — Sprint 0 (scoping). See [`docs/ROADMAP.md`](docs/ROADMAP.md)
+🚧 In development — Sprint 5 (LLM Integration). See [`docs/ROADMAP.md`](docs/ROADMAP.md)
 for architecture details, evaluation methodology, and sprint breakdown.
 
 ## Stack

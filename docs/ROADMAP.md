@@ -58,13 +58,21 @@ bergson-rag.
 - **Retrieval**: hybrid BM25 (on lemmas) + dense (BGE-M3), fused via RRF.
   Corpus-trained FastText query expansion was considered and dropped —
   it targeted vocabulary drift on the kind of broad/exploratory question
-  now out of scope; a single LLM-based query reformulation covers
-  vocabulary drift well enough for anchored questions, without an
-  additional model to train, version, and evaluate.
-- **Query reformulation**: single-query reformulation (one LLM rewrite,
-  optionally with synonym enrichment). Multi-query decomposition was
-  planned for comparative/multi-hop questions and is dropped along with
-  that category.
+  now out of scope.
+- **Query reformulation**: dropped from default scope, not deferred as a
+  placeholder — the query is used as-is, raw, with no LLM rewrite,
+  synonym enrichment, or decomposition. It remains a documented `exp/`
+  candidate, revisited only once a larger gold dataset can actually
+  measure whether it helps, not built into the default pipeline.
+- **Discourse-framing noise in dense queries**: keyword-extraction or
+  stopword/framing-noise filtering ahead of the dense embedder was
+  considered and deliberately not hand-built. The gold dataset already
+  carries `query_style` (`framed` vs. `keyword`) and `vocabulary_type` as
+  dimensions specifically so this question is measured via retrieval
+  breakdowns once enough annotated items exist, rather than answered by
+  introducing a manually curated keyword/stopword list — consistent with
+  this project's general preference for data-driven validation over
+  manual curation (see stemming vs. lemmas for BM25, above).
 - **Scoring**: cross-encoder reranker (bge-reranker-v2-m3) as the
   default, always-on relevance score. A separate, on-demand LLM relevance
   judgment (`judge_chunks`) provides a short textual justification per
@@ -141,8 +149,8 @@ the meantime (rationale: rule-based, more robust to period-specific
 1889-1932 French than a lemmatizer trained on contemporary text,
 established IR practice for French).
 
-### Sprint 3 — Hybrid retrieval + query reformulation
-RRF fusion, single-query LLM reformulation. First retrieval-only
+### Sprint 3 — Hybrid retrieval
+RRF fusion over the raw, un-reformulated query. First retrieval-only
 evaluation (recall@k, MRR).
 
 ### Sprint 4 — Reranking and generation

@@ -38,7 +38,7 @@ from src.indexing.qdrant_index import (
     SPARSE_VECTOR_NAME,
 )
 
-RRF_K = 60  # Cormack et al. 2009 standard value — no project-specific tuning.
+RRF_K = 1  # cf docs/eval_hyperparam_sweep_n10_20260816T084507Z.md
 DEFAULT_PREFETCH_LIMIT = 50
 
 

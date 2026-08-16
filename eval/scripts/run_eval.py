@@ -1,24 +1,32 @@
-#!/usr/bin/env python3
-"""Sprint 3 retrieval-only evaluation: hybrid search (src/retrieval/hybrid.py)
-against eval/gold_dataset.csv. Reports recall@{1,3,5,10} and MRR, overall
-and broken down by category / vocabulary_type / difficulty / query_style.
+"""Retrieval building block shared by the eval report scripts: hybrid search
+(src/retrieval/hybrid.py) against eval/gold_dataset.csv, with optional
+cross-encoder reranking (src/retrieval/reranking.py) on top.
 
-Usage: python3 -m eval.scripts.run_eval [--limit 10]
+Pure functions only — embedding, hybrid_search, optional reranking, gold
+dataset loading — no CLI, no printing beyond gold-dataset completeness
+warnings, no file output. `retrieve()` returns results for callers to score
+and report themselves.
+
+Consumers:
+- eval/scripts/run_hyperparam_sweep.py — dense/sparse/hybrid_k sweep report
+- eval/scripts/run_reranking_comparison.py — hybrid-only vs +rerank report
+
 Requires Qdrant running with the built index (scripts/build_index.py).
 """
 
 from __future__ import annotations
 
-import argparse
 import csv
 import sys
 from pathlib import Path
 
 from qdrant_client import QdrantClient
 
-from eval.scripts.metrics import BREAKDOWN_ATTRS, RECALL_KS, GoldItem, full_report, score_item
+from eval.scripts.metrics import RECALL_KS, GoldItem
 from src.indexing.embeddings import DenseEmbedder, SparseEmbedder
 from src.retrieval.hybrid import hybrid_search
+from src.retrieval.reranking import DEFAULT_RERANK_CANDIDATES, CrossEncoderReranker
+from src.retrieval.reranking import rerank as apply_reranking
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 GOLD_DATASET_PATH = REPO_ROOT / "eval" / "gold_dataset.csv"
@@ -119,43 +127,41 @@ def print_gold_dataset_status(path: Path) -> list[GoldItem]:
     return items
 
 
-def format_metrics(metrics: dict) -> str:
-    parts = [f"recall@{k}={metrics[f'recall@{k}']:.3f}" for k in RECALL_KS]
-    parts.append(f"mrr={metrics['mrr']:.3f}")
-    parts.append(f"n={metrics['n']}")
-    return "  ".join(parts)
+def retrieve(
+    client: QdrantClient,
+    items: list[GoldItem],
+    dense_embedder: DenseEmbedder,
+    sparse_embedder: SparseEmbedder,
+    *,
+    limit: int = max(RECALL_KS),
+    rerank: bool = False,
+    rerank_candidates: int = DEFAULT_RERANK_CANDIDATES,
+    reranker: CrossEncoderReranker | None = None,
+) -> dict[str, list[str]]:
+    """item.id -> ranked chunk_ids (length <= limit) from hybrid retrieval,
+    optionally cross-encoder reranked on top of the same baseline.
 
+    When `rerank` is set, retrieves `max(limit, rerank_candidates)` chunks so
+    the reranker sees its full intended candidate pool, reorders them, then
+    truncates to `limit` — same hybrid retrieval call either way, only the
+    post-processing differs, so callers can isolate the reranker's
+    contribution by calling this once with rerank=False and once with
+    rerank=True over the same items.
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--limit", type=int, default=max(RECALL_KS), help="Top-k retrieved per query (default: 10)."
-    )
-    parser.add_argument("--qdrant-url", default=QDRANT_URL)
-    args = parser.parse_args()
+    Pass `reranker` to reuse an already-loaded CrossEncoderReranker across
+    calls; otherwise one is constructed when rerank=True.
+    """
+    active_reranker: CrossEncoderReranker | None = None
+    if rerank:
+        active_reranker = reranker or CrossEncoderReranker()
+    retrieve_limit = max(limit, rerank_candidates) if rerank else limit
 
-    items = print_gold_dataset_status(GOLD_DATASET_PATH)
-
-    client = QdrantClient(url=args.qdrant_url)
-    dense_embedder = DenseEmbedder()
-    sparse_embedder = SparseEmbedder()
-
-    results = []
+    results = {}
     for item in items:
         retrieved = hybrid_search(
-            client, item.query, dense_embedder, sparse_embedder, limit=args.limit
+            client, item.query, dense_embedder, sparse_embedder, limit=retrieve_limit
         )
-        results.append(score_item(item, [chunk.chunk_id for chunk in retrieved]))
-
-    report = full_report(results)
-
-    print("=== Overall ===")
-    print(format_metrics(report["overall"]))
-    for attr in BREAKDOWN_ATTRS:
-        print(f"\n=== By {attr} ===")
-        for value, metrics in report["by"][attr].items():
-            print(f"{value:20s} {format_metrics(metrics)}")
-
-
-if __name__ == "__main__":
-    main()
+        if active_reranker is not None:
+            retrieved = apply_reranking(item.query, retrieved, active_reranker)
+        results[item.id] = [chunk.chunk_id for chunk in retrieved[:limit]]
+    return results

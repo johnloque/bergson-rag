@@ -43,3 +43,6 @@ fr-core-news-lg = { url = "https://github.com/explosion/spacy-models/releases/do
 # BAAI/bge-m3 dense embeddings — HF commit, since the model itself has no
 # package version.
 bge_m3_revision = "5617a9f61b028005a4858fdac845db406aefb181"
+# BAAI/bge-reranker-v2-m3 cross-encoder reranker — HF commit, same rationale
+# (src/retrieval/reranking.py).
+bge_reranker_v2_m3_revision = "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"

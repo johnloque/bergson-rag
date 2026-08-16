@@ -22,15 +22,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from qdrant_client import QdrantClient, models  # noqa: E402
+from qdrant_client import QdrantClient  # noqa: E402
 
 from src.indexing.embeddings import DenseEmbedder, SparseEmbedder  # noqa: E402
-from src.indexing.normalize import normalize_text  # noqa: E402
-from src.indexing.qdrant_index import (  # noqa: E402
-    COLLECTION_NAME,
-    DENSE_VECTOR_NAME,
-    SPARSE_VECTOR_NAME,
-)
+from src.indexing.qdrant_index import COLLECTION_NAME  # noqa: E402
+from src.retrieval.hybrid import RetrievedChunk, dense_search, sparse_search  # noqa: E402
 
 QDRANT_URL = "http://localhost:6333"
 SNIPPET_LENGTH = 300
@@ -63,16 +59,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_query(method: str, text: str) -> tuple[models.QueryInterface, str]:
-    if method == "dense":
-        vector = DenseEmbedder().embed([text])[0]
-        return vector, DENSE_VECTOR_NAME
-
-    bm25_text = normalize_text(text).bm25_text
-    indices, values = SparseEmbedder().embed_query([bm25_text])[0]
-    return models.SparseVector(indices=indices, values=values), SPARSE_VECTOR_NAME
-
-
 def format_page_range(page_start: dict, page_end: dict) -> str:
     start, end = page_start["display"], page_end["display"]
     return start if start == end else f"{start}-{end}"
@@ -83,32 +69,35 @@ def snippet(text: str, length: int = SNIPPET_LENGTH) -> str:
     return collapsed if len(collapsed) <= length else collapsed[:length].rstrip() + "..."
 
 
-def print_results(points: list[models.ScoredPoint], full: bool) -> None:
-    if not points:
+def print_results(chunks: list[RetrievedChunk], full: bool) -> None:
+    if not chunks:
         print("No results.")
         return
-    for rank, point in enumerate(points, start=1):
-        payload = point.payload or {}
-        pages = format_page_range(payload["page_start"], payload["page_end"])
-        header = f"{payload['work_id']}  {payload['section_path']}  p. {pages}"
-        print(f"[{rank}] score={point.score:.4f}  {header}")
-        print(f"    chunk_id={payload['chunk_id']}")
-        print(f"    {payload['text'] if full else snippet(payload['text'])}")
+    for rank, chunk in enumerate(chunks, start=1):
+        pages = format_page_range(chunk.page_start, chunk.page_end)
+        header = f"{chunk.work_id}  {chunk.section_path}  p. {pages}"
+        print(f"[{rank}] score={chunk.score:.4f}  {header}")
+        print(f"    chunk_id={chunk.chunk_id}")
+        print(f"    {chunk.text if full else snippet(chunk.text)}")
         print()
 
 
 def main() -> None:
     args = parse_args()
     client = QdrantClient(url=args.qdrant_url)
-    query, using = build_query(args.method, args.query)
-    response = client.query_points(
-        collection_name=args.collection,
-        query=query,
-        using=using,
-        limit=args.limit,
-        with_payload=True,
-    )
-    print_results(response.points, args.full)
+    if args.method == "dense":
+        chunks = dense_search(
+            client, args.query, DenseEmbedder(), limit=args.limit, collection_name=args.collection
+        )
+    else:
+        chunks = sparse_search(
+            client,
+            args.query,
+            SparseEmbedder(),
+            limit=args.limit,
+            collection_name=args.collection,
+        )
+    print_results(chunks, args.full)
 
 
 if __name__ == "__main__":

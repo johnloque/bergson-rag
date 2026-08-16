@@ -60,6 +60,47 @@ def _point_to_chunk(point: models.ScoredPoint) -> RetrievedChunk:
     return RetrievedChunk(score=point.score, **{field: payload[field] for field in PAYLOAD_FIELDS})
 
 
+def dense_search(
+    client: QdrantClient,
+    query: str,
+    dense_embedder: DenseEmbedder,
+    limit: int = 10,
+    collection_name: str = COLLECTION_NAME,
+) -> list[RetrievedChunk]:
+    """Dense-only (BGE-M3) search, no fusion — isolates the dense channel
+    for hyperparameter comparisons (eval/scripts/run_hyperparam_sweep.py)."""
+    dense_vector = dense_embedder.embed([query])[0]
+    response = client.query_points(
+        collection_name=collection_name,
+        query=dense_vector,
+        using=DENSE_VECTOR_NAME,
+        limit=limit,
+        with_payload=True,
+    )
+    return [_point_to_chunk(point) for point in response.points]
+
+
+def sparse_search(
+    client: QdrantClient,
+    query: str,
+    sparse_embedder: SparseEmbedder,
+    limit: int = 10,
+    collection_name: str = COLLECTION_NAME,
+) -> list[RetrievedChunk]:
+    """Sparse-only (BM25) search, no fusion — isolates the sparse channel
+    for hyperparameter comparisons (eval/scripts/run_hyperparam_sweep.py)."""
+    bm25_text = normalize_text(query).bm25_text
+    sparse_indices, sparse_values = sparse_embedder.embed_query([bm25_text])[0]
+    response = client.query_points(
+        collection_name=collection_name,
+        query=models.SparseVector(indices=sparse_indices, values=sparse_values),
+        using=SPARSE_VECTOR_NAME,
+        limit=limit,
+        with_payload=True,
+    )
+    return [_point_to_chunk(point) for point in response.points]
+
+
 def hybrid_search(
     client: QdrantClient,
     query: str,
@@ -68,10 +109,12 @@ def hybrid_search(
     limit: int = 10,
     prefetch_limit: int = DEFAULT_PREFETCH_LIMIT,
     collection_name: str = COLLECTION_NAME,
+    rrf_k: int = RRF_K,
 ) -> list[RetrievedChunk]:
     """Dense + sparse prefetch on `query`, fused via Qdrant-native RRF
-    (k=60). Deterministic given a fixed query and an unchanged index —
-    both embedders and the fusion itself are non-random.
+    (k=`rrf_k`, defaults to the Cormack et al. 2009 standard value).
+    Deterministic given a fixed query and an unchanged index — both
+    embedders and the fusion itself are non-random.
     """
     dense_vector = dense_embedder.embed([query])[0]
     bm25_text = normalize_text(query).bm25_text
@@ -97,7 +140,7 @@ def hybrid_search(
                 limit=prefetch_limit,
             ),
         ],
-        query=models.RrfQuery(rrf=models.Rrf(k=RRF_K)),
+        query=models.RrfQuery(rrf=models.Rrf(k=rrf_k)),
         limit=prefetch_limit,
         with_payload=True,
     )

@@ -157,6 +157,20 @@ evaluation (recall@k, MRR).
 Cross-encoder integration, single-mode prompt design, LLM integration
 (local + API fallback), preliminary end-to-end evaluation (RAGAS).
 
+**Reranking — implemented.** Cross-encoder reranking (`bge-reranker-v2-m3`)
+in `src/retrieval/reranking.py`, callable independently of
+`src/retrieval/hybrid.py`. `eval/scripts/run_reranking_comparison.py`
+generates the before/after recall@k/MRR report on `eval/gold_dataset.csv`
+(n=10) directly from this retrieval path:
+[`eval_reranking_n10_20260816T122756Z.md`](eval_reranking_n10_20260816T122756Z.md).
+
+**Deferred, not skipped**: BGE-M3 multi-vector (ColBERT-style) reranking,
+gated on two unmet conditions — (1) a feasibility check of extracting
+colbert vectors in this stack, likely requiring `FlagEmbedding` (not added
+this sprint), and (2) a larger gold dataset, needed for a meaningful
+reranker-vs-reranker comparison. Revisit once both are met
+(`docs/gold_dataset_protocol.md`).
+
 ### Sprint 5 — Anti-hallucination guardrails
 Post-generation validation, explicit "no reliable answer" handling,
 citation formatting, before/after metrics on the gold dataset.

@@ -8,8 +8,8 @@ services:
       - qdrant_data:/qdrant/storage
     restart: unless-stopped
 
-  # api:        # added in Sprint 6
-  # frontend:   # added in Sprint 6
+  # api:        # added in Sprint 7
+  # frontend:   # added in Sprint 8
 
 volumes:
   qdrant_data:

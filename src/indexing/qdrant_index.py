@@ -48,6 +48,11 @@ def ensure_collection(client: QdrantClient) -> None:
         sparse_vectors_config={
             SPARSE_VECTOR_NAME: models.SparseVectorParams(modifier=models.Modifier.IDF),
         },
+        # Single segment: at this corpus size (~900 chunks), Qdrant's default
+        # multi-segment layout has no deterministic tie-break when merging
+        # equal-score RRF results across segments — confirmed via repeated
+        # queries producing different orderings for exactly-tied scores.
+        optimizers_config=models.OptimizersConfigDiff(default_segment_number=1),
     )
 
 

@@ -77,6 +77,16 @@ def hybrid_search(
     bm25_text = normalize_text(query).bm25_text
     sparse_indices, sparse_values = sparse_embedder.embed_query([bm25_text])[0]
 
+    # Qdrant's RRF merge has no deterministic tie-break for exactly-equal
+    # scores: confirmed empirically (repeated identical queries against an
+    # unchanged, single-segment collection) that when a tied pair straddles
+    # the requested `limit`, which one gets truncated away flips from call
+    # to call — not just their relative order. Sorting the already-truncated
+    # response client-side can't fix that, since the dropped point is never
+    # returned at all. So we ask Qdrant for the full fused candidate set
+    # (bounded by prefetch_limit, same as each channel's own prefetch) and
+    # do the truncation ourselves, after imposing a deterministic secondary
+    # sort key (chunk_id) on top of Qdrant-native RRF scores.
     response = client.query_points(
         collection_name=collection_name,
         prefetch=[
@@ -88,7 +98,11 @@ def hybrid_search(
             ),
         ],
         query=models.RrfQuery(rrf=models.Rrf(k=RRF_K)),
-        limit=limit,
+        limit=prefetch_limit,
         with_payload=True,
     )
-    return [_point_to_chunk(point) for point in response.points]
+    chunks = sorted(
+        (_point_to_chunk(point) for point in response.points),
+        key=lambda chunk: (-chunk.score, chunk.chunk_id),
+    )
+    return chunks[:limit]

@@ -45,7 +45,7 @@ from src.indexing.embeddings import DenseEmbedder, SparseEmbedder
 from src.retrieval.reranking import DEFAULT_RERANK_CANDIDATES, CrossEncoderReranker
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-DOCS_DIR = REPO_ROOT / "docs"
+RESULTS_DIR = REPO_ROOT / "eval" / "results"
 
 CONFIG_NAMES = ["hybrid_only", "hybrid_rerank"]
 CONFIG_LABELS = {
@@ -354,7 +354,7 @@ def main() -> None:
         "--output",
         type=Path,
         default=None,
-        help="Output .md path (default: docs/eval_reranking_n<N>_<timestamp>.md).",
+        help="Output .md path (default: eval/results/eval_reranking_n<N>_<timestamp>.md).",
     )
     args = parser.parse_args()
 
@@ -378,8 +378,8 @@ def main() -> None:
     output_path = args.output
     if output_path is None:
         file_timestamp = now.strftime("%Y%m%dT%H%M%SZ")
-        DOCS_DIR.mkdir(parents=True, exist_ok=True)
-        output_path = DOCS_DIR / f"eval_reranking_n{len(items)}_{file_timestamp}.md"
+        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        output_path = RESULTS_DIR / f"eval_reranking_n{len(items)}_{file_timestamp}.md"
 
     output_path.write_text(report, encoding="utf-8")
     print(f"Wrote {output_path}")

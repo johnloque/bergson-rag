@@ -48,7 +48,7 @@ from src.retrieval.hybrid import (
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 GOLD_DATASET_PATH = REPO_ROOT / "eval" / "gold_dataset.csv"
-DOCS_DIR = REPO_ROOT / "docs"
+RESULTS_DIR = REPO_ROOT / "eval" / "results"
 QDRANT_URL = "http://localhost:6333"
 
 RRF_K_VALUES = (1, 5, 10, 20, 40, 60)
@@ -320,7 +320,7 @@ def main() -> None:
         "--output",
         type=Path,
         default=None,
-        help="Output .md path (default: docs/eval_hyperparam_sweep_n<N>_<timestamp>.md).",
+        help="Output .md path (default: eval/results/eval_hyperparam_sweep_n<N>_<timestamp>.md).",
     )
     args = parser.parse_args()
 
@@ -341,8 +341,8 @@ def main() -> None:
     output_path = args.output
     if output_path is None:
         file_timestamp = now.strftime("%Y%m%dT%H%M%SZ")
-        DOCS_DIR.mkdir(parents=True, exist_ok=True)
-        output_path = DOCS_DIR / f"eval_hyperparam_sweep_n{len(items)}_{file_timestamp}.md"
+        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        output_path = RESULTS_DIR / f"eval_hyperparam_sweep_n{len(items)}_{file_timestamp}.md"
 
     output_path.write_text(report, encoding="utf-8")
     print(f"Wrote {output_path}")

@@ -24,6 +24,9 @@ models_cache/
 # Notebooks
 .ipynb_checkpoints/
 
+# eval/scripts/run_ragas_eval.py resume state — working file, not a result
+eval/results/ragas_checkpoint.jsonl
+
 # OS / editors
 .DS_Store
 .vscode/

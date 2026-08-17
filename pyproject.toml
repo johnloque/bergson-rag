@@ -5,11 +5,27 @@ description = "Local RAG chatbot on the complete works of Henri Bergson"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
+# ragas pinned below 0.4: ragas 0.4.x unconditionally imports
+# langchain_community.chat_models.vertexai at module load time, a path
+# langchain-community has since dropped entirely (its own churn, unrelated to
+# this project) — breaks `import ragas` for every non-VertexAI user
+# regardless of provider (github.com/explodinggradients/ragas issues #2741,
+# #2745, #2753, open as of this pin). langchain-community itself is pinned
+# for the same reason: ragas does not pin it, and the latest release also
+# lacks that module, so an unconstrained resolve reintroduces the crash even
+# with ragas<0.4. Revisit both pins once upstream ships a fix.
+# langchain-litellm: the actively maintained standalone package for
+# LiteLLM-via-langchain (src/generation/faithfulness.py) — not
+# langchain_community's own ChatLiteLLM, which langchain-community's own
+# deprecation warning points away from.
 dependencies = [
     "fastembed==0.8.0",
     "fr-core-news-lg==3.8.0",
+    "langchain-community==0.3.30",
+    "langchain-litellm==0.7.0",
     "litellm==1.97.0",
     "qdrant-client==1.19.0",
+    "ragas==0.3.9",
     "sentence-transformers==5.7.0",
     "snowballstemmer==3.1.1",
     "spacy==3.8.15",

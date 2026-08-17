@@ -52,6 +52,7 @@ def load_gold_dataset(path: Path) -> list[GoldItem]:
                 query_style=row["query_style"],
                 ground_truth_type=row["ground_truth_type"],
                 chunk_ids=tuple(c.strip() for c in row["chunk_ids"].split(",") if c.strip()),
+                expected_anwser=row["expected_anwser"],
                 vocabulary_type=row["vocabulary_type"],
                 difficulty=row["difficulty"],
                 footnote_related=row["footnote_related"],

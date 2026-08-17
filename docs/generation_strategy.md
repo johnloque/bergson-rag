@@ -89,8 +89,15 @@ additionally require a reachable model (Ollama running locally with
 key configured) and skip cleanly otherwise, same discipline as this repo's
 other infra-dependent suites.
 
-## Not yet done, tracked for a fast-follow
+## RAGAS evaluation
 
-The "preliminary end-to-end evaluation (RAGAS)" named in Sprint 5's
-original scope line was not part of this pass — this pass covers the
-generation pipeline and prompt itself plus Test A/B coverage only.
+The "preliminary end-to-end evaluation (RAGAS)" named in Sprint 5's original
+scope line is implemented in a later pass on this branch:
+`eval/scripts/run_ragas_eval.py` (faithfulness, context precision, context
+recall; generation-only and end-to-end modes, reported separately) and
+`src/generation/faithfulness.py` (`check_faithfulness` — the reusable
+faithfulness function both this eval harness and Sprint 6's future
+guardrail will call). Full rationale, including the RAGAS
+single-instance-vs-batch API investigation and the `ragas`/`langchain-community`
+version pin: `docs/ROADMAP.md`'s Sprint 5 section and the module docstrings
+in both files above.

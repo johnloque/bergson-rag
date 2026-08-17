@@ -38,7 +38,7 @@ from src.indexing.qdrant_index import (
     SPARSE_VECTOR_NAME,
 )
 
-RRF_K = 1  # cf docs/eval_hyperparam_sweep_n10_20260816T084507Z.md
+RRF_K = 1  # cf eval/results/eval_hyperparam_sweep_n10_20260816T084507Z.md
 DEFAULT_PREFETCH_LIMIT = 50
 
 

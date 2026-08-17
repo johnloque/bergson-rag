@@ -161,7 +161,7 @@ in `src/retrieval/reranking.py`, callable independently of
 `src/retrieval/hybrid.py`. `eval/scripts/run_reranking_comparison.py`
 generates the before/after recall@k/MRR report on `eval/gold_dataset.csv`
 (n=10) directly from this retrieval path:
-[`eval_reranking_n10_20260816T122756Z.md`](eval_reranking_n10_20260816T122756Z.md).
+[`eval_reranking_n10_20260816T122756Z.md`](../eval/results/eval_reranking_n10_20260816T122756Z.md).
 
 **Deferred, not skipped**: BGE-M3 multi-vector (ColBERT-style) reranking,
 gated on two unmet conditions — (1) a feasibility check of extracting
@@ -172,18 +172,23 @@ reranker-vs-reranker comparison. Revisit once both are met
 
 ### Sprint 5 - LLM Integration
 
-Single-mode prompt design, LLM integration
-(local + API fallback), preliminary end-to-end evaluation (RAGAS).
+Single-mode prompt design, LLM integration (local + API fallback),
+preliminary end-to-end evaluation (RAGAS).
 
-**LLM integration — implemented.** `generate_from_chunks(query, chunks, client,
-model=DEFAULT_MODEL, fallback_model=None)` in `src/generation/generate.py`,
-via LiteLLM (Mistral/Ollama local default, Mistral hosted API fallback).
-Evidence-conditioned prompt (`src/generation/prompt.py` +
-`src/generation/signals.py`), mandatory citations, Test A/B coverage in
-`tests/test_generation.py`. Anti-hallucination guardrails and `judge_chunks`
-deferred (Sprint 6 and its own commit, respectively). RAGAS end-to-end
-evaluation not yet done, tracked as a fast-follow. Full design rationale
-and testing approach: [`docs/generation_strategy.md`](generation_strategy.md).
+**LLM integration — implemented.** `generate_from_chunks` in
+`src/generation/generate.py`, via LiteLLM (Mistral/Ollama local default,
+Mistral hosted API fallback). Evidence-conditioned prompt, mandatory
+citations, Test A/B coverage in `tests/test_generation.py`.
+Anti-hallucination guardrails and `judge_chunks` deferred to Sprint 6.
+Full design rationale: [`docs/generation_strategy.md`](generation_strategy.md).
+
+**RAGAS evaluation — implemented.** `eval/scripts/run_ragas_eval.py`
+(`generation_only` and `end_to_end` modes; faithfulness, context precision,
+context recall) against a local or API judge LLM, with an explicit two-run
+determinism check. Latest result: [`eval/results/`](../eval/results/)
+(exploratory, n=10, below the n=50 protocol target). Full methodology,
+the shared faithfulness implementation, and Sprint 6 handoff notes:
+[`docs/ragas_evaluation.md`](ragas_evaluation.md).
 
 ### Sprint 6 — Anti-hallucination guardrails
 Post-generation validation, explicit "no reliable answer" handling,

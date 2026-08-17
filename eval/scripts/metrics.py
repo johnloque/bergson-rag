@@ -29,6 +29,7 @@ class GoldItem:
     query_style: str
     ground_truth_type: str
     chunk_ids: tuple[str, ...]
+    expected_anwser: str  # gold_dataset.csv's own column name (sic) — RAGAS's `reference`
     vocabulary_type: str
     difficulty: str
     footnote_related: str

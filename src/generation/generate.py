@@ -32,7 +32,7 @@ from __future__ import annotations
 import os
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import cast
+from typing import Any, cast
 
 import litellm
 from litellm import ModelResponse
@@ -86,6 +86,8 @@ def generate_from_chunks(
     client: QdrantClient,
     model: str = DEFAULT_MODEL,
     fallback_model: str | None = None,
+    temperature: float | None = None,
+    **extra_params: Any,
 ) -> GenerationResult:
     """Synthesize an answer to `query` from `chunks` only.
 
@@ -98,6 +100,23 @@ def generate_from_chunks(
     primary `model` call fails, the fallback is attempted regardless — a
     missing `MISTRAL_API_KEY` (or whichever key the resolved fallback model
     needs) simply surfaces as that call's own error.
+
+    `temperature` is left unset (provider default sampling) unless given —
+    eval/scripts/run_ragas_eval.py passes 0 explicitly, since RAGAS scoring
+    needs a reproducible answer to score, but normal/interactive use has no
+    reason to force greedy decoding.
+
+    `**extra_params` are forwarded to `litellm.completion` as-is (e.g.
+    `num_ctx` for an Ollama model) — eval/scripts/run_ragas_eval.py passes
+    the same `num_ctx` used for judging, so generation and judging never
+    disagree on Ollama's context-window size: a size change on every call
+    forces Ollama to reload the model, observed to add tens of seconds per
+    call when generation and judging alternated with different context
+    sizes on the same local server. Forwarded to `fallback_model` too, so a
+    provider-specific param (like `num_ctx`) that the resolved fallback
+    doesn't support surfaces as that call's own error, same as any other
+    fallback failure mode here — caller's responsibility to keep
+    `extra_params` valid for both when a cross-provider fallback is in play.
     """
     if fallback_model is None:
         fallback_model = os.environ.get(FALLBACK_MODEL_ENV_VAR, DEFAULT_FALLBACK_MODEL)
@@ -109,15 +128,18 @@ def generate_from_chunks(
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": prompt},
     ]
-
     used_model = model
     try:
-        response = litellm.completion(model=model, messages=messages)
+        response = litellm.completion(
+            model=model, messages=messages, temperature=temperature, **extra_params
+        )
     except Exception:
         if not fallback_model:
             raise
         used_model = fallback_model
-        response = litellm.completion(model=fallback_model, messages=messages)
+        response = litellm.completion(
+            model=fallback_model, messages=messages, temperature=temperature, **extra_params
+        )
 
     # Never called with stream=True, so litellm always returns a ModelResponse
     # here, not a CustomStreamWrapper.

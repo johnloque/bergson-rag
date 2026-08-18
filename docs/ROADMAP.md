@@ -210,26 +210,11 @@ Sprint 7 handoff notes:
 [`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md).
 
 **`judge_chunk` — implemented.** `judge_chunk(query, chunk, model=DEFAULT_JUDGE_MODEL)
--> ChunkJudgment` in `src/generation/chunk_judge.py`. Singular, not batched: one
-chunk per call, replacing the plural `judge_chunks(query, chunks)` signature
-sketched earlier in this document — that batched design was never built (no
-prior branch to migrate). Judging one chunk at a time also makes cross-chunk
-contamination structurally impossible, rather than a prompt-design
-precaution a batched version would have needed. Same default judge as
-`generate_evaluation`'s faithfulness check (`DEFAULT_JUDGE_MODEL`, local 7B
-via Ollama) — consistent with this project's judge-calibration finding
-above that the hosted Mistral judge is unreliable for judge-shaped
-decisions in this project. Output conforms to the `ChunkJudgment` contract
-already committed in `src/generation/chunk_judgment.py`, so `generate_from_chunks`
-needed no changes.
-
-Accumulating repeated `judge_chunk` calls into the
-`chunk_judgments: dict[str, ChunkJudgment]` shape `generate_from_chunks`
-accepts is explicitly a frontend/client-side responsibility, deferred to
-Sprint 7 — not built or persisted on the backend here. Durable storage of
-judgments across sessions (SQLite, per the Sprint 7 plan below) remains a
-separate, still-deferred Sprint 7 concern; this branch has no persistence
-layer at all, in-memory or otherwise.
+-> ChunkJudgment` in `src/generation/chunk_judge.py`: an on-demand relevance
+judgment (label + justification) for one chunk per call. Accumulation into
+the `chunk_judgments` dict and persistence across sessions remain deferred
+to Sprint 7. Full design rationale, judge-model choice, and test coverage:
+[`docs/judge_chunk.md`](judge_chunk.md).
 
 ### Sprint 7 — Backend API and persistence
 - Three-endpoint FastAPI (`retrieve` / `generate_from_chunks` /

@@ -20,7 +20,7 @@ string; that provider's own API key is then optional/user-supplied, not
 activated by default.
 
 `chunk_judgments` (docs/ROADMAP.md, Sprint 6) carries prior relevance
-judgments — keyed by chunk_id, shape `src.generation.judgment.ChunkJudgment`
+judgments — keyed by chunk_id, shape `src.generation.chunk_judgment.ChunkJudgment`
 — for chunks still present in `chunks`. Populated on a user-triggered manual
 regeneration after a (future, separate-branch) `judge_chunks` call; `None`
 for an initial generation. `generate_from_chunks` never filters `chunks`
@@ -49,7 +49,7 @@ import litellm
 from litellm import ModelResponse
 from qdrant_client import QdrantClient
 
-from src.generation.judgment import ChunkJudgment
+from src.generation.chunk_judgment import ChunkJudgment
 from src.generation.prompt import SYSTEM_PROMPT, build_prompt
 from src.generation.signals import EvidenceSignals, GenerationChunk, compute_signals
 from src.indexing.qdrant_index import COLLECTION_NAME, DENSE_VECTOR_NAME, point_id_for

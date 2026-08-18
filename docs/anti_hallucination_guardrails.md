@@ -130,7 +130,7 @@ gold dataset" discipline as this project's other thresholds.
 
 `judge_chunks` itself is out of scope for this branch (its own, later
 branch) — this sprint only builds the consumer side. The shape it must
-conform to is fixed now, in `src/generation/judgment.py`:
+conform to is fixed now, in `src/generation/chunk_judgment.py`:
 
 ```python
 ChunkJudgment = {"label": "pertinent" | "partiellement pertinent" |

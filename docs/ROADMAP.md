@@ -75,10 +75,11 @@ bergson-rag.
   manual curation (see stemming vs. lemmas for BM25, above).
 - **Scoring**: cross-encoder reranker (bge-reranker-v2-m3) as the
   default, always-on relevance score. A separate, on-demand LLM relevance
-  judgment (`judge_chunks`) provides a short textual justification per
-  chunk, computed only when the user requests it. Kept deliberately: it
-  is what makes answer fidelity checkable by a non-specialist reviewer,
-  a central argument for staying on the Bergson corpus at all.
+  judgment (`judge_chunk`, one chunk per call — see Sprint 6) provides a
+  short textual justification per chunk, computed only when the user
+  requests it. Kept deliberately: it is what makes answer fidelity
+  checkable by a non-specialist reviewer, a central argument for staying
+  on the Bergson corpus at all.
 - **Generation**: single synthesis mode over a small, bounded evidence
   set, with mandatory citations. No evidence-conditioned branching by
   question category — not needed once evidence sets are consistently
@@ -90,8 +91,9 @@ bergson-rag.
   - `retrieve(query)` — hybrid search + reranking, returns chunks
   - `generate_from_chunks(query, chunks)` — synthesis from a given,
     possibly user-curated, chunk selection
-  - `judge_chunks(query, chunks)` — on-demand relevance judgment
-    (score + justification) per chunk
+  - `judge_chunk(query, chunk)` — on-demand relevance judgment (label +
+    justification) for a single chunk; called once per chunk, not
+    batched (see Sprint 6)
 - **Infra**: Qdrant (dense + sparse), FastAPI, Docker Compose as the
   reference setup. Kubernetes is not built — a one-line note on the
   natural scaling path suffices for this demo, not a dedicated sprint.
@@ -207,9 +209,16 @@ Full design rationale, the CV→best-score confidence-signal correction, and
 Sprint 7 handoff notes:
 [`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md).
 
+**`judge_chunk` — implemented.** `judge_chunk(query, chunk, model=DEFAULT_JUDGE_MODEL)
+-> ChunkJudgment` in `src/generation/chunk_judge.py`: an on-demand relevance
+judgment (label + justification) for one chunk per call. Accumulation into
+the `chunk_judgments` dict and persistence across sessions remain deferred
+to Sprint 7. Full design rationale, judge-model choice, and test coverage:
+[`docs/judge_chunk.md`](judge_chunk.md).
+
 ### Sprint 7 — Backend API and persistence
 - Three-endpoint FastAPI (`retrieve` / `generate_from_chunks` /
-  `judge_chunks`)
+  `judge_chunk`)
 - API-level tests (no UI yet)
 - SQLite persistence as fast-follow, not a blocker for this sprint's
   deliverable

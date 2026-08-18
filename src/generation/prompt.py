@@ -11,7 +11,7 @@ anti-hallucination guardrail — no refusal / "no reliable answer" handling
 here, that's Sprint 6 (docs/ROADMAP.md).
 
 `chunk_judgments` (Sprint 6, docs/ROADMAP.md — the `ChunkJudgment` contract
-in `src/generation/judgment.py`) is optional, separate conditioning: when a
+in `src/generation/chunk_judgment.py`) is optional, separate conditioning: when a
 chunk in the input selection has a prior relevance judgment (from a future
 `judge_chunks` call, on a manual regeneration), its label and justification
 are rendered inline with that chunk's evidence text, plus one instruction
@@ -24,7 +24,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 
-from src.generation.judgment import ChunkJudgment
+from src.generation.chunk_judgment import ChunkJudgment
 from src.generation.signals import EvidenceSignals, GenerationChunk
 
 SYSTEM_PROMPT = (

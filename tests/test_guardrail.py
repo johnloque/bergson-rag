@@ -43,6 +43,7 @@ import litellm
 import pytest
 from qdrant_client import QdrantClient
 
+from src.generation.chunk_judgment import ChunkJudgment
 from src.generation.faithfulness import DEFAULT_JUDGE_MODEL, build_judge_llm
 from src.generation.generate import (
     DEFAULT_FALLBACK_MODEL,
@@ -56,7 +57,6 @@ from src.generation.guardrail import (
     retrieval_confidence_tier,
     should_auto_expand,
 )
-from src.generation.judgment import ChunkJudgment
 from src.generation.prompt import CHUNK_JUDGMENT_INSTRUCTION
 from src.indexing.embeddings import DenseEmbedder, SparseEmbedder
 from src.indexing.qdrant_index import COLLECTION_NAME, PAYLOAD_FIELDS, point_id_for
@@ -336,7 +336,7 @@ def test_layer1_missing_citation_flagged_without_llm_call(client):
 def test_chunk_judgments_included_in_prompt(client):
     """A hand-constructed ChunkJudgment fixture — not from a real
     judge_chunks call, which doesn't exist yet on this branch — matching the
-    committed interface contract (src/generation/judgment.py)."""
+    committed interface contract (src/generation/chunk_judgment.py)."""
     chunk = _load_chunk(client, Q001_CHUNK_ID)
     justification = "Passage central sur l'image de la boule de neige illustrant le changement."
     chunk_judgments: dict[str, ChunkJudgment] = {

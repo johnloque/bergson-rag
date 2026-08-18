@@ -19,18 +19,29 @@ this project's default configuration cost-free on Mistral's free tier.
 string; that provider's own API key is then optional/user-supplied, not
 activated by default.
 
-Deliberately out of scope this sprint (docs/ROADMAP.md, Sprint 5 vs. 6):
-- Anti-hallucination guardrails: no post-generation validation and no
-  explicit "no reliable answer" refusal here. `EvidenceSignals` only
-  soften phrasing at the prompt level (src/generation/prompt.py); Sprint 6
-  is where weak evidence gets a hard gate.
-- `judge_chunks`: not stubbed here, deferred to its own commit.
+`chunk_judgments` (docs/ROADMAP.md, Sprint 6) carries prior relevance
+judgments — keyed by chunk_id, shape `src.generation.judgment.ChunkJudgment`
+— for chunks still present in `chunks`. Populated on a user-triggered manual
+regeneration after a (future, separate-branch) `judge_chunks` call; `None`
+for an initial generation. `generate_from_chunks` never filters `chunks`
+based on it — that's the caller's job, already done before this call — it
+only threads the judgment text into the prompt as extra signal
+(src/generation/prompt.py).
+
+Deliberately out of scope this sprint still (docs/ROADMAP.md, Sprint 6 vs.
+7): no hard refusal anywhere in this function regardless of evidence
+strength or `chunk_judgments` content — `generate_from_chunks` always
+generates and returns an answer. Post-generation faithfulness/structural
+validation is a separate function, `generate_evaluation`
+(src/generation/guardrail.py), not run inside this one (this function stays
+generation-only and fast). `judge_chunks` itself remains unstubbed, its own
+later branch.
 """
 
 from __future__ import annotations
 
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -38,6 +49,7 @@ import litellm
 from litellm import ModelResponse
 from qdrant_client import QdrantClient
 
+from src.generation.judgment import ChunkJudgment
 from src.generation.prompt import SYSTEM_PROMPT, build_prompt
 from src.generation.signals import EvidenceSignals, GenerationChunk, compute_signals
 from src.indexing.qdrant_index import COLLECTION_NAME, DENSE_VECTOR_NAME, point_id_for
@@ -87,6 +99,7 @@ def generate_from_chunks(
     model: str = DEFAULT_MODEL,
     fallback_model: str | None = None,
     temperature: float | None = None,
+    chunk_judgments: Mapping[str, ChunkJudgment] | None = None,
     **extra_params: Any,
 ) -> GenerationResult:
     """Synthesize an answer to `query` from `chunks` only.
@@ -100,6 +113,13 @@ def generate_from_chunks(
     primary `model` call fails, the fallback is attempted regardless — a
     missing `MISTRAL_API_KEY` (or whichever key the resolved fallback model
     needs) simply surfaces as that call's own error.
+
+    `chunk_judgments` (docs/ROADMAP.md, Sprint 6): optional prior relevance
+    judgments, keyed by chunk_id, rendered inline with the matching chunk's
+    evidence text in the prompt (src/generation/prompt.py). `None` for an
+    initial generation; a caller re-generating after judging some chunks
+    passes them here — this never filters `chunks` itself, that's the
+    caller's job before this call.
 
     `temperature` is left unset (provider default sampling) unless given —
     eval/scripts/run_ragas_eval.py passes 0 explicitly, since RAGAS scoring
@@ -123,27 +143,29 @@ def generate_from_chunks(
 
     dense_vectors = fetch_dense_vectors(client, [chunk.chunk_id for chunk in chunks])
     signals = compute_signals(chunks, dense_vectors)
-    prompt = build_prompt(query, chunks, signals)
+    prompt = build_prompt(query, chunks, signals, chunk_judgments)
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": prompt},
     ]
+
+    def complete(completion_model: str) -> ModelResponse:
+        response = litellm.completion(
+            model=completion_model, messages=messages, temperature=temperature, **extra_params
+        )
+        # Never called with stream=True, so litellm always returns a
+        # ModelResponse here, not a CustomStreamWrapper.
+        assert isinstance(response, ModelResponse)
+        return response
+
     used_model = model
     try:
-        response = litellm.completion(
-            model=model, messages=messages, temperature=temperature, **extra_params
-        )
+        response = complete(model)
     except Exception:
         if not fallback_model:
             raise
         used_model = fallback_model
-        response = litellm.completion(
-            model=fallback_model, messages=messages, temperature=temperature, **extra_params
-        )
-
-    # Never called with stream=True, so litellm always returns a ModelResponse
-    # here, not a CustomStreamWrapper.
-    assert isinstance(response, ModelResponse)
+        response = complete(fallback_model)
     return GenerationResult(
         answer=response.choices[0].message.content or "",
         model=used_model,

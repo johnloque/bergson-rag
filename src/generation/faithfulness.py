@@ -1,12 +1,11 @@
 """RAGAS-based faithfulness checking (docs/ROADMAP.md, Sprint 5 — "preliminary
 end-to-end evaluation (RAGAS)"), designed for two consumers from the start:
 
-1. `eval/scripts/run_ragas_eval.py` (this sprint) — calls `check_faithfulness`
+1. `eval/scripts/run_ragas_eval.py` (Sprint 5) — calls `check_faithfulness`
    once per gold item, in a loop, to score generation quality in batch.
-2. Sprint 6's anti-hallucination guardrail (not built yet) — will call
-   `check_faithfulness` once per generated answer, at production latency,
-   right after `generate_from_chunks` returns. Not wired up here (that's
-   Sprint 6's own commit), but this module is the function it imports.
+2. `generate_evaluation` (Sprint 6, `src/generation/guardrail.py`) — calls
+   `check_faithfulness` once per generated answer, right after
+   `generate_from_chunks` returns.
 
 One implementation, not two: there is no separate hand-rolled "for the
 guardrail" faithfulness check. Both consumers call the same function.
@@ -57,8 +56,27 @@ for the full-pipeline verification.
 
 Deliberately out of scope here (separate, already-deferred work,
 docs/ROADMAP.md Sprint 6): no threshold/`is_faithful` boolean, no refusal
-decision, no per-claim structural citation check. This module returns the
-raw RAGAS score only — Sprint 6 decides what to do with it.
+decision, no structural citation check (that's `check_structure` in
+`src/generation/guardrail.py`, Sprint 6's own module — deliberately kept out
+of this shared eval/guardrail module since it needs no LLM call at all).
+`check_faithfulness` does return the per-claim RAGAS verdicts (`claims`
+below) alongside the aggregate score, as of Sprint 6 — needed to flag which
+claim is unsupported, not just that some are, for the anti-hallucination
+guardrail (`generate_evaluation`, `src/generation/guardrail.py`).
+
+## Getting per-claim verdicts without a second LLM call
+
+`ragas.metrics.Faithfulness.single_turn_score(...)` only returns the
+aggregate float — it discards the per-claim verdicts computed along the way.
+Sprint 6 needs those verdicts, so `check_faithfulness` below calls the
+metric's own two internal async steps directly (`_create_statements`, then
+`_create_verdicts`) instead of going through `single_turn_score`. This is
+the exact same two LLM calls `single_turn_score` would make internally
+(claim extraction, then per-claim entailment) — not a second faithfulness
+pass — just with the intermediate verdicts kept instead of thrown away.
+Uses `ragas.async_utils.run`, the same sync-wrapper helper
+`single_turn_score` itself uses internally, to run these two async calls in
+this module's otherwise-sync API.
 """
 
 from __future__ import annotations
@@ -68,6 +86,7 @@ from dataclasses import dataclass
 
 import litellm
 from langchain_litellm import ChatLiteLLM
+from ragas.async_utils import run as ragas_run
 from ragas.dataset_schema import SingleTurnSample
 
 # Imported from ragas.llms.base, not the public ragas.llms re-export: the
@@ -121,11 +140,25 @@ def build_judge_llm(
 
 
 @dataclass(frozen=True)
+class ClaimVerdict:
+    """One RAGAS-extracted claim from the scored answer, with its entailment
+    verdict against `chunks`. `reason` is RAGAS's own judge-generated
+    explanation for the verdict, not post-hoc computed."""
+
+    statement: str
+    supported: bool
+    reason: str
+
+
+@dataclass(frozen=True)
 class FaithfulnessResult:
     # Fraction of extracted claims entailed by `chunks`; NaN if the answer
     # yielded no claims.
     score: float
     model: str  # judge model used (LiteLLM model string)
+    # Per-claim breakdown behind `score`; empty iff the answer yielded no
+    # claims (score is NaN in that case too).
+    claims: tuple[ClaimVerdict, ...] = ()
 
 
 def check_faithfulness(
@@ -140,7 +173,8 @@ def check_faithfulness(
 
     Works standalone on a single triple — no retrieval, no gold dataset, no
     RAGAS `Dataset`/`evaluate()` call involved, so this is equally usable
-    from a batch eval loop and from a future single-answer guardrail check.
+    from a batch eval loop and from the anti-hallucination guardrail
+    (`generate_evaluation`, `src/generation/guardrail.py`, Sprint 6).
 
     `judge_llm`: pass a pre-built wrapper (`build_judge_llm`) to reuse across
     many calls in a batch loop, instead of rebuilding one per item. When
@@ -154,5 +188,17 @@ def check_faithfulness(
         response=answer,
         retrieved_contexts=[chunk.text for chunk in chunks],
     )
-    score = Faithfulness(llm=llm).single_turn_score(sample)
-    return FaithfulnessResult(score=score, model=model)
+    metric = Faithfulness(llm=llm)
+    row = sample.to_dict()
+
+    statements = ragas_run(metric._create_statements(row, None))
+    if not statements.statements:
+        return FaithfulnessResult(score=float("nan"), model=model, claims=())
+
+    verdicts = ragas_run(metric._create_verdicts(row, statements.statements, None))
+    score = metric._compute_score(verdicts)
+    claims = tuple(
+        ClaimVerdict(statement=v.statement, supported=bool(v.verdict), reason=v.reason)
+        for v in verdicts.statements
+    )
+    return FaithfulnessResult(score=score, model=model, claims=claims)

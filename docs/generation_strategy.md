@@ -34,17 +34,28 @@ chunks — no branch-specific separate templates:
    signal costs no extra embedding call. High convergence: direct
    synthesis instruction. Low: present passages separately, never frame
    the answer as consensus.
-3. Reranking confidence (`EvidenceSignals.is_confident`) — coefficient of
-   variation of the input chunks' cross-encoder scores. Flat/low spread:
-   instruct the model to phrase the answer with epistemic caution. This is
-   a soft, prompt-level reaction only — not a hard gate.
+3. Reranking confidence (`EvidenceSignals.is_confident`) — the single best
+   cross-encoder score among the input chunks, via
+   `retrieval_confidence_tier` (`src/generation/signals.py`), on the same
+   discrete tier scale Sprint 6's guardrail uses (one shared definition,
+   not two). Below "moyenne": instruct the model to phrase the answer with
+   epistemic caution. This is a soft, prompt-level reaction only — not a
+   hard gate. An earlier version of this signal used the coefficient of
+   variation of the input chunks' cross-encoder scores instead — dropped
+   once Sprint 6 needed the same underlying signal for a genuine
+   confidence question ("is there real evidence here at all") that CV
+   answers unreliably: it's a function of the whole candidate set's
+   composition, not of how good the single best piece of evidence is, and a
+   real retrieval miss (near-zero scores) inflates it rather than
+   suppressing it. See `src/generation/signals.py`'s module docstring for
+   the full rationale.
 
-`CONVERGENCE_THRESHOLD` / `CONFIDENCE_CV_THRESHOLD` (`src/generation/signals.py`)
-are generic, documented placeholders, deliberately **not** fit against
-`eval/gold_dataset.csv` — at n=10 the dataset is far below the volume this
-project already treats as a threshold for that kind of calibration (same
-discipline as the Sprint 4 reranker-vs-reranker deferral). Revisit
-once a larger annotated set exists.
+`CONVERGENCE_THRESHOLD` / the `retrieval_confidence_tier` cut points
+(`src/generation/signals.py`) are generic, documented placeholders,
+deliberately **not** fit against `eval/gold_dataset.csv` — at n=10 the
+dataset is far below the volume this project already treats as a threshold
+for that kind of calibration (same discipline as the Sprint 4
+reranker-vs-reranker deferral). Revisit once a larger annotated set exists.
 
 Mandatory in every generated answer regardless of branch: explicit
 citations to the source chunk_id(s), and framing as an interpretive

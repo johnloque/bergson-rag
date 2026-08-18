@@ -179,7 +179,8 @@ preliminary end-to-end evaluation (RAGAS).
 `src/generation/generate.py`, via LiteLLM (Mistral/Ollama local default,
 Mistral hosted API fallback). Evidence-conditioned prompt, mandatory
 citations, Test A/B coverage in `tests/test_generation.py`.
-Anti-hallucination guardrails and `judge_chunks` deferred to Sprint 6.
+Anti-hallucination guardrails implemented in Sprint 6, below; `judge_chunks`
+remains its own, later branch.
 Full design rationale: [`docs/generation_strategy.md`](generation_strategy.md).
 
 **RAGAS evaluation — implemented.** `eval/scripts/run_ragas_eval.py`
@@ -191,8 +192,20 @@ the shared faithfulness implementation, and Sprint 6 handoff notes:
 [`docs/ragas_evaluation.md`](ragas_evaluation.md).
 
 ### Sprint 6 — Anti-hallucination guardrails
-Post-generation validation, explicit "no reliable answer" handling,
-citation formatting, before/after metrics on the gold dataset.
+
+Post-generation validation, citation formatting.
+
+**Guardrails — implemented.** Presentation-only gating, not a generation
+refusal or a pre-generation blocking gate: the first generated answer is
+always rendered collapsed by default, and auto-expands only once a
+post-generation evaluation (`generate_evaluation` in
+`src/generation/guardrail.py`) confirms both an independent
+structural/faithfulness check and a sufficient retrieval-confidence tier.
+The user can always expand it manually. UI rendering and persistence of
+the evaluation result are deferred to Sprint 7.
+Full design rationale, the CV→best-score confidence-signal correction, and
+Sprint 7 handoff notes:
+[`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md).
 
 ### Sprint 7 — Backend API and persistence
 - Three-endpoint FastAPI (`retrieve` / `generate_from_chunks` /

@@ -9,12 +9,22 @@ instruction when reranking confidence is low. This is the generation
 pipeline's own conditioning reaction to weak evidence, not the
 anti-hallucination guardrail — no refusal / "no reliable answer" handling
 here, that's Sprint 6 (docs/ROADMAP.md).
+
+`chunk_judgments` (Sprint 6, docs/ROADMAP.md — the `ChunkJudgment` contract
+in `src/generation/judgment.py`) is optional, separate conditioning: when a
+chunk in the input selection has a prior relevance judgment (from a future
+`judge_chunks` call, on a manual regeneration), its label and justification
+are rendered inline with that chunk's evidence text, plus one instruction
+telling the model this prior assessment exists. It is not a filter — chunks
+already excluded by the caller never appear here at all.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import re
+from collections.abc import Mapping, Sequence
 
+from src.generation.judgment import ChunkJudgment
 from src.generation.signals import EvidenceSignals, GenerationChunk
 
 SYSTEM_PROMPT = (
@@ -29,6 +39,14 @@ CITATION_INSTRUCTION = (
     "passage précis."
 )
 
+# The `[chunk_id]` bracket format CITATION_INSTRUCTION above asks the model
+# to produce — defined once here, since this module is what teaches the
+# model the format. `src/generation/guardrail.py`'s `check_structure`
+# (Layer 1, no LLM call) imports this rather than hardcoding a second copy
+# of the same pattern: the two modules must agree on exactly one citation
+# format, and a shared symbol is what keeps them agreeing on it.
+CITATION_PATTERN = re.compile(r"\[([^\[\]]+)\]")
+
 INTERPRETIVE_FRAMING_INSTRUCTION = (
     "Présente ta réponse comme une synthèse interprétative à vérifier auprès des "
     "passages cités, pas comme une conclusion définitive et arrêtée."
@@ -40,7 +58,7 @@ MONO_WORK_INSTRUCTION = (
 )
 
 CONVERGENT_INSTRUCTION = (
-    "Les passages convergent : tu peux les synthétiser directement en une réponse " "unifiée."
+    "Les passages convergent : tu peux les synthétiser directement en une réponse unifiée."
 )
 
 DIVERGENT_INSTRUCTION = (
@@ -50,9 +68,15 @@ DIVERGENT_INSTRUCTION = (
 )
 
 CAUTION_INSTRUCTION = (
-    "Le score de pertinence du reranker est plat ou peu discriminant sur cette "
-    "sélection de passages : formule la réponse avec une prudence épistémique "
+    "Le meilleur score de pertinence attribué par le reranker à cette sélection de "
+    "passages reste modéré : formule la réponse avec une prudence épistémique "
     "appropriée."
+)
+
+CHUNK_JUDGMENT_INSTRUCTION = (
+    "Certains extraits sont accompagnés d'un jugement de pertinence préalable "
+    "(étiquette et justification) : prends-le en compte comme signal supplémentaire "
+    "sur la pertinence du passage, sans t'y limiter."
 )
 
 
@@ -69,23 +93,40 @@ def _page_range(page_start: dict, page_end: dict) -> str:
     return start if start == end else f"{start}-{end}"
 
 
-def _format_chunk(chunk: GenerationChunk) -> str:
+def _format_chunk(chunk: GenerationChunk, judgment: ChunkJudgment | None) -> str:
     pages = _page_range(chunk.page_start, chunk.page_end)
-    return f"[{chunk.chunk_id}] ({chunk.work_id}, {chunk.section_path}, p. {pages})\n{chunk.text}"
+    header = f"[{chunk.chunk_id}] ({chunk.work_id}, {chunk.section_path}, p. {pages})"
+    block = f"{header}\n{chunk.text}"
+    if judgment is not None:
+        block += f"\n(Jugement de pertinence : {judgment['label']} — {judgment['justification']})"
+    return block
 
 
-def _format_evidence(chunks: Sequence[GenerationChunk], works: tuple[str, ...]) -> str:
+def _format_evidence(
+    chunks: Sequence[GenerationChunk],
+    works: tuple[str, ...],
+    chunk_judgments: Mapping[str, ChunkJudgment],
+) -> str:
+    def format_one(chunk: GenerationChunk) -> str:
+        return _format_chunk(chunk, chunk_judgments.get(chunk.chunk_id))
+
     if len(works) <= 1:
-        return "\n\n".join(_format_chunk(chunk) for chunk in chunks)
+        return "\n\n".join(format_one(chunk) for chunk in chunks)
     blocks = []
     for work in works:
         work_chunks = [chunk for chunk in chunks if chunk.work_id == work]
-        body = "\n\n".join(_format_chunk(chunk) for chunk in work_chunks)
+        body = "\n\n".join(format_one(chunk) for chunk in work_chunks)
         blocks.append(f"=== {work} ===\n{body}")
     return "\n\n".join(blocks)
 
 
-def build_prompt(query: str, chunks: Sequence[GenerationChunk], signals: EvidenceSignals) -> str:
+def build_prompt(
+    query: str,
+    chunks: Sequence[GenerationChunk],
+    signals: EvidenceSignals,
+    chunk_judgments: Mapping[str, ChunkJudgment] | None = None,
+) -> str:
+    chunk_judgments = chunk_judgments or {}
     instructions = [CITATION_INSTRUCTION, INTERPRETIVE_FRAMING_INSTRUCTION]
     instructions.append(
         _multi_work_instruction(signals.works) if signals.is_multi_work else MONO_WORK_INSTRUCTION
@@ -93,9 +134,11 @@ def build_prompt(query: str, chunks: Sequence[GenerationChunk], signals: Evidenc
     instructions.append(CONVERGENT_INSTRUCTION if signals.is_convergent else DIVERGENT_INSTRUCTION)
     if not signals.is_confident:
         instructions.append(CAUTION_INSTRUCTION)
+    if any(chunk.chunk_id in chunk_judgments for chunk in chunks):
+        instructions.append(CHUNK_JUDGMENT_INSTRUCTION)
 
     instructions_block = "\n".join(f"- {instruction}" for instruction in instructions)
-    evidence_block = _format_evidence(chunks, signals.works)
+    evidence_block = _format_evidence(chunks, signals.works, chunk_judgments)
 
     return (
         f"CONSIGNES :\n{instructions_block}\n\n"

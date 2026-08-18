@@ -87,13 +87,26 @@ bergson-rag.
 - **Anti-hallucination guardrails**: post-generation validation layer +
   mandatory citations; generated syntheses are treated as interpretive
   proposals to verify, not as definitive answers.
-- **API decomposition**: three independent endpoints —
+- **API decomposition**: four independent functions, each exposed as its
+  own HTTP endpoint by the Sprint 7a FastAPI service (`src/api/`) —
   - `retrieve(query)` — hybrid search + reranking, returns chunks
+    (`POST /retrieve`)
   - `generate_from_chunks(query, chunks)` — synthesis from a given,
-    possibly user-curated, chunk selection
+    possibly user-curated, chunk selection (`POST /generate`)
+  - `generate_evaluation(query, chunks, answer)` +
+    `should_auto_expand(...)` — post-generation anti-hallucination
+    evaluation (see Sprint 6), a separate call from generation itself so
+    the client can render the draft answer immediately and only apply the
+    collapsed/auto-expand decision once evaluation resolves
+    (`POST /evaluate`)
   - `judge_chunk(query, chunk)` — on-demand relevance judgment (label +
     justification) for a single chunk; called once per chunk, not
-    batched (see Sprint 6)
+    batched (see Sprint 6) (`POST /judge-chunk`)
+
+  Sprint 7a ships these four endpoints with no persistence and no
+  session/conversation history: each request is self-contained, and a
+  known, deliberately unresolved simplification follows directly from
+  that — see Sprint 7's own write-up below.
 - **Infra**: Qdrant (dense + sparse), FastAPI, Docker Compose as the
   reference setup. Kubernetes is not built — a one-line note on the
   natural scaling path suffices for this demo, not a dedicated sprint.
@@ -217,13 +230,20 @@ to Sprint 7. Full design rationale, judge-model choice, and test coverage:
 [`docs/judge_chunk.md`](judge_chunk.md).
 
 ### Sprint 7 — Backend API and persistence
-- Three-endpoint FastAPI (`retrieve` / `generate_from_chunks` /
-  `judge_chunk`)
+- Four-endpoint FastAPI (`retrieve` / `generate` / `evaluate` /
+  `judge-chunk`)
 - API-level tests (no UI yet)
 - SQLite persistence as fast-follow, not a blocker for this sprint's
   deliverable
 - **Deliverable**: fully functional, tested API, usable independently of
   any frontend
+
+**Backend API — implemented (Sprint 7a, `feat/api-endpoints`).** FastAPI
+scaffold in `src/api/`, each endpoint a thin wrapper around an existing,
+already-tested function, no persistence or session history yet
+(`feat/api-persistence`, still pending). Full design rationale, the known
+`/evaluate`-trusts-its-input simplification, and test coverage:
+[`docs/backend_api.md`](backend_api.md).
 
 ### Sprint 8 — Frontend
 - React (Vite) + Tailwind + TanStack Query, consuming the Sprint 7 API
@@ -260,6 +280,7 @@ bergson-rag/
 │   ├── indexing/          # BM25, embeddings, Qdrant
 │   ├── retrieval/         # reformulation, hybrid, reranking
 │   ├── generation/         # prompts, anti-hallucination validation
+│   ├── api/                # FastAPI endpoints — Sprint 7
 │   └── mcp_server/         # Sprint 10
 ├── frontend/               # React (Vite) UI — Sprint 8
 ├── eval/

@@ -19,6 +19,7 @@ license = { file = "LICENSE" }
 # langchain_community's own ChatLiteLLM, which langchain-community's own
 # deprecation warning points away from.
 dependencies = [
+    "fastapi==0.141.1",
     "fastembed==0.8.0",
     "fr-core-news-lg==3.8.0",
     "langchain-community==0.3.30",
@@ -29,6 +30,7 @@ dependencies = [
     "sentence-transformers==5.7.0",
     "snowballstemmer==3.1.1",
     "spacy==3.8.15",
+    "uvicorn[standard]==0.52.3",
 ]
 
 [dependency-groups]

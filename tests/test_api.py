@@ -1,4 +1,4 @@
-"""Unit tests for src/api/main.py — Sprint 7a FastAPI scaffold
+"""Unit tests for src/api/main.py — Sprint 7 FastAPI + persistence
 (docs/ROADMAP.md).
 
 Same fixture discipline as tests/test_guardrail.py and
@@ -8,6 +8,19 @@ text. Skip marks are scoped per-test rather than module-wide, since several
 tests here (malformed-body 422s, the provider-down 503 simulations) need
 neither Qdrant nor a reachable LLM at all — only the tests that call the
 real pipeline against real corpus content require them.
+
+Persistence-specific coverage (the /generate <-> /judge-chunk round trip,
+/evaluate via direct DB insertion, GET /turns and GET /conversations
+assembly, 404s, and the chunk_judgments override rule) lives in
+tests/test_persistence.py instead — this file keeps the per-endpoint
+plumbing/422/503 coverage Sprint 7a established, updated for the request/
+response shapes this branch (feat/api-persistence) changed.
+
+Each test gets its own isolated in-memory SQLite DB (the `engine`/`client`
+fixtures below) — `app.dependency_overrides[get_session]` swaps in a fresh
+`StaticPool`-backed engine per test, so persisted rows from one test never
+leak into another and never touch the real dev database
+(`data/app.db`, src/api/db.py).
 """
 
 from __future__ import annotations
@@ -18,9 +31,13 @@ import litellm
 import pytest
 from fastapi.testclient import TestClient
 from qdrant_client import QdrantClient
+from sqlalchemy.pool import StaticPool
+from sqlmodel import Session, SQLModel, create_engine
 
 from src.api.converters import chunk_input_to_generation_chunk
+from src.api.db import get_session
 from src.api.main import app
+from src.api.models import Conversation, Generation, RetrievedChunkRow, Turn
 from src.api.schemas import ChunkInput
 from src.generation.faithfulness import DEFAULT_JUDGE_MODEL
 from src.generation.generate import (
@@ -49,6 +66,11 @@ Q001_HALLUCINATED_ANSWER = (
 # hallucination fixture (tests/test_guardrail.py).
 Q004_QUERY = "Quel rapport Bergson établit-il entre l'imagination poétique et la réalité ?"
 Q004_CHUNK_ID = "1900_R_c49"
+Q004_HALLUCINATED_ANSWER = (
+    "Bergson affirme, en reprenant une thèse de Kant, que l'imagination poétique n'a "
+    "structurellement aucun rapport avec la réalité et relève d'une faculté purement "
+    f"arbitraire, indépendante de toute expérience vécue [{Q004_CHUNK_ID}]."
+)
 
 # Q002 (eval/gold_dataset.csv, ground_truth_type "multi") — the "known-
 # strong query" case: any one of its three gold chunk_ids suffices as
@@ -121,8 +143,30 @@ def qdrant_client() -> QdrantClient:
 
 
 @pytest.fixture()
-def client() -> TestClient:
-    return TestClient(app)
+def engine():
+    """A fresh, isolated in-memory SQLite DB per test — `StaticPool` so the
+    single shared in-memory connection survives across the multiple
+    `Session`s a request cycle opens (plain in-memory SQLite gives each new
+    connection its own empty DB, which would silently lose everything
+    written by a prior request in the same test)."""
+    test_engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    SQLModel.metadata.create_all(test_engine)
+    return test_engine
+
+
+@pytest.fixture()
+def client(engine) -> TestClient:
+    def _get_session_override():
+        with Session(engine) as session:
+            yield session
+
+    app.dependency_overrides[get_session] = _get_session_override
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()
 
 
 def _load_chunk_input(client: QdrantClient, chunk_id: str, score: float = 1.0) -> dict:
@@ -140,6 +184,38 @@ def _load_chunk_input(client: QdrantClient, chunk_id: str, score: float = 1.0) -
         "text": payload["text"],
         "score": score,
     }
+
+
+def _create_turn(engine, query: str) -> int:
+    """Direct DB insertion of a bare turn (and its conversation), bypassing
+    /generate entirely — for tests that only need a valid turn_id to anchor
+    a /judge-chunk or /evaluate call, without exercising generation itself."""
+    with Session(engine) as session:
+        conversation = Conversation()
+        session.add(conversation)
+        session.commit()
+        session.refresh(conversation)
+        turn = Turn(conversation_id=conversation.id, query=query)
+        session.add(turn)
+        session.commit()
+        session.refresh(turn)
+        return turn.id
+
+
+def _insert_generation(
+    engine, turn_id: int, chunk_id: str, answer: str, model: str = "test-model", score: float = 1.0
+) -> int:
+    """Direct DB insertion of a generation record, bypassing a live
+    /generate call — this is /evaluate's new trust boundary (docs/ROADMAP.md):
+    it looks the generation up by ID rather than trusting a client-submitted
+    triple, so exercising it doesn't require actually running generation."""
+    with Session(engine) as session:
+        session.add(RetrievedChunkRow(turn_id=turn_id, chunk_id=chunk_id, rank=0, score=score))
+        generation = Generation(turn_id=turn_id, model=model, chunk_ids=[chunk_id], answer=answer)
+        session.add(generation)
+        session.commit()
+        session.refresh(generation)
+        return generation.id
 
 
 # --- /retrieve --------------------------------------------------------------
@@ -169,13 +245,18 @@ def test_retrieve_malformed_body_returns_422(client):
 )
 def test_generate_plumbing_produces_an_answer(client, qdrant_client, query, chunk_id):
     """Confirms the endpoint plumbing end to end — not correctness of the
-    generated content, that's /evaluate's job (docs/ROADMAP.md scope note)."""
+    generated content, that's /evaluate's job (docs/ROADMAP.md scope note).
+    Also confirms a fresh conversation/turn/generation is persisted and
+    their ids are returned (feat/api-persistence)."""
     chunk = _load_chunk_input(qdrant_client, chunk_id)
     response = client.post("/generate", json={"query": query, "chunks": [chunk]})
     assert response.status_code == 200
     body = response.json()
     assert body["answer"].strip()
     assert body["model_used"]
+    assert body["generation_id"]
+    assert body["turn_id"]
+    assert body["conversation_id"]
 
 
 def test_generate_malformed_body_returns_422(client):
@@ -201,69 +282,93 @@ def test_generate_unreachable_provider_returns_503(client, qdrant_client, monkey
     assert "mistral" in response.json()["detail"]
 
 
+@_qdrant_skip
+def test_generate_unknown_turn_id_returns_404(client, qdrant_client):
+    chunk = _load_chunk_input(qdrant_client, Q001_CHUNK_ID)
+    response = client.post(
+        "/generate", json={"query": Q001_QUERY, "chunks": [chunk], "turn_id": 999999}
+    )
+    assert response.status_code == 404
+
+
 # --- /evaluate -----------------------------------------------------------
 
 
 @_qdrant_skip
 @_judge_skip
-def test_evaluate_flags_known_hallucination(client, qdrant_client):
+@pytest.mark.parametrize(
+    ("query", "chunk_id", "answer", "fabricated_term"),
+    [
+        (Q001_QUERY, Q001_CHUNK_ID, Q001_HALLUCINATED_ANSWER, "einstein"),
+        (Q004_QUERY, Q004_CHUNK_ID, Q004_HALLUCINATED_ANSWER, "kant"),
+    ],
+)
+def test_evaluate_flags_known_hallucination(
+    client, engine, query, chunk_id, answer, fabricated_term
+):
     """The real, gold-verified chunk text must be the cited evidence — a
     placeholder/synthetic context was found to let the local judge mark the
     fabricated claim as spuriously "supported" (this project's own judge
     fragility, tests/test_faithfulness.py), so this uses the same real
-    indexed chunk tests/test_guardrail.py's Q001 case does."""
-    chunk = _load_chunk_input(qdrant_client, Q001_CHUNK_ID)
-    response = client.post(
-        "/evaluate",
-        json={"query": Q001_QUERY, "chunks": [chunk], "answer": Q001_HALLUCINATED_ANSWER},
-    )
+    indexed chunks tests/test_guardrail.py's Q001/Q004 cases do. The
+    generation record is inserted directly (bypassing a live /generate
+    call, docs/ROADMAP.md's Tests section) — see `_insert_generation`
+    above."""
+    turn_id = _create_turn(engine, query)
+    generation_id = _insert_generation(engine, turn_id, chunk_id, answer)
+    response = client.post("/evaluate", json={"generation_id": generation_id})
     assert response.status_code == 200
     body = response.json()
     unsupported = [c for c in body["faithfulness"]["claims"] if not c["supported"]]
-    assert any("einstein" in c["statement"].lower() for c in unsupported), unsupported
+    assert any(fabricated_term in c["statement"].lower() for c in unsupported), unsupported
     assert body["should_auto_expand"] is False
 
 
 @_qdrant_skip
 @_llm_skip
 @_judge_skip
-def test_evaluate_strong_case_auto_expands(client, qdrant_client):
+def test_evaluate_strong_case_auto_expands(client, qdrant_client, engine):
     """Real generate_from_chunks output at temperature=0, not a hand-crafted
     paraphrase — same discipline as tests/test_guardrail.py's own Q002 case
     (a hand-crafted near-verbatim paraphrase was found to reproducibly score
     faithfulness=0.0 against this project's local judge). The answer is
-    produced by calling generate_from_chunks directly rather than through
-    POST /generate: /generate's request schema has no temperature field (by
-    design — normal/interactive use has no reason to force greedy decoding,
-    src/generation/generate.py), so provider-default sampling there is not
-    reproducible enough for this specific assertion; /generate's own
-    plumbing is already covered by test_generate_plumbing_produces_an_answer
-    above, so this test's only job is to exercise /evaluate."""
+    produced by calling generate_from_chunks directly and then inserted as
+    a generation record — /generate's own plumbing (turn/generation
+    persistence, chunk_judgments auto-load) is already covered by
+    test_generate_plumbing_produces_an_answer and tests/test_persistence.py,
+    so this test's only job is to exercise /evaluate's new
+    lookup-by-generation_id path."""
     chunk_input = _load_chunk_input(qdrant_client, Q002_CHUNK_ID)
     chunk = chunk_input_to_generation_chunk(ChunkInput(**chunk_input))
     result = generate_from_chunks(Q002_QUERY, [chunk], qdrant_client, temperature=0.0)
 
-    response = client.post(
-        "/evaluate", json={"query": Q002_QUERY, "chunks": [chunk_input], "answer": result.answer}
+    turn_id = _create_turn(engine, Q002_QUERY)
+    generation_id = _insert_generation(
+        engine, turn_id, Q002_CHUNK_ID, result.answer, score=chunk_input["score"]
     )
+
+    response = client.post("/evaluate", json={"generation_id": generation_id})
     assert response.status_code == 200
     assert response.json()["should_auto_expand"] is True
 
 
 def test_evaluate_malformed_body_returns_422(client):
-    assert client.post("/evaluate", json={"query": Q001_QUERY, "chunks": []}).status_code == 422
-    assert (
-        client.post("/evaluate", json={"query": Q001_QUERY, "chunks": [], "answer": ""}).status_code
-        == 422
-    )
+    assert client.post("/evaluate", json={}).status_code == 422
+    assert client.post("/evaluate", json={"generation_id": "not-an-int"}).status_code == 422
 
 
-def test_evaluate_unreachable_provider_returns_503(client, monkeypatch):
-    """No Qdrant/LLM required at all: generate_evaluation never touches
-    Qdrant, and the judge call is mocked directly at litellm.acompletion
-    (langchain-litellm's ChatLiteLLM calls out through it, confirmed via
-    `self.client.acompletion` where `self.client` is the `litellm` module
-    itself — src/api/main.py's module docstring)."""
+def test_evaluate_unknown_generation_id_returns_404(client):
+    response = client.post("/evaluate", json={"generation_id": 999999})
+    assert response.status_code == 404
+
+
+@_qdrant_skip
+def test_evaluate_unreachable_provider_returns_503(client, engine, monkeypatch):
+    """`generate_evaluation`'s only LLM call is the judge, made via
+    langchain-litellm's `acompletion` (src/api/main.py's module docstring) —
+    mocked directly here, same as before. Fetching the generation's chunk
+    text back from Qdrant by chunk_id (src/api/converters.py) is new on this
+    branch, so this now needs `_qdrant_skip` where it previously didn't."""
 
     async def _raise(*args, **kwargs):
         raise litellm.exceptions.APIConnectionError(
@@ -271,18 +376,11 @@ def test_evaluate_unreachable_provider_returns_503(client, monkeypatch):
         )
 
     monkeypatch.setattr(litellm, "acompletion", _raise)
-    chunk = {
-        "chunk_id": "c1",
-        "work_id": "1907_EC",
-        "section_path": "",
-        "paragraph_ids": [],
-        "text": "Un extrait quelconque.",
-        "score": 1.0,
-    }
-    response = client.post(
-        "/evaluate",
-        json={"query": "une question", "chunks": [chunk], "answer": "une réponse [c1]."},
+    turn_id = _create_turn(engine, Q001_QUERY)
+    generation_id = _insert_generation(
+        engine, turn_id, Q001_CHUNK_ID, f"une réponse [{Q001_CHUNK_ID}]."
     )
+    response = client.post("/evaluate", json={"generation_id": generation_id})
     assert response.status_code == 503
     assert "ollama_chat" in response.json()["detail"]
 
@@ -292,9 +390,12 @@ def test_evaluate_unreachable_provider_returns_503(client, monkeypatch):
 
 @_qdrant_skip
 @_judge_skip
-def test_judge_chunk_pertinent_for_matching_chunk(client, qdrant_client):
+def test_judge_chunk_pertinent_for_matching_chunk(client, qdrant_client, engine):
     chunk = _load_chunk_input(qdrant_client, Q007_CHUNK_ID)
-    response = client.post("/judge-chunk", json={"query": Q007_QUERY, "chunk": chunk})
+    turn_id = _create_turn(engine, Q007_QUERY)
+    response = client.post(
+        "/judge-chunk", json={"query": Q007_QUERY, "chunk": chunk, "turn_id": turn_id}
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["label"] == "pertinent"
@@ -303,9 +404,12 @@ def test_judge_chunk_pertinent_for_matching_chunk(client, qdrant_client):
 
 @_qdrant_skip
 @_judge_skip
-def test_judge_chunk_non_pertinent_for_unrelated_chunk(client, qdrant_client):
+def test_judge_chunk_non_pertinent_for_unrelated_chunk(client, qdrant_client, engine):
     chunk = _load_chunk_input(qdrant_client, UNRELATED_CHUNK_ID)
-    response = client.post("/judge-chunk", json={"query": Q001_QUERY, "chunk": chunk})
+    turn_id = _create_turn(engine, Q001_QUERY)
+    response = client.post(
+        "/judge-chunk", json={"query": Q001_QUERY, "chunk": chunk, "turn_id": turn_id}
+    )
     assert response.status_code == 200
     assert response.json()["label"] == "non pertinent"
 
@@ -316,16 +420,36 @@ def test_judge_chunk_malformed_body_returns_422(client):
         client.post("/judge-chunk", json={"chunk": {"chunk_id": "x", "text": "y"}}).status_code
         == 422
     )
+    # turn_id is now required (docs/ROADMAP.md) — omitting it 422s even
+    # when query/chunk are otherwise well-formed.
+    assert (
+        client.post(
+            "/judge-chunk",
+            json={"query": Q001_QUERY, "chunk": {"chunk_id": "x", "text": "y"}},
+        ).status_code
+        == 422
+    )
 
 
-def test_judge_chunk_unreachable_provider_returns_503(client, monkeypatch):
+def test_judge_chunk_unreachable_provider_returns_503(client, engine, monkeypatch):
     def _raise(*args, **kwargs):
         raise litellm.exceptions.APIConnectionError(
             message="Connection refused", llm_provider="ollama_chat", model="mistral"
         )
 
     monkeypatch.setattr(litellm, "completion", _raise)
+    turn_id = _create_turn(engine, "une question")
     chunk = {"chunk_id": "c1", "text": "Un extrait quelconque."}
-    response = client.post("/judge-chunk", json={"query": "une question", "chunk": chunk})
+    response = client.post(
+        "/judge-chunk", json={"query": "une question", "chunk": chunk, "turn_id": turn_id}
+    )
     assert response.status_code == 503
     assert "ollama_chat" in response.json()["detail"]
+
+
+def test_judge_chunk_unknown_turn_id_returns_404(client):
+    chunk = {"chunk_id": "c1", "text": "Un extrait quelconque."}
+    response = client.post(
+        "/judge-chunk", json={"query": "une question", "chunk": chunk, "turn_id": 999999}
+    )
+    assert response.status_code == 404

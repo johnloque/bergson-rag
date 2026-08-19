@@ -103,10 +103,13 @@ bergson-rag.
     justification) for a single chunk; called once per chunk, not
     batched (see Sprint 6) (`POST /judge-chunk`)
 
-  Sprint 7a ships these four endpoints with no persistence and no
-  session/conversation history: each request is self-contained, and a
-  known, deliberately unresolved simplification follows directly from
-  that — see Sprint 7's own write-up below.
+  Sprint 7a shipped these four endpoints with no persistence and no
+  session/conversation history: each request was self-contained, and a
+  known, deliberately unresolved simplification followed directly from
+  that. Sprint 7b (`feat/api-persistence`) adds SQLite persistence
+  (`src/api/models.py`) and two read endpoints (`GET /turns/{id}`,
+  `GET /conversations/{id}`) that close it — see Sprint 7's own write-up
+  below.
 - **Infra**: Qdrant (dense + sparse), FastAPI, Docker Compose as the
   reference setup. Kubernetes is not built — a one-line note on the
   natural scaling path suffices for this demo, not a dedicated sprint.
@@ -244,6 +247,20 @@ already-tested function, no persistence or session history yet
 (`feat/api-persistence`, still pending). Full design rationale, the known
 `/evaluate`-trusts-its-input simplification, and test coverage:
 [`docs/backend_api.md`](backend_api.md).
+
+**SQLite persistence — implemented (Sprint 7b, `feat/api-persistence`).**
+SQLModel over a single local SQLite file (`data/app.db`), storing
+conversations, turns, retrieved chunks, generations, evaluations, and
+chunk judgments. `/generate` now creates or resumes a turn, and two new
+read endpoints — `GET /turns/{id}`, `GET /conversations/{id}` — recover a
+turn's full state after a reload. This branch closes two risks flagged as
+deferred in prior sprints: Sprint 7a's `/evaluate` trusting a
+client-submitted `(query, chunks, answer)` triple, and Sprint 6's lost
+badge state for a user who left before evaluation completed. Full schema,
+the accepted chunk-text-snapshot limitation, and design rationale:
+[`docs/backend_api.md`](backend_api.md).
+
+Sprint 7 (backend API + persistence) is complete.
 
 ### Sprint 8 — Frontend
 - React (Vite) + Tailwind + TanStack Query, consuming the Sprint 7 API

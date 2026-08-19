@@ -10,8 +10,11 @@ so this module is pure adaptation, not new business logic.
 
 from __future__ import annotations
 
+from qdrant_client import QdrantClient
+
 from src.api.schemas import ChunkInput, ChunkResult, PageRef
 from src.generation.signals import GenerationChunk
+from src.indexing.qdrant_index import COLLECTION_NAME, point_id_for
 from src.retrieval.hybrid import RetrievedChunk
 from src.retrieval.reranking import RerankedChunk
 
@@ -54,6 +57,40 @@ def chunk_input_to_generation_chunk(chunk: ChunkInput) -> GenerationChunk:
         page_start=page_start,
         page_end=page_end,
         text=chunk.text,
+    )
+
+
+def fetch_chunk_input(
+    client: QdrantClient, chunk_id: str, score: float | None
+) -> ChunkInput | None:
+    """Rebuilds a `ChunkInput` by reading `chunk_id`'s current payload back
+    from Qdrant — used by `/evaluate` and `GET /turns/{id}` (`src/api/main.py`)
+    to reconstruct full chunk content for a persisted turn, since
+    `retrieved_chunks` (`src/api/models.py`) stores only `chunk_id`/`rank`/
+    `score`, never chunk text. `score` comes from the caller's own
+    persisted `retrieved_chunks` row, not from Qdrant.
+
+    Returns `None` if `chunk_id` is no longer indexed (e.g. a reindex
+    since this turn was recorded) — the known, documented limitation
+    (`src/api/models.py`'s module docstring) rather than a hard failure:
+    the caller drops it from the reconstructed chunk set instead of
+    crashing on a stale reference.
+    """
+    points = client.retrieve(
+        collection_name=COLLECTION_NAME, ids=[point_id_for(chunk_id)], with_payload=True
+    )
+    if not points:
+        return None
+    payload = points[0].payload or {}
+    return ChunkInput(
+        chunk_id=payload["chunk_id"],
+        work_id=payload["work_id"],
+        section_path=payload["section_path"],
+        paragraph_ids=payload["paragraph_ids"],
+        page_start=payload["page_start"],
+        page_end=payload["page_end"],
+        text=payload["text"],
+        score=score,
     )
 
 

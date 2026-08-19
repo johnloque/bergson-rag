@@ -21,6 +21,12 @@ data/processed/*
 *.qdrant/
 models_cache/
 
+# SQLite persistence (src/api/db.py) — runtime state, not source
+data/app.db
+data/app.db-journal
+data/app.db-wal
+data/app.db-shm
+
 # Notebooks
 .ipynb_checkpoints/
 

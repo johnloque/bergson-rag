@@ -103,10 +103,13 @@ bergson-rag.
     justification) for a single chunk; called once per chunk, not
     batched (see Sprint 6) (`POST /judge-chunk`)
 
-  Sprint 7a ships these four endpoints with no persistence and no
-  session/conversation history: each request is self-contained, and a
-  known, deliberately unresolved simplification follows directly from
-  that — see Sprint 7's own write-up below.
+  Sprint 7a shipped these four endpoints with no persistence and no
+  session/conversation history: each request was self-contained, and a
+  known, deliberately unresolved simplification followed directly from
+  that. Sprint 7b (`feat/api-persistence`) adds SQLite persistence
+  (`src/api/models.py`) and two read endpoints (`GET /turns/{id}`,
+  `GET /conversations/{id}`) that close it — see Sprint 7's own write-up
+  below.
 - **Infra**: Qdrant (dense + sparse), FastAPI, Docker Compose as the
   reference setup. Kubernetes is not built — a one-line note on the
   natural scaling path suffices for this demo, not a dedicated sprint.
@@ -244,6 +247,45 @@ already-tested function, no persistence or session history yet
 (`feat/api-persistence`, still pending). Full design rationale, the known
 `/evaluate`-trusts-its-input simplification, and test coverage:
 [`docs/backend_api.md`](backend_api.md).
+
+**SQLite persistence — implemented (Sprint 7b, `feat/api-persistence`).**
+SQLModel over a single local SQLite file (`data/app.db`, gitignored —
+runtime state, not source): `conversations`, `turns`, `retrieved_chunks`,
+`generations`, `evaluations`, `chunk_judgments` (`src/api/models.py`).
+`/generate` now creates or resumes a turn, `/judge-chunk` persists a
+judgment keyed by turn (upserted, not accumulated), and two new endpoints —
+`GET /turns/{id}`, `GET /conversations/{id}` — read that state back. This
+branch closes both risks flagged as deferred in prior sprints, not new
+scope invented here:
+
+- **Sprint 7a's `/evaluate`-trusts-its-input gap**: `/evaluate` now takes
+  `{generation_id}` instead of a client-submitted `(query, chunks, answer)`
+  triple — the server looks up the stored `generations` record, so `query`
+  and `answer` are exactly what a real `/generate` call produced, not
+  whatever a client claims. Chunk *text* is still re-fetched live from
+  Qdrant by `chunk_id` at evaluation time, not read from a snapshot (see
+  the limitation below) — but the client can no longer submit an
+  `(answer, chunks)` pairing that was never actually generated together.
+- **Sprint 6's lost-badge-state-on-early-departure risk**: a user who left
+  before `generate_evaluation` completed, or before a session persisted,
+  previously never saw the final badge state. `GET /turns/{id}` resolves
+  this directly — it reassembles a turn's full state (query, retrieved
+  chunks, generation(s), evaluation(s), chunk judgments) purely from
+  persisted rows, no Qdrant/LLM dependency, so a reloaded page recovers it
+  even if the live session, or the retrieval/generation stack itself, is
+  gone.
+
+**Accepted limitation: chunk text is not snapshotted.** `retrieved_chunks`
+stores only `chunk_id`, `rank`, and `score` per turn — never the chunk's
+text/work_id/section_path. If the corpus is later reindexed, a historical
+turn's chunk references could point to content that has since changed.
+`/evaluate` and `GET /turns/{id}` re-fetch chunk content live from Qdrant
+by `chunk_id` instead of reading a stored snapshot. Accepted as a known
+limitation for this single-user local demo — snapshotting full chunk text
+for every turn is unnecessary storage cost here, not solved on this
+branch.
+
+Sprint 7 (backend API + persistence) is complete.
 
 ### Sprint 8 — Frontend
 - React (Vite) + Tailwind + TanStack Query, consuming the Sprint 7 API

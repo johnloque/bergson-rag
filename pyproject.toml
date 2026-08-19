@@ -30,6 +30,7 @@ dependencies = [
     "sentence-transformers==5.7.0",
     "snowballstemmer==3.1.1",
     "spacy==3.8.15",
+    "sqlmodel==0.0.29",
     "uvicorn[standard]==0.52.3",
 ]
 
@@ -49,6 +50,12 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/generate_xml_audit_report.py" = ["E501"]
+
+# fastapi.Depends()-in-default-argument is the standard, idiomatic FastAPI
+# dependency-injection pattern (src/api/main.py) — not a mutable-default
+# footgun like the bare-list/dict case B008 exists to catch.
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,9 +1,11 @@
-"""Pydantic request/response models for the Sprint 7a API (docs/ROADMAP.md).
+"""Pydantic request/response models for the Sprint 7 API (docs/ROADMAP.md).
 
-No persistence, no session linkage: `ChunkInput` is how a caller resends
-chunk content across the /retrieve -> /generate -> /evaluate boundary — each
-call is self-contained, nothing is looked up server-side by ID. See
-src/api/main.py's module docstring for the full known-simplification note.
+`ChunkInput` is still how a caller resends chunk content into /generate,
+/evaluate, and /judge-chunk (each call still carries its own chunk data in
+the request body — /evaluate's chunks now come from the DB instead, see
+below). See src/api/main.py's module docstring for the persistence model
+this sprint (feat/api-persistence) adds on top of Sprint 7a's four
+endpoints.
 
 `ChunkInput` mirrors `ChunkResult` (both shaped after
 `src.ingestion.models.Chunk`) plus an optional `score` — the fused/reranked
@@ -14,6 +16,8 @@ retrieval signal instead of falling back to its "insufficient data" default.
 """
 
 from __future__ import annotations
+
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -81,18 +85,26 @@ class GenerateRequest(BaseModel):
     query: str = Field(min_length=1)
     chunks: list[ChunkInput] = Field(min_length=1)
     model: str = DEFAULT_MODEL
+    # `None` (omitted, or explicit `null`) AND `turn_id` present -> the
+    # server auto-loads that turn's persisted chunk_judgments as the
+    # default (a plain "regenerate" click works without resending every
+    # judgment already made). Any explicit dict, including `{}`, is used
+    # as-is and overrides the persisted default (docs/ROADMAP.md).
     chunk_judgments: dict[str, ChunkJudgment] | None = None
+    conversation_id: int | None = None
+    turn_id: int | None = None
 
 
 class GenerateResponse(BaseModel):
     answer: str
     model_used: str
+    generation_id: int
+    turn_id: int
+    conversation_id: int
 
 
 class EvaluateRequest(BaseModel):
-    query: str = Field(min_length=1)
-    chunks: list[ChunkInput] = Field(min_length=1)
-    answer: str = Field(min_length=1)
+    generation_id: int
 
 
 class ClaimVerdictOut(BaseModel):
@@ -127,9 +139,56 @@ class EvaluateResponse(BaseModel):
 class JudgeChunkRequest(BaseModel):
     query: str = Field(min_length=1)
     chunk: ChunkInput
+    turn_id: int
     model: str = DEFAULT_JUDGE_MODEL
 
 
 class JudgeChunkResponse(BaseModel):
     label: str
     justification: str
+
+
+# --- GET /turns/{id}, GET /conversations/{id} -------------------------------
+#
+# Assembled entirely from persisted state (src/api/persistence.py) — no
+# Qdrant/LLM dependency — so a reloaded page can recover a turn's final
+# badge state (should_auto_expand, faithfulness annotations) even if the
+# live session that produced it, or the retrieval/generation stack itself,
+# is gone (docs/ROADMAP.md, Sprint 6's flagged risk this resolves).
+
+
+class RetrievedChunkOut(BaseModel):
+    chunk_id: str
+    rank: int
+    score: float
+
+
+class GenerationOut(BaseModel):
+    generation_id: int
+    model: str
+    chunk_ids: list[str]
+    answer: str
+    chunk_judgments_used: dict[str, ChunkJudgment] | None
+    created_at: datetime
+    evaluation: EvaluateResponse | None
+
+
+class TurnDetailResponse(BaseModel):
+    turn_id: int
+    conversation_id: int
+    query: str
+    created_at: datetime
+    retrieved_chunks: list[RetrievedChunkOut]
+    generations: list[GenerationOut]
+    chunk_judgments: dict[str, ChunkJudgment]
+
+
+class ConversationTurnOut(BaseModel):
+    turn_id: int
+    query: str
+    created_at: datetime
+
+
+class ConversationDetailResponse(BaseModel):
+    conversation_id: int
+    turns: list[ConversationTurnOut]

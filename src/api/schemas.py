@@ -150,17 +150,29 @@ class JudgeChunkResponse(BaseModel):
 
 # --- GET /turns/{id}, GET /conversations/{id} -------------------------------
 #
-# Assembled entirely from persisted state (src/api/persistence.py) — no
-# Qdrant/LLM dependency — so a reloaded page can recover a turn's final
-# badge state (should_auto_expand, faithfulness annotations) even if the
-# live session that produced it, or the retrieval/generation stack itself,
-# is gone (docs/ROADMAP.md, Sprint 6's flagged risk this resolves).
+# Assembled from persisted state (src/api/persistence.py) — turn/generation/
+# evaluation/chunk_judgment rows never depend on Qdrant or an LLM, so a
+# reloaded page can recover a turn's final badge state (should_auto_expand,
+# faithfulness annotations) even if the live session that produced it, or
+# the retrieval/generation stack itself, is gone (docs/ROADMAP.md, Sprint 6's
+# flagged risk this resolves). Chunk *content* is the one exception: like
+# `/evaluate`, `GET /turns/{id}` re-fetches it live from Qdrant by chunk_id
+# (`src/api/converters.py:fetch_chunk_input`) since `retrieved_chunks`
+# (src/api/models.py) stores only chunk_id/rank/score, never text — see that
+# module's docstring for the accepted snapshot limitation this leaves (a
+# reindexed/deleted chunk_id comes back empty rather than raising).
 
 
 class RetrievedChunkOut(BaseModel):
     chunk_id: str
     rank: int
     score: float
+    text: str
+    work_id: str
+    section_path: str
+    paragraph_ids: list[str]
+    page_start: PageRef
+    page_end: PageRef
 
 
 class GenerationOut(BaseModel):
@@ -192,3 +204,23 @@ class ConversationTurnOut(BaseModel):
 class ConversationDetailResponse(BaseModel):
     conversation_id: int
     turns: list[ConversationTurnOut]
+
+
+# --- Sprint 8 (frontend) additions: list / rename / delete conversations ---
+# Needed by the sidebar (docs/ROADMAP.md, Screen 2) and the landing page's
+# "last conversation" lookup — Sprint 7 only shipped lookup-by-id.
+
+
+class ConversationSummaryOut(BaseModel):
+    conversation_id: int
+    created_at: datetime
+    title: str | None
+    first_query: str | None
+
+
+class ConversationListResponse(BaseModel):
+    conversations: list[ConversationSummaryOut]
+
+
+class RenameConversationRequest(BaseModel):
+    title: str = Field(min_length=1)

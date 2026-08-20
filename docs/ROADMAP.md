@@ -267,6 +267,49 @@ Sprint 7 (backend API + persistence) is complete.
 - Inspect → explain → curate → regenerate loop
 - **Deliverable**: working UI against the real API, demoable locally
 
+**Frontend — implemented.** React 19 + Vite + Tailwind v4 + TanStack Query in
+`frontend/`. Desktop light mode is the primary deliverable, built exactly to
+the design consigne (exact hex tokens, spacing, copy) since no mockup image
+files exist for this sprint — the design was approved in a separate
+conversation and specified in full in the sprint consigne instead. Five
+screens: landing (session-scoped via `sessionStorage`, not `localStorage` —
+must reappear on a new tab/session), the sidebar app shell, the conversation
+view (query bubble, accumulating processing-steps list, chunk rail,
+collapsed/expanded answer card with the confidence gauge and faithfulness
+highlighting), the chunk detail view (`Expliquer`/`Exclure`/`Inclure`), and
+an in-app documentation page. State split three ways: TanStack Query for
+server reads (`GET /turns/{id}`, `GET /conversations/{id}`), a small React
+context (`frontend/src/state/turnUi.tsx`) for the client-owned
+included/excluded chunk set and the accumulated `chunk_judgments` dict (both
+explicitly client-side until a `/generate` or `/judge-chunk` call sends
+them, per this sprint's spec), and a module-level chunk-text cache
+(`frontend/src/state/chunkCache.ts`) working around the backend's own
+accepted chunk-text-snapshot limitation (`docs/backend_api.md`) — a turn
+whose chunks were never fetched client-side this session (e.g. a cold
+reload of an old conversation) falls back to a placeholder rather than
+fabricating content. Verified against the real API (Qdrant + local Ollama
+judge/generation models running) as well as 19 component/integration tests
+(Vitest + Testing Library, mocked fetch) covering every behavior called out
+in the sprint's Tests section — see `frontend/src/**/*.test.tsx`.
+
+Small, additive backend surface added alongside this sprint (not part of
+Sprint 7): `GET /conversations` (list, newest first), `PATCH
+/conversations/{id}` (rename), `DELETE /conversations/{id}` (cascading
+delete) — Sprint 7 only shipped lookup-by-id, but the sidebar's
+conversation list and the landing page's "last conversation" redirect have
+no way to enumerate conversations without it. `Conversation` gained a
+nullable `title` column for the rename action.
+
+**Known gap, not a finished feature: dark mode and full responsive layout.**
+The design tokens are CSS custom properties (`frontend/src/index.css`), not
+hardcoded Tailwind colors, specifically so a dark-mode pass is a values-swap
+later rather than a rewrite — but no dark-mode values are defined yet, since
+that design pass hasn't happened. Likewise, only the sidebar/chunk-rail
+breakpoints that were straightforward with Tailwind's responsive utilities
+are in place; the layout has not been comprehensively designed or tested
+for mobile/tablet widths. Both remain explicitly open, to be picked up in a
+later, dedicated design pass rather than assumed complete from this sprint.
+
 ### Sprint 9 — Integration and bootstrap
 - Full dockerization (API, frontend, Qdrant) via Docker Compose
 - Bootstrap script/Makefile chaining fetch-data → build-index → run

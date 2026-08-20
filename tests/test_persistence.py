@@ -366,6 +366,42 @@ def test_get_turn_assembles_full_state_after_generate_evaluate_judge(
     }
 
 
+@_qdrant_skip
+def test_regenerate_with_excluded_chunk_keeps_it_in_retrieved_chunks(
+    client, qdrant_client, monkeypatch
+):
+    """Regression: excluding a chunk in the UI (frontend/src/state/turnUi.tsx)
+    filters it out of the *regeneration's* /generate call, but that chunk
+    must still come back from GET /turns/{id} afterwards — the chunk rail's
+    "excluded stays visible to re-include" contract (frontend/src/components/
+    ChunkRail.tsx) depends on the turn's persisted retrieved_chunks set never
+    shrinking to just whatever the most recent generation used."""
+    monkeypatch.setattr(litellm, "completion", _fake_completion([], chunk_id=Q001_CHUNK_ID))
+
+    chunk_a = _load_chunk_input(qdrant_client, Q001_CHUNK_ID)
+    chunk_b = _load_chunk_input(qdrant_client, Q007_CHUNK_ID)
+
+    first = client.post("/generate", json={"query": Q001_QUERY, "chunks": [chunk_a, chunk_b]})
+    assert first.status_code == 200
+    turn_id = first.json()["turn_id"]
+
+    # Regenerate with chunk_b excluded — mirrors useTurnController.ts's
+    # regenerate() sending only turnUi-included chunks.
+    second = client.post(
+        "/generate", json={"query": Q001_QUERY, "chunks": [chunk_a], "turn_id": turn_id}
+    )
+    assert second.status_code == 200
+
+    turn_response = client.get(f"/turns/{turn_id}")
+    assert turn_response.status_code == 200
+    retrieved_ids = {c["chunk_id"] for c in turn_response.json()["retrieved_chunks"]}
+    assert retrieved_ids == {Q001_CHUNK_ID, Q007_CHUNK_ID}
+
+    # The exclusion is still reflected in what that specific generation used.
+    generations = turn_response.json()["generations"]
+    assert generations[-1]["chunk_ids"] == [Q001_CHUNK_ID]
+
+
 def test_get_turn_unknown_id_returns_404(client):
     assert client.get("/turns/999999").status_code == 404
 

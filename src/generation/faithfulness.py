@@ -81,12 +81,15 @@ this module's otherwise-sync API.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import asyncio
+import atexit
+import threading
+from collections.abc import Coroutine, Sequence
 from dataclasses import dataclass
+from typing import Any, TypeVar
 
 import litellm
 from langchain_litellm import ChatLiteLLM
-from ragas.async_utils import run as ragas_run
 from ragas.dataset_schema import SingleTurnSample
 
 # Imported from ragas.llms.base, not the public ragas.llms re-export: the
@@ -124,6 +127,64 @@ JUDGE_TEMPERATURE = 0.0
 # provider (e.g. the Mistral API fallback) would error.
 JUDGE_NUM_CTX = 8192
 _OLLAMA_PROVIDERS = ("ollama", "ollama_chat")
+
+T = TypeVar("T")
+
+# `ragas.async_utils.run` (RAGAS's own sync-wrapper, used here until the fix
+# below) drives each await with a fresh `asyncio.run(...)`, which opens and
+# then immediately closes a brand-new event loop per call. litellm's async
+# HTTP client cache keys clients by event-loop id specifically to avoid
+# reusing one across loops (`LLMClientCache.update_cache_key_with_event_loop`
+# in `litellm/caching/llm_caching_handler.py`), so every such call builds a
+# fresh `AsyncHTTPHandler` — and its underlying TCP connection to the judge
+# provider (typically local Ollama) is never closed, because the loop that
+# would run its cleanup is already gone by the time it'd be evicted. Two
+# calls per `check_faithfulness` invocation (statements, then verdicts) times
+# every `/evaluate` request leaks two connections each; against Ollama's
+# single-slot local server (`-np 1`) this was observed to eventually wedge it
+# entirely (near-idle CPU, no progress on any request) after enough
+# `/evaluate` calls piled up established-but-abandoned connections.
+#
+# Fix: run every judge-LLM coroutine on one persistent background event loop
+# instead of a new one per call, so litellm's cache key stays stable and it
+# reuses (rather than re-leaks) the same client and connection.
+_background_loop: asyncio.AbstractEventLoop | None = None
+_background_loop_thread: threading.Thread | None = None
+_background_loop_init_lock = threading.Lock()
+
+
+def _get_background_loop() -> asyncio.AbstractEventLoop:
+    global _background_loop, _background_loop_thread
+    with _background_loop_init_lock:
+        if _background_loop is None:
+            loop = asyncio.new_event_loop()
+            thread = threading.Thread(
+                target=loop.run_forever, name="faithfulness-judge-loop", daemon=True
+            )
+            thread.start()
+            _background_loop = loop
+            _background_loop_thread = thread
+            atexit.register(_stop_background_loop)
+        return _background_loop
+
+
+def _stop_background_loop() -> None:
+    global _background_loop, _background_loop_thread
+    loop, thread = _background_loop, _background_loop_thread
+    if loop is not None:
+        loop.call_soon_threadsafe(loop.stop)
+    if thread is not None:
+        thread.join(timeout=5)
+    _background_loop = None
+    _background_loop_thread = None
+
+
+def _run_on_background_loop(coro: Coroutine[Any, Any, T]) -> T:
+    """Schedules `coro` on the shared judge-LLM event loop and blocks the
+    calling (sync) thread for its result — this module's replacement for
+    `ragas.async_utils.run` (see the note above for why)."""
+    future = asyncio.run_coroutine_threadsafe(coro, _get_background_loop())
+    return future.result()
 
 
 def build_judge_llm(
@@ -191,11 +252,16 @@ def check_faithfulness(
     metric = Faithfulness(llm=llm)
     row = sample.to_dict()
 
-    statements = ragas_run(metric._create_statements(row, None))
-    if not statements.statements:
+    async def _score() -> Any:
+        statements = await metric._create_statements(row, None)
+        if not statements.statements:
+            return None
+        return await metric._create_verdicts(row, statements.statements, None)
+
+    verdicts = _run_on_background_loop(_score())
+    if verdicts is None:
         return FaithfulnessResult(score=float("nan"), model=model, claims=())
 
-    verdicts = ragas_run(metric._create_verdicts(row, statements.statements, None))
     score = metric._compute_score(verdicts)
     claims = tuple(
         ClaimVerdict(statement=v.statement, supported=bool(v.verdict), reason=v.reason)

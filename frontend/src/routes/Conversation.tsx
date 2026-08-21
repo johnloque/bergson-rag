@@ -43,6 +43,11 @@ export function Conversation() {
   }
 
   const draftTurnIds = new Set(drafts.map((d) => d.turnId).filter((id) => id !== undefined))
+  const persistedTurns = data?.turns.filter((t) => !draftTurnIds.has(t.turn_id)) ?? []
+  // Once a first turn already exists, the next submitted query will be the
+  // second (or later) in this conversation — the point at which the
+  // no-cross-turn-context note near the input becomes relevant.
+  const hasPriorTurn = persistedTurns.length + drafts.length >= 1
 
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col gap-8 p-8">
@@ -74,6 +79,12 @@ export function Conversation() {
       </div>
 
       <Composer onSubmit={handleSubmit} disabled={pendingCount > 0} />
+
+      {hasPriorTurn && (
+        <p className="-mt-4 text-xs" style={{ color: 'var(--ink-3)' }}>
+          Chaque question est traitée indépendamment, sans mémoire des échanges précédents.
+        </p>
+      )}
     </div>
   )
 }

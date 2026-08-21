@@ -120,3 +120,69 @@ describe('Conversation — draft turn stays on one controller instance', () => {
     expect(generateBodies[1].chunks.map((c) => c.chunk_id)).toEqual(['c1'])
   })
 })
+
+const NOTE_TEXT = 'Chaque question est traitée indépendamment, sans mémoire des échanges précédents.'
+
+// Sprint 8 addendum: no cross-turn context — the transparency note must
+// only appear once a prior turn already exists in the conversation, not on
+// an empty one where it wouldn't yet be relevant.
+describe('Conversation — no-cross-turn-context transparency note', () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: async () => body })
+        if (url.endsWith('/conversations/1')) {
+          return ok({ conversation_id: 1, turns: [{ turn_id: 1, query: 'Q', created_at: 'now' }] })
+        }
+        if (url.endsWith('/turns/1')) {
+          return ok({
+            turn_id: 1,
+            conversation_id: 1,
+            query: 'Q',
+            created_at: 'now',
+            retrieved_chunks: [],
+            generations: [],
+            chunk_judgments: {},
+          })
+        }
+        throw new Error(`Unhandled fetch: ${url}`)
+      }),
+    )
+  })
+
+  it('is absent on a brand-new, empty conversation', async () => {
+    const client = new QueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <TurnUiProvider>
+          <MemoryRouter initialEntries={['/new']}>
+            <Routes>
+              <Route path="/new" element={<Conversation />} />
+            </Routes>
+          </MemoryRouter>
+        </TurnUiProvider>
+      </QueryClientProvider>,
+    )
+
+    await screen.findByPlaceholderText(/./)
+    expect(screen.queryByText(NOTE_TEXT)).not.toBeInTheDocument()
+  })
+
+  it('appears near the input once a first turn already exists', async () => {
+    const client = new QueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <TurnUiProvider>
+          <MemoryRouter initialEntries={['/c/1']}>
+            <Routes>
+              <Route path="/c/:conversationId" element={<Conversation />} />
+            </Routes>
+          </MemoryRouter>
+        </TurnUiProvider>
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(screen.getByText(NOTE_TEXT)).toBeInTheDocument())
+  })
+})

@@ -15,9 +15,15 @@ export function TurnCard({ turnId, pendingQuery, conversationId, onCreated }: Tu
   const turn = useTurnController({ turnId, pendingQuery, conversationId, onCreated })
 
   return (
+    // Each turn renders as one visually self-contained unit (query,
+    // processing steps, chunk rail, answer) — a bordered card, not a
+    // continuous chat bubble — because there is no cross-turn context: every
+    // query triggers its own independent retrieve+generate cycle
+    // (docs/ROADMAP.md, Sprint 8 addendum).
     <div
-      className="flex flex-col gap-4 rounded-xl p-5"
-      style={{ border: '0.5px solid var(--hairline)', background: 'var(--paper)' }}
+      className="flex flex-col gap-4 rounded-2xl p-6"
+      style={{ background: 'var(--paper)', border: '1px solid var(--hairline)' }}
+      data-testid="turn-card"
     >
       {turn.query && <QueryBubble query={turn.query} />}
 

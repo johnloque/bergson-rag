@@ -31,6 +31,7 @@ dependencies = [
     "snowballstemmer==3.1.1",
     "spacy==3.8.15",
     "sqlmodel==0.0.29",
+    "torch",
     "uvicorn[standard]==0.52.3",
 ]
 
@@ -62,6 +63,20 @@ testpaths = ["tests"]
 
 [tool.uv.sources]
 fr-core-news-lg = { url = "https://github.com/explosion/spacy-models/releases/download/fr_core_news_lg-3.8.0/fr_core_news_lg-3.8.0-py3-none-any.whl" }
+# CPU-only torch on Linux (the Dockerfile's target platform): this project
+# never does GPU inference (docs/ROADMAP.md's CPU-only Ollama decision
+# applies equally to the dense embedder / cross-encoder reranker that run
+# in-process via sentence-transformers, src/indexing/embeddings.py,
+# src/retrieval/reranking.py). Without this, PyPI's default linux/amd64
+# torch wheel drags in ~4GB of unused CUDA/triton libraries. Scoped to
+# Linux only so macOS dev installs are untouched (PyPI's default macOS
+# torch wheel has no CUDA variant to begin with).
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 # Model versions not installable as Python packages, pinned here as the
 # single source of truth (read at runtime by src/indexing/embeddings.py).

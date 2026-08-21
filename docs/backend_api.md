@@ -101,6 +101,16 @@ hypothetical) surface as a 503 naming the failed provider and model, rather
 than an unhandled 500. CORS is enabled for a single hardcoded local Vite dev
 origin (`http://localhost:5173`), ahead of Sprint 8's frontend needing it.
 
+## Additive backend surface (added alongside Sprint 8, not part of Sprint 7)
+
+`GET /conversations` (list, newest first), `PATCH /conversations/{id}`
+(rename), `DELETE /conversations/{id}` (cascading delete) — Sprint 7 only
+shipped lookup-by-id, but the frontend's sidebar conversation list and the
+landing page's "last conversation" redirect have no way to enumerate
+conversations without it. `Conversation` gained a nullable `title` column
+for the rename action. Full frontend context:
+[`docs/frontend.md`](frontend.md).
+
 ## Test coverage
 
 `tests/test_api.py`: same real-corpus / gold-dataset fixture discipline as

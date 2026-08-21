@@ -98,7 +98,6 @@ describe('AnswerCard full-endorsement statement', () => {
     return {
       structural: { citations: [], unknown_citations: [], has_citation: true, passed: true },
       faithfulness: { score: claims.every((c) => c.supported) ? 1 : 0.5, model: 'judge', claims },
-      retrieval_confidence_tier: 'moyenne',
       should_auto_expand: claims.every((c) => c.supported),
     }
   }

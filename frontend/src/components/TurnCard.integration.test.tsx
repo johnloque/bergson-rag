@@ -112,7 +112,7 @@ describe('TurnCard integration', () => {
 
     expect(screen.getByText('Non vérifié')).toBeInTheDocument()
     expect(
-      (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.some(([url]: [string]) =>
+      (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.some(([url]) =>
         url.endsWith('/evaluate'),
       ),
     ).toBe(false)

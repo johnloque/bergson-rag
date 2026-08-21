@@ -154,6 +154,45 @@ before `generate_evaluation` finishes, or before a session is persisted,
 never sees the answer's final expanded/collapsed badge state. Sprint 7
 needs to close this gap, not just add the rendering.
 
+## Follow-up correction (Sprint 8): retrieval confidence moved from post-evaluation display to a pre-generation preview
+
+Originally, the retrieval confidence tier was computed inside
+`generate_evaluation` (this sprint) and surfaced as a field on
+`/evaluate`'s response (Sprint 7a-b), rendered as a gauge inside the
+expanded, post-evaluation answer card (Sprint 8). On reflection this showed
+the signal at the wrong moment and in the wrong place: retrieval confidence
+is a property of the *evidence*, knowable before generation ever runs, not
+a property of the *answer* — showing it only after `/evaluate` completed
+meant the user had already committed to generating (and had to wait through
+the full generate → evaluate round trip) before seeing a signal that could
+have informed whether to curate the chunk rail first. It also duplicated
+`should_auto_expand`'s own internal use of the same tier without adding
+information, since a low tier already suppresses auto-expand.
+
+Fixed by extracting the tier computation into
+`src.generation.signals.retrieval_confidence_tier` (already a standalone
+function; `generate_evaluation` now takes the tier as a parameter instead
+of computing it) and giving it two call sites, not the previous single
+implicit one: a new `POST /confidence-preview` endpoint, called live by the
+frontend at the chunk-rail level on every include/exclude toggle (debounced
+~300ms), and `POST /generate`, which computes the same tier server-side
+over the chunks it was actually given and persists it on the `generations`
+row — never a client-submitted value, the same trust boundary Sprint 7b
+already applied to `/evaluate`'s `(query, chunks, answer)`. `/evaluate`
+reads that persisted value back purely to gate `should_auto_expand`
+internally; its response no longer carries a `retrieval_confidence_tier`
+field, since re-showing it there would just duplicate what
+`/confidence-preview` already showed before generation.
+`should_auto_expand`'s decision logic itself is unchanged (tier at
+"moyenne" or above AND no unsupported claims) — only where its confidence
+input comes from changed.
+
+On the frontend, the confidence gauge (`ConfidenceGauge.tsx`, unchanged
+visually — same 4-segment bar, `--blue` for the confident tiers,
+`--gray-dark` for the two weak tiers) moved from the expanded answer card
+to directly above the chunk rail (`ChunkRail.tsx`); the answer card now
+renders only the citation integrity flag and faithfulness highlighting.
+
 ## Test coverage
 
 `tests/test_guardrail.py` — Q001/Q004 hand-crafted confirmed-hallucination

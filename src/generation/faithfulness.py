@@ -77,6 +77,30 @@ pass — just with the intermediate verdicts kept instead of thrown away.
 Uses `ragas.async_utils.run`, the same sync-wrapper helper
 `single_turn_score` itself uses internally, to run these two async calls in
 this module's otherwise-sync API.
+
+## Grounding claims back to a verbatim quote, for UI highlighting
+
+The frontend (`AnswerCard.tsx`, via `annotateAnswer.tsx`) wants to highlight
+the exact unsupported span inside the *original* answer text. RAGAS's own
+`StatementGeneratorPrompt` (`ragas.metrics._faithfulness`) is unsuitable as
+the source for that span: its instruction explicitly tells the judge to
+rewrite each sentence into a pronoun-free, self-contained statement — by
+design not a verbatim substring of the answer (confirmed against real
+output: the extracted statement essentially never `indexOf`-matches the
+answer it was drawn from). Using it for highlighting silently produced no
+highlights at all.
+
+Fix: replace RAGAS's own statement-generation step with
+`_GROUNDED_STATEMENT_PROMPT` below, a `PydanticPrompt` that asks for the
+same atomic, pronoun-free statements *plus* a `quote` field the instruction
+requires to be copied character-for-character from the answer. The NLI
+entailment step (`metric._create_verdicts`) is untouched — it still judges
+the paraphrased `statement` text against the cited chunks, so the
+faithfulness score's meaning doesn't change. `quote` is then validated
+against the real answer text (`_ground_quote_in_answer`) — a local judge
+does not reliably honor "copy verbatim" — and dropped (not fabricated) when
+it doesn't actually occur in the answer, same best-effort philosophy the
+old frontend-only matching already documented.
 """
 
 from __future__ import annotations
@@ -90,6 +114,7 @@ from typing import Any, TypeVar
 
 import litellm
 from langchain_litellm import ChatLiteLLM
+from pydantic import BaseModel, Field
 from ragas.dataset_schema import SingleTurnSample
 
 # Imported from ragas.llms.base, not the public ragas.llms re-export: the
@@ -102,6 +127,14 @@ from ragas.dataset_schema import SingleTurnSample
 # is the only working option for these metrics in ragas 0.3.9.
 from ragas.llms.base import LangchainLLMWrapper
 from ragas.metrics import Faithfulness
+
+# `StatementGeneratorInput` (question, answer) is reused as-is as the input
+# to our own grounded-statement prompt below — only the *output* shape needs
+# to change (see "Grounding claims back to a verbatim quote" above).
+# Imported from the private module since `ragas.metrics` doesn't re-export
+# it; it's a stable-shaped Pydantic model, not internal machinery.
+from ragas.metrics._faithfulness import StatementGeneratorInput
+from ragas.prompt import PydanticPrompt
 
 from src.generation.generate import DEFAULT_MODEL
 from src.generation.signals import GenerationChunk
@@ -120,12 +153,17 @@ JUDGE_TEMPERATURE = 0.0
 # lengthy few-shot examples on top of the actual (query, answer, contexts)
 # triple, and truncation mid-generation was observed to produce free-text
 # instead of the requested JSON — RagasOutputParserException even after
-# RAGAS's own internal fix-the-format retry. Confirmed fixed empirically at
-# num_ctx=8192 against this project's real chunk sizes (up to 5 concatenated
-# chunks, eval/scripts/run_ragas_eval.py's end_to_end mode). Only applied
-# for an Ollama-served model — passing an Ollama-specific param to a hosted
+# RAGAS's own internal fix-the-format retry. num_ctx=8192 turned out not to
+# be a safe general default: tests/test_guardrail.py's Q009 case overflowed
+# it with as few as 5 real (long) chunks, and it reliably overflows on the
+# API's old default retrieval top_k of 10 (confirmed against a real
+# conversation, /evaluate raising the same RagasOutputParserException as an
+# unhandled 500). 16384 is the value that test already had to pass
+# explicitly to work around the overflow — promoted here to the default so
+# every caller gets it, not just that one test. Only applied for an
+# Ollama-served model — passing an Ollama-specific param to a hosted
 # provider (e.g. the Mistral API fallback) would error.
-JUDGE_NUM_CTX = 8192
+JUDGE_NUM_CTX = 16384
 _OLLAMA_PROVIDERS = ("ollama", "ollama_chat")
 
 T = TypeVar("T")
@@ -200,15 +238,115 @@ def build_judge_llm(
     )
 
 
+class GroundedStatement(BaseModel):
+    statement: str = Field(
+        description="A fully understandable, standalone statement extracted "
+        "from the answer, with no pronouns"
+    )
+    quote: str = Field(
+        description="The exact, character-for-character substring of the "
+        "answer that this statement was derived from — copied verbatim, "
+        "never paraphrased or summarized"
+    )
+
+
+class GroundedStatementGeneratorOutput(BaseModel):
+    statements: list[GroundedStatement] = Field(
+        description="The generated statements, each paired with its verbatim source quote"
+    )
+
+
+class GroundedStatementGeneratorPrompt(
+    PydanticPrompt[StatementGeneratorInput, GroundedStatementGeneratorOutput]
+):
+    """Same decomposition RAGAS's own `StatementGeneratorPrompt` does
+    (`ragas.metrics._faithfulness`), plus a `quote` field per statement so
+    the UI can highlight the actual span in the answer — see this module's
+    docstring, "Grounding claims back to a verbatim quote"."""
+
+    instruction = (
+        "Given a question and an answer, analyze the complexity of each sentence in the "
+        "answer. Break down each sentence into one or more fully understandable statements. "
+        "Ensure that no pronouns are used in any statement. For each statement, also give a "
+        "'quote': the exact substring of the answer, copied character-for-character, that the "
+        "statement was derived from. The quote must appear verbatim in the answer — do not "
+        "paraphrase, summarize, or alter it in any way. Format the outputs in JSON."
+    )
+    input_model = StatementGeneratorInput
+    output_model = GroundedStatementGeneratorOutput
+    examples = [
+        (
+            StatementGeneratorInput(
+                question="Who was Albert Einstein and what is he best known for?",
+                answer="He was a German-born theoretical physicist, widely acknowledged to be "
+                "one of the greatest and most influential physicists of all time. He was best "
+                "known for developing the theory of relativity, he also made important "
+                "contributions to the development of the theory of quantum mechanics.",
+            ),
+            GroundedStatementGeneratorOutput(
+                statements=[
+                    GroundedStatement(
+                        statement="Albert Einstein was a German-born theoretical physicist.",
+                        quote="He was a German-born theoretical physicist",
+                    ),
+                    GroundedStatement(
+                        statement="Albert Einstein is recognized as one of the greatest and "
+                        "most influential physicists of all time.",
+                        quote="widely acknowledged to be one of the greatest and most "
+                        "influential physicists of all time",
+                    ),
+                    GroundedStatement(
+                        statement="Albert Einstein was best known for developing the theory "
+                        "of relativity.",
+                        quote="He was best known for developing the theory of relativity",
+                    ),
+                    GroundedStatement(
+                        statement="Albert Einstein also made important contributions to the "
+                        "development of the theory of quantum mechanics.",
+                        quote="he also made important contributions to the development of "
+                        "the theory of quantum mechanics",
+                    ),
+                ]
+            ),
+        )
+    ]
+
+
+_GROUNDED_STATEMENT_PROMPT = GroundedStatementGeneratorPrompt()
+
+
+def _ground_quote_in_answer(answer: str, quote: str) -> str | None:
+    """Validates that `quote` (as returned by `_GROUNDED_STATEMENT_PROMPT`)
+    actually occurs in `answer` — the judge is only asked to copy verbatim,
+    not guaranteed to. Tolerates a case mismatch (returning the answer's own
+    casing, so highlighting always matches what's on screen); anything else
+    (paraphrased or fabricated quote) is treated as ungrounded and dropped
+    rather than guessed at, same best-effort philosophy as the rest of this
+    module's claim handling."""
+    quote = quote.strip()
+    if not quote:
+        return None
+    if quote in answer:
+        return quote
+    idx = answer.lower().find(quote.lower())
+    if idx == -1:
+        return None
+    return answer[idx : idx + len(quote)]
+
+
 @dataclass(frozen=True)
 class ClaimVerdict:
     """One RAGAS-extracted claim from the scored answer, with its entailment
     verdict against `chunks`. `reason` is RAGAS's own judge-generated
-    explanation for the verdict, not post-hoc computed."""
+    explanation for the verdict, not post-hoc computed. `quote` is the
+    verbatim span of `answer` this claim was grounded to (for UI
+    highlighting) — `None` when the judge's quote couldn't be validated
+    against the answer text (`_ground_quote_in_answer`)."""
 
     statement: str
     supported: bool
     reason: str
+    quote: str | None = None
 
 
 @dataclass(frozen=True)
@@ -253,18 +391,36 @@ def check_faithfulness(
     row = sample.to_dict()
 
     async def _score() -> Any:
-        statements = await metric._create_statements(row, None)
-        if not statements.statements:
+        grounded = await _GROUNDED_STATEMENT_PROMPT.generate(
+            llm=llm, data=StatementGeneratorInput(question=query, answer=answer)
+        )
+        if not grounded.statements:
             return None
-        return await metric._create_verdicts(row, statements.statements, None)
+        statement_texts = [s.statement for s in grounded.statements]
+        verdicts = await metric._create_verdicts(row, statement_texts, None)
+        return grounded, verdicts
 
-    verdicts = _run_on_background_loop(_score())
-    if verdicts is None:
+    result = _run_on_background_loop(_score())
+    if result is None:
         return FaithfulnessResult(score=float("nan"), model=model, claims=())
+    grounded, verdicts = result
 
     score = metric._compute_score(verdicts)
+    # NLI verdicts echo back the exact statement text they were given
+    # (`StatementFaithfulnessAnswer.statement`, "the original statement,
+    # word-by-word") — matched by that text back to the quote extracted
+    # alongside it, rather than assumed positional, since a local judge
+    # isn't guaranteed to preserve order/count between the two LLM calls.
+    quote_by_statement = {s.statement: s.quote for s in grounded.statements}
     claims = tuple(
-        ClaimVerdict(statement=v.statement, supported=bool(v.verdict), reason=v.reason)
+        ClaimVerdict(
+            statement=v.statement,
+            supported=bool(v.verdict),
+            reason=v.reason,
+            quote=_ground_quote_in_answer(answer, quote_by_statement[v.statement])
+            if v.statement in quote_by_statement
+            else None,
+        )
         for v in verdicts.statements
     )
     return FaithfulnessResult(score=score, model=model, claims=claims)

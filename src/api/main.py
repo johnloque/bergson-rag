@@ -227,7 +227,9 @@ def _evaluation_result_to_response(evaluation: EvaluationResult) -> EvaluateResp
             score=None if math.isnan(score) else score,
             model=evaluation.faithfulness.model,
             claims=[
-                ClaimVerdictOut(statement=c.statement, supported=c.supported, reason=c.reason)
+                ClaimVerdictOut(
+                    statement=c.statement, supported=c.supported, reason=c.reason, quote=c.quote
+                )
                 for c in evaluation.faithfulness.claims
             ],
         ),

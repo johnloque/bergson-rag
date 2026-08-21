@@ -9,6 +9,7 @@ interface GenerationBlockProps {
   canRegenerate: boolean
   isRegenerating: boolean
   onReveal: () => void
+  onEvaluate: () => void
   onRegenerate: () => void
 }
 
@@ -24,12 +25,18 @@ export function GenerationBlock({
   canRegenerate,
   isRegenerating,
   onReveal,
+  onEvaluate,
   onRegenerate,
 }: GenerationBlockProps) {
   const generateLabel = isFirst
     ? 'Génération de la réponse'
     : `Génération d'une nouvelle réponse (${entry.chunkIds.join(', ')})`
-  const verifyLabel = entry.evaluationStatus === 'done' ? 'Vérification terminée' : 'Vérification en cours'
+  const verifyLabel =
+    entry.evaluationStatus === 'done'
+      ? 'Vérification terminée'
+      : entry.evaluationStatus === 'error'
+        ? 'Vérification indisponible'
+        : 'Vérification en cours'
 
   return (
     <div className="flex flex-col gap-4">
@@ -43,10 +50,15 @@ export function GenerationBlock({
             evaluationStatus={entry.evaluationStatus}
             revealed={entry.revealed}
             onReveal={onReveal}
+            onEvaluate={onEvaluate}
           />
 
           {entry.evaluationStatus !== 'idle' && (
-            <StepLine label={verifyLabel} done={entry.evaluationStatus === 'done'} />
+            <StepLine
+              label={verifyLabel}
+              done={entry.evaluationStatus === 'done' || entry.evaluationStatus === 'error'}
+              failed={entry.evaluationStatus === 'error'}
+            />
           )}
 
           {isLast && canRegenerate && (

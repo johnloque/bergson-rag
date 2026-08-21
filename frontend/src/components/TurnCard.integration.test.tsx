@@ -89,9 +89,23 @@ describe('TurnCard integration', () => {
     expect(screen.queryByText('Lire quand même')).not.toBeInTheDocument()
     expect(screen.queryByText('Confiance du retrieval')).not.toBeInTheDocument()
 
+    // /evaluate is never auto-triggered — it only runs once "Évaluer" is clicked.
+    await user.click(screen.getByText('Évaluer'))
     resolveEvaluate()
     await waitFor(() => expect(screen.getByText('Confiance du retrieval')).toBeInTheDocument())
     expect(screen.getByTestId('answer-content')).toHaveStyle({ filter: 'none' })
+  })
+
+  it('never calls /evaluate until "Évaluer" is clicked', async () => {
+    renderTurnCard()
+    await screen.findByText('Lire quand même')
+
+    expect(screen.getByText('Non vérifié')).toBeInTheDocument()
+    expect(
+      (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.some(([url]: [string]) =>
+        url.endsWith('/evaluate'),
+      ),
+    ).toBe(false)
   })
 
   it('shows Régénérer only after the first generation has completed', async () => {

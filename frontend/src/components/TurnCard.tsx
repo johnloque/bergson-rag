@@ -39,6 +39,7 @@ export function TurnCard({ turnId, pendingQuery, conversationId, onCreated }: Tu
           canRegenerate={turn.canRegenerate}
           isRegenerating={turn.isRegenerating}
           onReveal={() => turn.reveal(index)}
+          onEvaluate={() => turn.evaluate(index)}
           onRegenerate={() => void turn.regenerate()}
         />
       ))}

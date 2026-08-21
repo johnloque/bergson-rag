@@ -7,7 +7,7 @@ import { cacheChunks, getCachedChunk } from './chunkCache'
 import { useTurnUi } from './turnUi'
 
 export type StepState = 'pending' | 'active' | 'done'
-export type EvaluationStatus = 'idle' | 'pending' | 'done'
+export type EvaluationStatus = 'idle' | 'pending' | 'done' | 'error'
 
 // One row in the turn's generation history: the initial /generate plus one
 // entry per subsequent Régénérer click, each keeping its own answer,
@@ -57,12 +57,13 @@ export function useTurnController(options: TurnControllerOptions) {
     setGenerations((prev) => patchAt(prev, index, { evaluationStatus: 'pending' }))
     try {
       const result = await api.evaluate({ generation_id: generationId })
-      setGenerations((prev) => patchAt(prev, index, { evaluation: result }))
+      setGenerations((prev) => patchAt(prev, index, { evaluation: result, evaluationStatus: 'done' }))
     } catch {
       // Evaluation failure (e.g. provider down) shouldn't hide the answer
-      // already shown — the badge just never resolves past "Non vérifié".
-    } finally {
-      setGenerations((prev) => patchAt(prev, index, { evaluationStatus: 'done' }))
+      // already shown, but the badge must not claim "Vérifié" either —
+      // evaluation stays null so retrieval confidence/faithfulness data
+      // stays absent from the UI, matching the 'error' status.
+      setGenerations((prev) => patchAt(prev, index, { evaluationStatus: 'error' }))
     }
   }, [])
 
@@ -120,13 +121,12 @@ export function useTurnController(options: TurnControllerOptions) {
         void queryClient.invalidateQueries({ queryKey: ['conversations'] })
         void queryClient.invalidateQueries({ queryKey: ['conversation', result.conversation_id] })
         options.onCreated?.(result.turn_id, result.conversation_id)
-        await runEvaluationAt(0, result.generation_id)
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e))
         setGenerations([])
       }
     },
-    [options, queryClient, runEvaluationAt, turnUi],
+    [options, queryClient, turnUi],
   )
 
   // Auto-start a brand-new turn exactly once.
@@ -176,11 +176,6 @@ export function useTurnController(options: TurnControllerOptions) {
           revealed: false,
         }))
         setGenerations(entries)
-        const lastIndex = entries.length - 1
-        const last = entries.at(-1)
-        if (last && !last.evaluation && last.generationId !== null) {
-          await runEvaluationAt(lastIndex, last.generationId)
-        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
       }
@@ -195,6 +190,15 @@ export function useTurnController(options: TurnControllerOptions) {
   const reveal = useCallback((index: number) => {
     setGenerations((prev) => patchAt(prev, index, { revealed: true }))
   }, [])
+
+  const evaluate = useCallback(
+    (index: number) => {
+      const entry = generations[index]
+      if (!entry || entry.generationId === null) return
+      void runEvaluationAt(index, entry.generationId)
+    },
+    [generations, runEvaluationAt],
+  )
 
   const regenerate = useCallback(async () => {
     if (turnId === null || conversationId === null || generations.length === 0) return
@@ -235,14 +239,13 @@ export function useTurnController(options: TurnControllerOptions) {
           state: 'done',
         }),
       )
-      await runEvaluationAt(newIndex, result.generation_id)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       setGenerations((prev) => prev.slice(0, newIndex))
     } finally {
       setIsRegenerating(false)
     }
-  }, [chunks, conversationId, generations, query, runEvaluationAt, turnId, turnUi])
+  }, [chunks, conversationId, generations, query, turnId, turnUi])
 
   const lastGeneration = generations.at(-1)
 
@@ -254,6 +257,7 @@ export function useTurnController(options: TurnControllerOptions) {
     retrieveState,
     generations,
     reveal,
+    evaluate,
     isRegenerating,
     regenerate,
     canRegenerate: lastGeneration?.state === 'done',

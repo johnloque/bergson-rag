@@ -26,10 +26,19 @@ from src.generation.faithfulness import DEFAULT_JUDGE_MODEL
 from src.generation.generate import DEFAULT_MODEL
 from src.generation.signals import RetrievalConfidenceTier
 
-# Mirrors src.retrieval.hybrid.hybrid_search's own `limit: int = 10` default
-# (also the default already used by scripts/query_retrieval.py and
-# scripts/query_hybrid_retrieval.py) — not a new default introduced here.
-DEFAULT_TOP_K = 10
+# Was 10, mirroring src.retrieval.hybrid.hybrid_search's own `limit: int =
+# 10` default (also the default used by scripts/query_retrieval.py and
+# scripts/query_hybrid_retrieval.py). Lowered to 3: `/generate` and
+# `/evaluate` both operate on however many chunks `/retrieve` handed back
+# (neither has its own independent cap), so the old default of 10 chunks
+# flowed straight into the faithfulness judge's prompt — reliably
+# overflowing its context window (`JUDGE_NUM_CTX`,
+# src/generation/faithfulness.py) and making `/evaluate` fail with an
+# unhandled 500 on every turn that kept most of its retrieved chunks.
+# Retrieval candidate breadth for reranking is unaffected — this only trims
+# the final `[:top_k]` slice returned to the client (src/api/main.py's
+# `retrieve`), not the `DEFAULT_RERANK_CANDIDATES` pool reranked over.
+DEFAULT_TOP_K = 3
 
 
 class PageRef(BaseModel):
@@ -111,6 +120,10 @@ class ClaimVerdictOut(BaseModel):
     statement: str
     supported: bool
     reason: str
+    # Verbatim span of the answer this claim was grounded to (for UI
+    # highlighting, src/generation/faithfulness.py:_ground_quote_in_answer);
+    # None when the judge's quote couldn't be validated against the answer.
+    quote: str | None = None
 
 
 class StructuralCheckOut(BaseModel):

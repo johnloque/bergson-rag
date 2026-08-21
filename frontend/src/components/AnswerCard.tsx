@@ -12,12 +12,34 @@ interface AnswerCardProps {
   evaluationStatus: EvaluationStatus
   revealed: boolean
   onReveal: () => void
+  onEvaluate?: () => void
 }
 
-export function AnswerCard({ answer, evaluation, evaluationStatus, revealed, onReveal }: AnswerCardProps) {
+export function AnswerCard({
+  answer,
+  evaluation,
+  evaluationStatus,
+  revealed,
+  onReveal,
+  onEvaluate,
+}: AnswerCardProps) {
   const expanded = revealed || evaluation?.should_auto_expand === true
   const unsupportedClaims = evaluation?.faithfulness.claims.filter((c) => !c.supported) ?? []
   const hasFlaggedClaims = unsupportedClaims.length > 0
+  // Reading early via "Lire quand même" must not strand the evaluate control —
+  // /evaluate is only ever triggered by this button now, so it has to stay
+  // reachable after reveal too, not just in the collapsed overlay.
+  const canEvaluate = (evaluationStatus === 'idle' || evaluationStatus === 'error') && onEvaluate
+  const evaluateButton = canEvaluate && (
+    <button
+      type="button"
+      onClick={onEvaluate}
+      className="rounded-lg border px-4 py-1.5 text-sm font-medium"
+      style={{ background: 'var(--paper)', borderColor: 'var(--hairline)', color: 'var(--ink)' }}
+    >
+      {evaluationStatus === 'error' ? 'Réessayer la vérification' : 'Évaluer'}
+    </button>
+  )
 
   return (
     <div
@@ -53,6 +75,13 @@ export function AnswerCard({ answer, evaluation, evaluationStatus, revealed, onR
         </p>
       )}
 
+      {expanded && canEvaluate && (
+        <div className="mt-3 flex items-center gap-2">
+          <StatusPill tone={evaluationStatus === 'error' ? 'failed' : 'pending'} />
+          {evaluateButton}
+        </div>
+      )}
+
       {!expanded && (
         <div
           className="absolute inset-0 flex flex-col items-center justify-center gap-3"
@@ -64,17 +93,22 @@ export function AnswerCard({ answer, evaluation, evaluationStatus, revealed, onR
                 ? 'verifying'
                 : evaluationStatus === 'done'
                   ? 'verified'
-                  : 'pending'
+                  : evaluationStatus === 'error'
+                    ? 'failed'
+                    : 'pending'
             }
           />
-          <button
-            type="button"
-            onClick={onReveal}
-            className="rounded-lg border px-4 py-1.5 text-sm font-medium"
-            style={{ background: 'var(--paper)', borderColor: 'var(--hairline)', color: 'var(--ink)' }}
-          >
-            Lire quand même
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onReveal}
+              className="rounded-lg border px-4 py-1.5 text-sm font-medium"
+              style={{ background: 'var(--paper)', borderColor: 'var(--hairline)', color: 'var(--ink)' }}
+            >
+              Lire quand même
+            </button>
+            {evaluateButton}
+          </div>
         </div>
       )}
     </div>

@@ -1,22 +1,26 @@
 import type { ReactNode } from 'react'
 import type { ClaimVerdictOut } from '../api/types'
 
-// Wraps unsupported claims in a highlight span. Claim statements come from
-// the faithfulness judge (RAGAS-style claim extraction) and are not
-// guaranteed to be a literal substring of the answer — this is a
-// best-effort literal, case-insensitive match; a claim that doesn't appear
-// verbatim simply isn't highlighted rather than forcing a fuzzy match.
+// Wraps unsupported claims in a highlight span. `claim.statement` (the
+// faithfulness judge's RAGAS-style paraphrase — pronouns resolved, sentences
+// split) is *not* used for locating the span: it's a rewrite, essentially
+// never a literal substring of the answer. `claim.quote` is a separate,
+// backend-validated verbatim span of the answer (src/generation/
+// faithfulness.py:_ground_quote_in_answer) — matching against it directly
+// (case-insensitive, as a defensive fallback for any residual case drift)
+// is what actually finds highlightable ranges. A claim with no valid quote
+// (judge failed to ground it) simply isn't highlighted.
 export function annotateAnswer(text: string, claims: ClaimVerdictOut[]): ReactNode[] {
   const unsupported = claims
-    .filter((c) => !c.supported && c.statement.trim().length > 0)
-    .sort((a, b) => b.statement.length - a.statement.length)
+    .filter((c): c is ClaimVerdictOut & { quote: string } => !c.supported && !!c.quote?.trim())
+    .sort((a, b) => b.quote.length - a.quote.length)
 
   type Range = { start: number; end: number }
   const ranges: Range[] = []
   for (const claim of unsupported) {
-    const idx = text.toLowerCase().indexOf(claim.statement.toLowerCase())
+    const idx = text.toLowerCase().indexOf(claim.quote.toLowerCase())
     if (idx === -1) continue
-    const end = idx + claim.statement.length
+    const end = idx + claim.quote.length
     const overlaps = ranges.some((r) => idx < r.end && end > r.start)
     if (!overlaps) ranges.push({ start: idx, end })
   }

@@ -51,10 +51,10 @@ export function Conversation() {
 
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col gap-8 p-8">
-      <div className="flex flex-1 flex-col gap-10 overflow-y-auto pb-4">
-        {persistedTurns.map((t) => (
-          <TurnCard key={t.turn_id} turnId={t.turn_id} />
-        ))}
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto pb-4">
+        {data?.turns
+          .filter((t) => !draftTurnIds.has(t.turn_id))
+          .map((t) => <TurnCard key={t.turn_id} turnId={t.turn_id} />)}
 
         {drafts.map((draft) => (
           <TurnCard

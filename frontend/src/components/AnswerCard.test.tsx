@@ -1,39 +1,49 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { AnswerCard } from './AnswerCard'
-import type { EvaluateResponse, RetrievalConfidenceTier } from '../api/types'
+import type { EvaluateResponse } from '../api/types'
 
-function makeEvaluation(
-  tier: RetrievalConfidenceTier,
-  shouldAutoExpand: boolean,
-): EvaluateResponse {
+function makeEvaluation(shouldAutoExpand: boolean): EvaluateResponse {
   return {
     structural: { citations: [], unknown_citations: [], has_citation: true, passed: true },
     faithfulness: { score: 1, model: 'judge', claims: [] },
-    retrieval_confidence_tier: tier,
     should_auto_expand: shouldAutoExpand,
   }
 }
 
 describe('AnswerCard collapsed state', () => {
-  it.each<[RetrievalConfidenceTier | null]>([
-    ['très faible'],
-    ['faible'],
-    ['moyenne'],
-    ['élevée'],
-    [null],
-  ])('always renders collapsed first regardless of confidence tier (%s)', (tier) => {
+  it.each<[boolean]>([[true], [false]])(
+    'always renders collapsed first regardless of should_auto_expand (%s)',
+    (hasEvaluation) => {
+      render(
+        <AnswerCard
+          answer="Une réponse."
+          evaluation={hasEvaluation ? makeEvaluation(false) : null}
+          evaluationStatus={hasEvaluation ? 'done' : 'idle'}
+          revealed={false}
+          onReveal={() => {}}
+        />,
+      )
+      expect(screen.getByText('Lire quand même')).toBeInTheDocument()
+      expect(screen.getByTestId('answer-content')).toHaveStyle({ filter: 'blur(5px)' })
+    },
+  )
+})
+
+describe('AnswerCard confidence gauge removal', () => {
+  it('never renders the confidence gauge, expanded or collapsed', () => {
     render(
       <AnswerCard
         answer="Une réponse."
-        evaluation={tier ? makeEvaluation(tier, false) : null}
-        evaluationStatus={tier ? 'done' : 'idle'}
-        revealed={false}
+        evaluation={makeEvaluation(true)}
+        evaluationStatus="done"
+        revealed={true}
         onReveal={() => {}}
       />,
     )
-    expect(screen.getByText('Lire quand même')).toBeInTheDocument()
-    expect(screen.getByTestId('answer-content')).toHaveStyle({ filter: 'blur(5px)' })
+    expect(screen.getByTestId('answer-content')).toHaveStyle({ filter: 'none' })
+    expect(screen.queryByText('Confiance du retrieval')).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: /Confiance :/ })).not.toBeInTheDocument()
   })
 })
 
@@ -53,18 +63,18 @@ describe('AnswerCard reveal behavior', () => {
     expect(screen.queryByText('Confiance du retrieval')).not.toBeInTheDocument()
   })
 
-  it('applies confidence/annotations once evaluation resolves, without re-blurring', () => {
+  it('applies faithfulness annotations once evaluation resolves, without re-blurring', () => {
     render(
       <AnswerCard
         answer="Une réponse."
-        evaluation={makeEvaluation('moyenne', false)}
+        evaluation={makeEvaluation(false)}
         evaluationStatus="done"
         revealed={true}
         onReveal={() => {}}
       />,
     )
     expect(screen.getByTestId('answer-content')).toHaveStyle({ filter: 'none' })
-    expect(screen.getByText('Confiance du retrieval')).toBeInTheDocument()
+    expect(screen.queryByText('Confiance du retrieval')).not.toBeInTheDocument()
   })
 
   it('calls onReveal when the button is clicked', () => {

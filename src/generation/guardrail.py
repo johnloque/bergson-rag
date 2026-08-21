@@ -33,12 +33,17 @@ Three inputs feed `EvaluationResult`:
   Sprint 5/6's shared faithfulness module; per-claim verdicts, not just the
   aggregate score, are read off `FaithfulnessResult.claims`.
 - Retrieval confidence tier, `src.generation.signals.retrieval_confidence_tier`
-  — deterministic, no LLM call, imported (not reimplemented) from
-  `signals.py`: the exact same best-cross-encoder-score signal Sprint 5's
-  prompt conditioning already computes for `EvidenceSignals.is_confident`,
-  one shared definition rather than two independently-tuned ones (see that
-  module's docstring for why an earlier CV-based version of this signal was
-  dropped in favor of a max-score one).
+  — deterministic, no LLM call, the exact same best-cross-encoder-score
+  signal Sprint 5's prompt conditioning already computes for
+  `EvidenceSignals.is_confident`, one shared definition rather than two
+  independently-tuned ones (see that module's docstring for why an earlier
+  CV-based version of this signal was dropped in favor of a max-score one).
+  Since the retrieval-confidence-split correction (docs/ROADMAP.md), this
+  module no longer calls that function itself: `generate_evaluation` takes
+  the tier as a parameter, computed once by `/generate` (persisted on the
+  generation record) and shown to the user pre-generation via
+  `/confidence-preview` — both API-level call sites of the shared function,
+  never this one.
 
 `should_auto_expand` folds two of the three into one boolean: retrieval
 confidence at "moyenne" or above (`CONFIDENT_TIERS`,
@@ -73,12 +78,7 @@ from src.generation.faithfulness import (
     check_faithfulness,
 )
 from src.generation.prompt import CITATION_PATTERN
-from src.generation.signals import (
-    CONFIDENT_TIERS,
-    GenerationChunk,
-    RetrievalConfidenceTier,
-    retrieval_confidence_tier,
-)
+from src.generation.signals import CONFIDENT_TIERS, GenerationChunk, RetrievalConfidenceTier
 
 
 def _extract_citations(answer: str) -> tuple[str, ...]:
@@ -144,6 +144,7 @@ def generate_evaluation(
     query: str,
     chunks: Sequence[GenerationChunk],
     answer: str,
+    retrieval_confidence: RetrievalConfidenceTier,
     judge_llm: LangchainLLMWrapper | None = None,
     model: str = DEFAULT_JUDGE_MODEL,
 ) -> EvaluationResult:
@@ -157,15 +158,24 @@ def generate_evaluation(
     function only sees `(query, chunks, answer)`, not how `answer` was
     produced.
 
+    `retrieval_confidence` is supplied by the caller rather than computed
+    here (docs/ROADMAP.md, the retrieval-confidence-split correction):
+    `src.generation.signals.retrieval_confidence_tier` is the single shared
+    computation, called once at generation time (`/generate`) and again,
+    identically, wherever the pre-generation preview needs it
+    (`/confidence-preview`) — this function just receives whichever value
+    the caller already has (typically the persisted one from the
+    `generations` row) rather than recomputing it a third time from
+    `chunks`.
+
     `judge_llm`/`model` are forwarded to `check_faithfulness` unchanged (pass
     a pre-built `judge_llm` to reuse across many evaluations, same as that
     function's own contract) — the only LLM call this function makes.
     """
     structural = check_structure(answer, chunks)
-    confidence = retrieval_confidence_tier(chunks)
     faithfulness = check_faithfulness(query, answer, chunks, judge_llm=judge_llm, model=model)
     return EvaluationResult(
-        structural=structural, faithfulness=faithfulness, retrieval_confidence=confidence
+        structural=structural, faithfulness=faithfulness, retrieval_confidence=retrieval_confidence
     )
 
 

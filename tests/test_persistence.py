@@ -30,11 +30,14 @@ from qdrant_client import QdrantClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
+from src.api.converters import chunk_input_to_generation_chunk
 from src.api.db import get_session
 from src.api.main import app
 from src.api.models import Conversation, Generation, RetrievedChunkRow, Turn
+from src.api.schemas import ChunkInput
 from src.generation.faithfulness import DEFAULT_JUDGE_MODEL
 from src.generation.prompt import CHUNK_JUDGMENT_INSTRUCTION
+from src.generation.signals import retrieval_confidence_tier
 from src.indexing.qdrant_index import COLLECTION_NAME, point_id_for
 
 QDRANT_URL = "http://localhost:6333"
@@ -167,14 +170,29 @@ def _create_turn(engine, query: str) -> int:
 
 
 def _insert_generation(
-    engine, turn_id: int, chunk_id: str, answer: str, model: str = "test-model", score: float = 1.0
+    engine,
+    turn_id: int,
+    chunk_id: str,
+    answer: str,
+    model: str = "test-model",
+    score: float = 1.0,
+    retrieval_confidence_tier: str = "moyenne",
 ) -> int:
     """Direct DB insertion of a generation record, bypassing a live LLM
     call — used for the /evaluate tests below so they stay fast and
-    independent of model output variance (docs/ROADMAP.md's Tests section)."""
+    independent of model output variance (docs/ROADMAP.md's Tests section).
+    `retrieval_confidence_tier` defaults to "moyenne" (a confident tier) —
+    /evaluate now reads it back from this persisted field instead of
+    recomputing it from chunks."""
     with Session(engine) as session:
         session.add(RetrievedChunkRow(turn_id=turn_id, chunk_id=chunk_id, rank=0, score=score))
-        generation = Generation(turn_id=turn_id, model=model, chunk_ids=[chunk_id], answer=answer)
+        generation = Generation(
+            turn_id=turn_id,
+            model=model,
+            chunk_ids=[chunk_id],
+            answer=answer,
+            retrieval_confidence_tier=retrieval_confidence_tier,
+        )
         session.add(generation)
         session.commit()
         session.refresh(generation)
@@ -282,6 +300,36 @@ def test_generate_explicit_chunk_judgments_overrides_persisted_default(
     assert CHUNK_JUDGMENT_INSTRUCTION not in captured[-1][-1]["content"]
 
 
+# --- /generate: server-side retrieval confidence persistence ---------------
+
+
+@_qdrant_skip
+def test_generate_persists_correct_retrieval_confidence_tier(
+    client, qdrant_client, engine, monkeypatch
+):
+    """/generate computes the retrieval confidence tier server-side
+    (src.generation.signals.retrieval_confidence_tier) over the chunks it
+    was actually given, and persists it on the generations row — never a
+    client-submitted value (docs/ROADMAP.md, the retrieval-confidence-split
+    correction). Verified via a direct DB read, not just that the call
+    succeeds. `litellm.completion` is faked (`_fake_completion`) so this
+    doesn't need a reachable generation LLM — /generate's own answer
+    content is irrelevant here, only the persisted tier is under test."""
+    chunk = _load_chunk_input(qdrant_client, Q007_CHUNK_ID)
+    expected_tier = retrieval_confidence_tier(
+        [chunk_input_to_generation_chunk(ChunkInput(**chunk))]
+    )
+
+    monkeypatch.setattr(litellm, "completion", _fake_completion([], chunk_id=Q007_CHUNK_ID))
+    response = client.post("/generate", json={"query": Q007_QUERY, "chunks": [chunk]})
+    assert response.status_code == 200
+    generation_id = response.json()["generation_id"]
+
+    with Session(engine) as session:
+        generation = session.get(Generation, generation_id)
+        assert generation.retrieval_confidence_tier == expected_tier
+
+
 # --- /evaluate via generation_id, direct DB insertion -----------------------
 
 
@@ -356,10 +404,11 @@ def test_get_turn_assembles_full_state_after_generate_evaluate_judge(
     assert generation_out["answer"] == generate_body["answer"]
     assert generation_out["evaluation"] is not None
     assert generation_out["evaluation"]["should_auto_expand"] == evaluate_body["should_auto_expand"]
-    assert (
-        generation_out["evaluation"]["retrieval_confidence_tier"]
-        == evaluate_body["retrieval_confidence_tier"]
-    )
+    # retrieval_confidence_tier is no longer part of EvaluateResponse
+    # (docs/ROADMAP.md, the retrieval-confidence-split correction) — it was
+    # already shown to the user pre-generation via /confidence-preview.
+    assert "retrieval_confidence_tier" not in evaluate_body
+    assert "retrieval_confidence_tier" not in generation_out["evaluation"]
 
     assert body["chunk_judgments"] == {
         Q001_CHUNK_ID: {"label": judgment["label"], "justification": judgment["justification"]}

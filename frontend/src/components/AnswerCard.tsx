@@ -3,7 +3,6 @@ import type { EvaluateResponse } from '../api/types'
 import type { EvaluationStatus } from '../state/useTurnController'
 import { annotateAnswer } from '../lib/annotateAnswer'
 import { CitationFlag } from './CitationFlag'
-import { ConfidenceGauge } from './ConfidenceGauge'
 import { StatusPill } from './StatusPill'
 
 interface AnswerCardProps {
@@ -49,15 +48,9 @@ export function AnswerCard({
   return (
     <div
       className="relative overflow-hidden rounded-xl p-4"
-      style={{ background: 'var(--paper-2)' }}
+      style={{ background: 'var(--paper-2)', border: '0.5px solid var(--hairline)' }}
       data-testid="answer-card"
     >
-      {evaluation?.retrieval_confidence_tier && expanded && (
-        <div className="mb-3">
-          <ConfidenceGauge tier={evaluation.retrieval_confidence_tier} />
-        </div>
-      )}
-
       {expanded && evaluation && (
         <CitationFlag unknownCitations={evaluation.structural.unknown_citations} />
       )}

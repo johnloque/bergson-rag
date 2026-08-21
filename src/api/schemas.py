@@ -13,6 +13,12 @@ score a prior /retrieve call attached to that chunk. When present, it's
 threaded back into a `RerankedChunk` (src/api/converters.py) so
 `retrieval_confidence_tier` (src/generation/signals.py) reflects the real
 retrieval signal instead of falling back to its "insufficient data" default.
+
+`ConfidencePreviewChunk` is the same idea, pared down further: /confidence-
+preview only needs chunk_id + score to compute a tier, not a full chunk's
+text/work_id/section_path, since it's called once per chunk-rail
+include/exclude toggle (docs/ROADMAP.md, the retrieval-confidence-split
+correction).
 """
 
 from __future__ import annotations
@@ -90,6 +96,26 @@ class RetrieveResponse(BaseModel):
     chunks: list[ChunkResult]
 
 
+class ConfidencePreviewChunk(BaseModel):
+    """The lean shape /confidence-preview needs — chunk_id plus the
+    reranking score already sitting in a prior /retrieve response's
+    `ChunkResult.score`, not the full `ChunkInput` (text, work_id, ...).
+    Called once per include/exclude toggle in the chunk rail (debounced
+    client-side), so the request body is kept as small as the signal
+    actually requires."""
+
+    chunk_id: str = Field(min_length=1)
+    score: float | None = None
+
+
+class ConfidencePreviewRequest(BaseModel):
+    chunks: list[ConfidencePreviewChunk] = Field(min_length=1)
+
+
+class ConfidencePreviewResponse(BaseModel):
+    retrieval_confidence_tier: RetrievalConfidenceTier
+
+
 class GenerateRequest(BaseModel):
     query: str = Field(min_length=1)
     chunks: list[ChunkInput] = Field(min_length=1)
@@ -143,9 +169,16 @@ class FaithfulnessOut(BaseModel):
 
 
 class EvaluateResponse(BaseModel):
+    """No `retrieval_confidence_tier` field (docs/ROADMAP.md, the
+    retrieval-confidence-split correction): the tier is already shown to the
+    user pre-generation via `/confidence-preview`, computed server-side at
+    `/generate` time and persisted on the `generations` row
+    (`src/api/models.py`) — `/evaluate` looks that value up internally
+    (`generation.retrieval_confidence_tier`) purely to gate
+    `should_auto_expand`, and does not re-surface it here."""
+
     structural: StructuralCheckOut
     faithfulness: FaithfulnessOut
-    retrieval_confidence_tier: RetrievalConfidenceTier
     should_auto_expand: bool
 
 

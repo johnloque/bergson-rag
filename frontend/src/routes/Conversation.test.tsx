@@ -53,9 +53,11 @@ describe('Conversation — draft turn stays on one controller instance', () => {
           return ok({
             structural: { citations: [], unknown_citations: [], has_citation: true, passed: true },
             faithfulness: { score: 1, model: 'judge', claims: [] },
-            retrieval_confidence_tier: 'moyenne',
             should_auto_expand: false,
           })
+        }
+        if (url.endsWith('/confidence-preview')) {
+          return ok({ retrieval_confidence_tier: 'moyenne' })
         }
         if (url.includes('/conversations/1') && !url.includes('/turns')) {
           return ok({ conversation_id: 1, turns: [{ turn_id: 1, query: 'Q', created_at: 'now' }] })

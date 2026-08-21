@@ -68,7 +68,7 @@ export function ChunkDetail() {
 
       <div className="grid grid-cols-[1fr_260px] gap-6">
         <div>
-          <div className="rounded-xl p-4" style={{ background: 'var(--paper-2)' }}>
+          <div className="rounded-xl p-4" style={{ background: 'var(--paper-2)', border: '0.5px solid var(--hairline)' }}>
             <p className="whitespace-pre-wrap text-[15px] leading-relaxed" style={{ color: 'var(--ink)' }}>
               {chunk?.text || 'Texte indisponible pour ce passage (session précédente).'}
             </p>

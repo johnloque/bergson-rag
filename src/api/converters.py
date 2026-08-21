@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from qdrant_client import QdrantClient
 
-from src.api.schemas import ChunkInput, ChunkResult, PageRef
+from src.api.schemas import ChunkInput, ChunkResult, ConfidencePreviewChunk, PageRef
 from src.generation.signals import GenerationChunk
 from src.indexing.qdrant_index import COLLECTION_NAME, point_id_for
 from src.retrieval.hybrid import RetrievedChunk
@@ -57,6 +57,40 @@ def chunk_input_to_generation_chunk(chunk: ChunkInput) -> GenerationChunk:
         page_start=page_start,
         page_end=page_end,
         text=chunk.text,
+    )
+
+
+def confidence_preview_chunk_to_generation_chunk(chunk: ConfidencePreviewChunk) -> GenerationChunk:
+    """Same `RerankedChunk`-when-scored / `RetrievedChunk`-when-not rebuild
+    rule as `chunk_input_to_generation_chunk`, pared down to what
+    `retrieval_confidence_tier` (src/generation/signals.py) actually reads —
+    `chunk_id` and the rerank score. Every other field is irrelevant to that
+    computation, so it's left empty rather than requiring the caller to
+    resend a full chunk's text/work_id/section_path just to get a tier back
+    (docs/ROADMAP.md, the retrieval-confidence-split correction)."""
+    if chunk.score is None:
+        return RetrievedChunk(
+            score=0.0,
+            work_id="",
+            chunk_id=chunk.chunk_id,
+            section_id="",
+            section_path="",
+            paragraph_ids=[],
+            page_start={},
+            page_end={},
+            text="",
+        )
+    return RerankedChunk(
+        rerank_score=chunk.score,
+        rrf_score=chunk.score,
+        work_id="",
+        chunk_id=chunk.chunk_id,
+        section_id="",
+        section_path="",
+        paragraph_ids=[],
+        page_start={},
+        page_end={},
+        text="",
     )
 
 

@@ -1,4 +1,6 @@
 import type {
+  ConfidencePreviewRequest,
+  ConfidencePreviewResponse,
   ConversationDetailResponse,
   ConversationListResponse,
   ConversationSummaryOut,
@@ -50,6 +52,12 @@ export const api = {
 
   generate: (body: GenerateRequest) =>
     request<GenerateResponse>('/generate', { method: 'POST', body: JSON.stringify(body) }),
+
+  confidencePreview: (body: ConfidencePreviewRequest) =>
+    request<ConfidencePreviewResponse>('/confidence-preview', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 
   evaluate: (body: EvaluateRequest) =>
     request<EvaluateResponse>('/evaluate', { method: 'POST', body: JSON.stringify(body) }),

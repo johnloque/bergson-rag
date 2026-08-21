@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
@@ -67,10 +67,12 @@ describe('TurnCard integration', () => {
             jsonResponse({
               structural: { citations: ['W_c1'], unknown_citations: [], has_citation: true, passed: true },
               faithfulness: { score: 1, model: 'judge', claims: [] },
-              retrieval_confidence_tier: 'moyenne',
               should_auto_expand: false,
             }),
           )
+        }
+        if (url.endsWith('/confidence-preview')) {
+          return jsonResponse({ retrieval_confidence_tier: 'moyenne' })
         }
         throw new Error(`Unhandled fetch: ${url}`)
       }),
@@ -87,13 +89,21 @@ describe('TurnCard integration', () => {
     await user.click(revealButton)
     expect(screen.getByTestId('answer-content')).toHaveStyle({ filter: 'none' })
     expect(screen.queryByText('Lire quand même')).not.toBeInTheDocument()
-    expect(screen.queryByText('Confiance du retrieval')).not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('answer-card')).queryByText('Confiance du retrieval'),
+    ).not.toBeInTheDocument()
 
     // /evaluate is never auto-triggered — it only runs once "Évaluer" is clicked.
     await user.click(screen.getByText('Évaluer'))
     resolveEvaluate()
-    await waitFor(() => expect(screen.getByText('Confiance du retrieval')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Vérification terminée')).toBeInTheDocument())
     expect(screen.getByTestId('answer-content')).toHaveStyle({ filter: 'none' })
+    // The confidence gauge never appears in the answer card, evaluated or
+    // not (docs/ROADMAP.md, the retrieval-confidence-split correction) —
+    // it's shown pre-generation, at the chunk-rail level, instead.
+    expect(
+      within(screen.getByTestId('answer-card')).queryByText('Confiance du retrieval'),
+    ).not.toBeInTheDocument()
   })
 
   it('never calls /evaluate until "Évaluer" is clicked', async () => {

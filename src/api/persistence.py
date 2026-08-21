@@ -128,6 +128,7 @@ def save_generation(
     model: str,
     chunk_ids: list[str],
     answer: str,
+    retrieval_confidence_tier: str,
     chunk_judgments_used: dict[str, ChunkJudgment] | None,
 ) -> Generation:
     """404s if `turn_id` no longer exists — re-checked here (not just at
@@ -135,7 +136,14 @@ def save_generation(
     have been deleted mid-request, while `generate_from_chunks` was
     running. Without this, since SQLite FKs aren't enforced (module
     docstring), the insert would silently succeed and leave an orphaned
-    `Generation` row under a deleted turn."""
+    `Generation` row under a deleted turn.
+
+    `retrieval_confidence_tier` is computed server-side by the caller
+    (`src/api/main.py`'s `generate`, via `src.generation.signals.
+    retrieval_confidence_tier`) over the same chunks actually passed into
+    this generation — never trusted from the client — so `/evaluate` can
+    later read it back to gate `should_auto_expand` without recomputing it
+    (docs/ROADMAP.md, the retrieval-confidence-split correction)."""
     if session.get(Turn, turn_id) is None:
         raise HTTPException(status_code=404, detail=f"turn_id {turn_id} not found")
     generation = Generation(
@@ -143,6 +151,7 @@ def save_generation(
         model=model,
         chunk_ids=chunk_ids,
         answer=answer,
+        retrieval_confidence_tier=retrieval_confidence_tier,
         chunk_judgments_used=chunk_judgments_used,
     )
     session.add(generation)
@@ -168,7 +177,6 @@ def save_evaluation(
     generation_id: int,
     structural_flags: dict,
     faithfulness_annotations: dict,
-    retrieval_confidence_tier: str,
     should_auto_expand: bool,
 ) -> Evaluation:
     """404s if `generation_id` no longer exists — same rationale as
@@ -190,7 +198,6 @@ def save_evaluation(
         evaluation = Evaluation(generation_id=generation_id)
     evaluation.structural_flags = structural_flags
     evaluation.faithfulness_annotations = faithfulness_annotations
-    evaluation.retrieval_confidence_tier = retrieval_confidence_tier
     evaluation.should_auto_expand = should_auto_expand
     session.add(evaluation)
     session.commit()

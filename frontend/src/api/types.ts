@@ -90,11 +90,27 @@ export interface FaithfulnessOut {
 
 export type RetrievalConfidenceTier = 'très faible' | 'faible' | 'moyenne' | 'élevée'
 
+// No retrieval_confidence_tier field (docs/ROADMAP.md, the retrieval-
+// confidence-split correction): the tier is shown to the user pre-
+// generation via /confidence-preview (see ConfidencePreviewResponse below),
+// not repeated here.
 export interface EvaluateResponse {
   structural: StructuralCheckOut
   faithfulness: FaithfulnessOut
-  retrieval_confidence_tier: RetrievalConfidenceTier
   should_auto_expand: boolean
+}
+
+export interface ConfidencePreviewChunk {
+  chunk_id: string
+  score: number | null
+}
+
+export interface ConfidencePreviewRequest {
+  chunks: ConfidencePreviewChunk[]
+}
+
+export interface ConfidencePreviewResponse {
+  retrieval_confidence_tier: RetrievalConfidenceTier
 }
 
 export interface JudgeChunkRequest {

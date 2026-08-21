@@ -274,9 +274,10 @@ files exist for this sprint — the design was approved in a separate
 conversation and specified in full in the sprint consigne instead. Five
 screens: landing (session-scoped via `sessionStorage`, not `localStorage` —
 must reappear on a new tab/session), the sidebar app shell, the conversation
-view (query bubble, accumulating processing-steps list, chunk rail,
-collapsed/expanded answer card with the confidence gauge and faithfulness
-highlighting), the chunk detail view (`Expliquer`/`Exclure`/`Inclure`), and
+view (query bubble, accumulating processing-steps list, chunk rail with its
+pre-generation confidence gauge, collapsed/expanded answer card with
+faithfulness highlighting — see the retrieval-confidence-split correction
+below), the chunk detail view (`Expliquer`/`Exclure`/`Inclure`), and
 an in-app documentation page. State split three ways: TanStack Query for
 server reads (`GET /turns/{id}`, `GET /conversations/{id}`), a small React
 context (`frontend/src/state/turnUi.tsx`) for the client-owned
@@ -309,6 +310,43 @@ breakpoints that were straightforward with Tailwind's responsive utilities
 are in place; the layout has not been comprehensively designed or tested
 for mobile/tablet widths. Both remain explicitly open, to be picked up in a
 later, dedicated design pass rather than assumed complete from this sprint.
+
+**Correction to Sprint 6/7a-b/8's original design: retrieval confidence
+moved from post-evaluation display to a pre-generation preview.**
+Originally, the retrieval confidence tier was computed inside
+`generate_evaluation` (Sprint 6) and surfaced as a field on `/evaluate`'s
+response (Sprint 7a-b), rendered as a gauge inside the expanded,
+post-evaluation answer card (Sprint 8). On reflection this showed the
+signal at the wrong moment and in the wrong place: retrieval confidence is
+a property of the *evidence*, knowable before generation ever runs, not a
+property of the *answer* — showing it only after `/evaluate` completed
+meant the user had already committed to generating (and had to wait through
+the full generate → evaluate round trip) before seeing a signal that could
+have informed whether to curate the chunk rail first. It also duplicated
+`should_auto_expand`'s own internal use of the same tier without adding
+information, since a low tier already suppresses auto-expand.
+
+Fixed by extracting the tier computation into `src.generation.signals.
+retrieval_confidence_tier` (already a standalone function; `generate_evaluation`
+now takes the tier as a parameter instead of computing it) and giving it two
+call sites, not the previous single implicit one: a new `POST
+/confidence-preview` endpoint, called live by the frontend at the chunk-rail
+level on every include/exclude toggle (debounced ~300ms), and `POST
+/generate`, which computes the same tier server-side over the chunks it was
+actually given and persists it on the `generations` row — never a
+client-submitted value, the same trust boundary Sprint 7b already applied to
+`/evaluate`'s `(query, chunks, answer)`. `/evaluate` reads that persisted
+value back purely to gate `should_auto_expand` internally; its response no
+longer carries a `retrieval_confidence_tier` field, since re-showing it
+there would just duplicate what `/confidence-preview` already showed before
+generation. `should_auto_expand`'s decision logic itself is unchanged (tier
+at "moyenne" or above AND no unsupported claims) — only where its confidence
+input comes from changed. On the frontend, the confidence gauge
+(`ConfidenceGauge.tsx`, unchanged visually — same 4-segment bar, `--blue`
+for the confident tiers, `--gray-dark` for the two weak tiers) moved from
+the expanded answer card to directly above the chunk rail (`ChunkRail.tsx`);
+the answer card now renders only the citation integrity flag and
+faithfulness highlighting.
 
 ### Sprint 9 — Integration and bootstrap
 - Full dockerization (API, frontend, Qdrant) via Docker Compose

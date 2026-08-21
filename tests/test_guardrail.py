@@ -51,13 +51,9 @@ from src.generation.generate import (
     FALLBACK_MODEL_ENV_VAR,
     generate_from_chunks,
 )
-from src.generation.guardrail import (
-    check_structure,
-    generate_evaluation,
-    retrieval_confidence_tier,
-    should_auto_expand,
-)
+from src.generation.guardrail import check_structure, generate_evaluation, should_auto_expand
 from src.generation.prompt import CHUNK_JUDGMENT_INSTRUCTION
+from src.generation.signals import retrieval_confidence_tier
 from src.indexing.embeddings import DenseEmbedder, SparseEmbedder
 from src.indexing.qdrant_index import COLLECTION_NAME, PAYLOAD_FIELDS, point_id_for
 from src.retrieval.hybrid import RetrievedChunk, hybrid_search
@@ -205,7 +201,8 @@ def test_q001_hallucination_flagged_and_blocks_auto_expand(client):
     confidence is fine) — should_auto_expand must still be False, blocked by
     Layer 2 alone."""
     chunk = _load_chunk(client, Q001_CHUNK_ID)
-    evaluation = generate_evaluation(Q001_QUERY, [chunk], Q001_HALLUCINATED_ANSWER)
+    confidence = retrieval_confidence_tier([chunk])
+    evaluation = generate_evaluation(Q001_QUERY, [chunk], Q001_HALLUCINATED_ANSWER, confidence)
 
     assert evaluation.has_unsupported_claims
     assert any(
@@ -217,7 +214,8 @@ def test_q001_hallucination_flagged_and_blocks_auto_expand(client):
 @_judge_skip
 def test_q004_hallucination_flagged_and_blocks_auto_expand(client):
     chunk = _load_chunk(client, Q004_CHUNK_ID)
-    evaluation = generate_evaluation(Q004_QUERY, [chunk], Q004_HALLUCINATED_ANSWER)
+    confidence = retrieval_confidence_tier([chunk])
+    evaluation = generate_evaluation(Q004_QUERY, [chunk], Q004_HALLUCINATED_ANSWER, confidence)
 
     assert evaluation.has_unsupported_claims
     assert any(
@@ -239,7 +237,9 @@ def test_q008_answer_generated_and_returned_regardless_of_evaluation(client, rer
     answer_before_evaluation = result.answer
     assert answer_before_evaluation.strip()
 
-    evaluation = generate_evaluation(Q008_QUERY, reranked, result.answer)
+    evaluation = generate_evaluation(
+        Q008_QUERY, reranked, result.answer, retrieval_confidence_tier(reranked)
+    )
 
     # generate_from_chunks' own output is untouched by generate_evaluation —
     # no hard refusal, no post-hoc modification of the answer.
@@ -277,11 +277,14 @@ def test_q009_persistent_retrieval_miss_gets_very_low_confidence_tier(
     result = generate_from_chunks(Q009_QUERY, reranked, client, num_ctx=_Q009_NUM_CTX)
     assert result.answer.strip()
 
-    assert retrieval_confidence_tier(reranked) == "très faible"
+    confidence = retrieval_confidence_tier(reranked)
+    assert confidence == "très faible"
 
     judge_llm = build_judge_llm()
     judge_llm.langchain_llm.model_kwargs["num_ctx"] = _Q009_NUM_CTX
-    evaluation = generate_evaluation(Q009_QUERY, reranked, result.answer, judge_llm=judge_llm)
+    evaluation = generate_evaluation(
+        Q009_QUERY, reranked, result.answer, confidence, judge_llm=judge_llm
+    )
     assert evaluation.retrieval_confidence == "très faible"
     assert not should_auto_expand(evaluation)
 
@@ -296,7 +299,9 @@ def test_q002_strong_case_auto_expands(client):
     result = generate_from_chunks(Q002_QUERY, [chunk], client, temperature=0.0)
     assert result.answer.strip()
 
-    evaluation = generate_evaluation(Q002_QUERY, [chunk], result.answer)
+    evaluation = generate_evaluation(
+        Q002_QUERY, [chunk], result.answer, retrieval_confidence_tier([chunk])
+    )
     assert should_auto_expand(evaluation)
 
 
@@ -315,7 +320,9 @@ def test_layer1_unknown_citation_is_flagged_and_blocks_auto_expand(client):
     assert structural.unknown_citations == (UNKNOWN_CHUNK_ID,)
     assert not structural.passed
 
-    evaluation = generate_evaluation(Q001_QUERY, [chunk], answer_with_unknown_citation)
+    evaluation = generate_evaluation(
+        Q001_QUERY, [chunk], answer_with_unknown_citation, retrieval_confidence_tier([chunk])
+    )
     assert evaluation.structural.unknown_citations == (UNKNOWN_CHUNK_ID,)
     assert not should_auto_expand(evaluation)
 
@@ -372,7 +379,10 @@ def test_manual_regeneration_with_chunk_judgments_goes_through_same_evaluation(c
         Q001_QUERY, [chunk], client, temperature=0.0, chunk_judgments=chunk_judgments
     )
     assert result.answer.strip()
-    assert should_auto_expand(generate_evaluation(Q001_QUERY, [chunk], result.answer)) in (
+    confidence = retrieval_confidence_tier([chunk])
+    assert should_auto_expand(
+        generate_evaluation(Q001_QUERY, [chunk], result.answer, confidence)
+    ) in (
         True,
         False,
     )
@@ -382,6 +392,6 @@ def test_manual_regeneration_with_chunk_judgments_goes_through_same_evaluation(c
     # (same as test_q001_hallucination_flagged_and_blocks_auto_expand above)
     # against what a manual regeneration's output would look like, rather
     # than a separate assertion suite for this path.
-    evaluation = generate_evaluation(Q001_QUERY, [chunk], Q001_HALLUCINATED_ANSWER)
+    evaluation = generate_evaluation(Q001_QUERY, [chunk], Q001_HALLUCINATED_ANSWER, confidence)
     assert evaluation.has_unsupported_claims
     assert not should_auto_expand(evaluation)

@@ -15,7 +15,10 @@ export function TurnCard({ turnId, pendingQuery, conversationId, onCreated }: Tu
   const turn = useTurnController({ turnId, pendingQuery, conversationId, onCreated })
 
   return (
-    <div className="flex flex-col gap-4">
+    <div
+      className="flex flex-col gap-4 rounded-xl p-5"
+      style={{ border: '0.5px solid var(--hairline)', background: 'var(--paper)' }}
+    >
       {turn.query && <QueryBubble query={turn.query} />}
 
       {turn.retrieveState !== 'pending' && (

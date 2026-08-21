@@ -1,13 +1,30 @@
 """FastAPI scaffold for Sprint 7 (docs/ROADMAP.md, Sprint 7 — "Backend API
-and persistence"). Six endpoints: `/retrieve`, `/generate`, `/evaluate`,
-`/judge-chunk`, `GET /turns/{id}`, `GET /conversations/{id}`. Each compute
-endpoint still thin-wraps an existing, already-tested function
-(`hybrid_search` + `rerank`, `generate_from_chunks`, `generate_evaluation` +
+and persistence"). Seven endpoints: `/retrieve`, `/generate`,
+`/confidence-preview`, `/evaluate`, `/judge-chunk`, `GET /turns/{id}`,
+`GET /conversations/{id}`. Each compute endpoint still thin-wraps an
+existing, already-tested function (`hybrid_search` + `rerank`,
+`generate_from_chunks`, `retrieval_confidence_tier`, `generate_evaluation` +
 `should_auto_expand`, `judge_chunk`) — no retrieval, generation, evaluation,
 or judging logic is reimplemented here. Persistence (SQLite via SQLModel,
 `src/api/models.py`, `src/api/db.py`) is layered on top through
 `src/api/persistence.py`'s helper functions, keeping this module's job
 orchestration rather than raw session/query code.
+
+## Retrieval confidence: pre-generation preview, not a post-evaluation field
+
+`/confidence-preview` (docs/ROADMAP.md, the retrieval-confidence-split
+correction to Sprint 6/7a-b/8's original design) is the only place the
+retrieval confidence tier is now *shown*: the frontend calls it live at the
+chunk-rail level, debounced on every include/exclude toggle, so it's
+advisory input to the decision to generate/regenerate — not a property of
+an answer already produced. `/generate` computes the same tier server-side
+(`src.generation.signals.retrieval_confidence_tier`, the one shared
+function both endpoints call — never a client-submitted value) over the
+chunks actually used and persists it on the `generations` row. `/evaluate`
+reads that persisted value back purely to gate `should_auto_expand`
+internally; `EvaluateResponse` no longer carries a `retrieval_confidence_tier`
+field at all, since re-showing it there would just duplicate what
+`/confidence-preview` already showed before generation.
 
 ## What this branch (feat/api-persistence) resolves
 
@@ -74,6 +91,7 @@ from sqlmodel import Session
 from src.api import persistence
 from src.api.converters import (
     chunk_input_to_generation_chunk,
+    confidence_preview_chunk_to_generation_chunk,
     fetch_chunk_input,
     generation_chunk_to_result,
 )
@@ -87,6 +105,8 @@ from src.api.dependencies import (
 from src.api.models import Evaluation
 from src.api.schemas import (
     ClaimVerdictOut,
+    ConfidencePreviewRequest,
+    ConfidencePreviewResponse,
     ConversationDetailResponse,
     ConversationListResponse,
     ConversationSummaryOut,
@@ -110,6 +130,7 @@ from src.api.schemas import (
 from src.generation.chunk_judge import judge_chunk
 from src.generation.generate import generate_from_chunks
 from src.generation.guardrail import EvaluationResult, generate_evaluation, should_auto_expand
+from src.generation.signals import retrieval_confidence_tier
 from src.retrieval.hybrid import hybrid_search
 from src.retrieval.reranking import DEFAULT_RERANK_CANDIDATES, rerank
 
@@ -160,6 +181,18 @@ def retrieve(body: RetrieveRequest) -> RetrieveResponse:
     return RetrieveResponse(chunks=[generation_chunk_to_result(c) for c in reranked])
 
 
+@app.post("/confidence-preview", response_model=ConfidencePreviewResponse)
+def confidence_preview(body: ConfidencePreviewRequest) -> ConfidencePreviewResponse:
+    """Pre-generation retrieval-confidence tier for the chunk-rail gauge
+    (docs/ROADMAP.md, the retrieval-confidence-split correction) — the same
+    `retrieval_confidence_tier` function `/generate` calls below, over
+    whichever chunks the client currently has included in the rail. No
+    persistence: this is a stateless preview, called live on every
+    include/exclude toggle, not tied to any turn/generation record."""
+    chunks = [confidence_preview_chunk_to_generation_chunk(c) for c in body.chunks]
+    return ConfidencePreviewResponse(retrieval_confidence_tier=retrieval_confidence_tier(chunks))
+
+
 @app.post("/generate", response_model=GenerateResponse)
 def generate(body: GenerateRequest, session: Session = Depends(get_session)) -> GenerateResponse:
     """Wraps `generate_from_chunks` directly — no evaluation here (that's
@@ -186,6 +219,10 @@ def generate(body: GenerateRequest, session: Session = Depends(get_session)) -> 
         model=body.model,
         chunk_judgments=chunk_judgments,
     )
+    # Server-side only, never a client-submitted tier — same trust boundary
+    # already applied to query/chunks/answer for /evaluate (module
+    # docstring). Computed over the same `chunks` generation actually used.
+    confidence_tier = retrieval_confidence_tier(chunks)
 
     if body.turn_id is None:
         # Only the turn's initial /generate call establishes its retrieved-
@@ -203,6 +240,7 @@ def generate(body: GenerateRequest, session: Session = Depends(get_session)) -> 
         model=result.model,
         chunk_ids=[c.chunk_id for c in body.chunks],
         answer=result.answer,
+        retrieval_confidence_tier=confidence_tier,
         chunk_judgments_used=chunk_judgments,
     )
     return GenerateResponse(
@@ -233,7 +271,6 @@ def _evaluation_result_to_response(evaluation: EvaluationResult) -> EvaluateResp
                 for c in evaluation.faithfulness.claims
             ],
         ),
-        retrieval_confidence_tier=evaluation.retrieval_confidence,
         should_auto_expand=should_auto_expand(evaluation),
     )
 
@@ -242,7 +279,6 @@ def _evaluation_row_to_response(evaluation: Evaluation) -> EvaluateResponse:
     return EvaluateResponse(
         structural=StructuralCheckOut(**evaluation.structural_flags),
         faithfulness=FaithfulnessOut(**evaluation.faithfulness_annotations),
-        retrieval_confidence_tier=evaluation.retrieval_confidence_tier,
         should_auto_expand=evaluation.should_auto_expand,
     )
 
@@ -256,7 +292,10 @@ def evaluate(body: EvaluateRequest, session: Session = Depends(get_session)) -> 
     `(chunks, answer)` pairing that was never actually produced by
     `/generate`. Chunk text itself is re-fetched live from Qdrant by
     `chunk_id` (src/api/converters.py) — not snapshotted, see
-    src/api/models.py's module docstring.
+    src/api/models.py's module docstring. Retrieval confidence, likewise,
+    comes from `generation.retrieval_confidence_tier` (computed server-side
+    at `/generate` time) rather than being recomputed here or trusted from
+    the client — see this module's "Retrieval confidence" docstring section.
 
     Idempotent per `generation_id`: if a prior call already persisted an
     `Evaluation` row for it, that row is returned as-is instead of rerunning
@@ -280,7 +319,9 @@ def evaluate(body: EvaluateRequest, session: Session = Depends(get_session)) -> 
     ]
     chunks = [chunk_input_to_generation_chunk(c) for c in chunk_inputs]
 
-    evaluation = generate_evaluation(turn.query, chunks, generation.answer)
+    evaluation = generate_evaluation(
+        turn.query, chunks, generation.answer, generation.retrieval_confidence_tier
+    )
     response = _evaluation_result_to_response(evaluation)
 
     persistence.save_evaluation(
@@ -288,7 +329,6 @@ def evaluate(body: EvaluateRequest, session: Session = Depends(get_session)) -> 
         generation_id=generation.id,
         structural_flags=response.structural.model_dump(),
         faithfulness_annotations=response.faithfulness.model_dump(),
-        retrieval_confidence_tier=response.retrieval_confidence_tier,
         should_auto_expand=response.should_auto_expand,
     )
     return response

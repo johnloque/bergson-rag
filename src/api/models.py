@@ -84,6 +84,15 @@ class Generation(SQLModel, table=True):
     model: str
     chunk_ids: list[str] = Field(sa_column=Column(JSON))
     answer: str
+    # Retrieval confidence tier (src.generation.signals.retrieval_confidence_tier),
+    # computed server-side over the chunks actually passed into this
+    # generation and persisted here — never trusted from the client
+    # (docs/ROADMAP.md, the retrieval-confidence-split correction). The
+    # user already saw this signal pre-generation via /confidence-preview;
+    # it's persisted here purely so /evaluate can read it back to gate
+    # `should_auto_expand` without recomputing it or re-trusting a
+    # client-submitted chunk set.
+    retrieval_confidence_tier: str
     # Snapshot of the chunk_judgments dict actually threaded into the
     # prompt for this generation (src/generation/prompt.py) — None when
     # none applied, distinct from an empty dict (see src/api/main.py's
@@ -101,7 +110,6 @@ class Evaluation(SQLModel, table=True):
     generation_id: int = Field(foreign_key="generations.id", index=True)
     structural_flags: dict = Field(sa_column=Column(JSON))
     faithfulness_annotations: dict = Field(sa_column=Column(JSON))
-    retrieval_confidence_tier: str
     should_auto_expand: bool
     created_at: datetime = Field(default_factory=_utcnow)
 

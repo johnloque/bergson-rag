@@ -46,7 +46,10 @@ from src.generation.generate import (
     FALLBACK_MODEL_ENV_VAR,
     generate_from_chunks,
 )
+from src.indexing.embeddings import DenseEmbedder, SparseEmbedder
 from src.indexing.qdrant_index import COLLECTION_NAME, point_id_for
+from src.retrieval.hybrid import hybrid_search
+from src.retrieval.reranking import CrossEncoderReranker, rerank
 
 QDRANT_URL = "http://localhost:6333"
 
@@ -92,6 +95,12 @@ Q007_CHUNK_ID = "1888_EDIC_c1"
 # Q005-derived "non pertinent" fixture, paired with Q001_QUERY (no shared
 # vocabulary) — same pairing as tests/test_chunk_judge.py.
 UNRELATED_CHUNK_ID = "1932_2S_c62"
+
+# Q009 (eval/gold_dataset.csv) — same confirmed, persistent retrieval miss
+# as tests/test_guardrail.py's own Q009 case: the real hybrid_search +
+# rerank pipeline never surfaces the correct gold chunk among its top
+# candidates for this query, tops out at a "très faible" tier.
+Q009_QUERY = "Quelle thèse Bergson explique-t-il en décrivant la grande chevauchée du vivant ?"
 
 
 def _collection_populated() -> bool:
@@ -140,6 +149,21 @@ _judge_skip = pytest.mark.skipif(
 @pytest.fixture(scope="module")
 def qdrant_client() -> QdrantClient:
     return QdrantClient(url=QDRANT_URL)
+
+
+@pytest.fixture(scope="module")
+def reranker() -> CrossEncoderReranker:
+    return CrossEncoderReranker()
+
+
+@pytest.fixture(scope="module")
+def dense_embedder() -> DenseEmbedder:
+    return DenseEmbedder()
+
+
+@pytest.fixture(scope="module")
+def sparse_embedder() -> SparseEmbedder:
+    return SparseEmbedder()
 
 
 @pytest.fixture()
@@ -203,15 +227,31 @@ def _create_turn(engine, query: str) -> int:
 
 
 def _insert_generation(
-    engine, turn_id: int, chunk_id: str, answer: str, model: str = "test-model", score: float = 1.0
+    engine,
+    turn_id: int,
+    chunk_id: str,
+    answer: str,
+    model: str = "test-model",
+    score: float = 1.0,
+    retrieval_confidence_tier: str = "moyenne",
 ) -> int:
     """Direct DB insertion of a generation record, bypassing a live
     /generate call — this is /evaluate's new trust boundary (docs/ROADMAP.md):
     it looks the generation up by ID rather than trusting a client-submitted
-    triple, so exercising it doesn't require actually running generation."""
+    triple, so exercising it doesn't require actually running generation.
+    `retrieval_confidence_tier` defaults to "moyenne" (a confident tier) so
+    should_auto_expand's gating on it doesn't mask the faithfulness-only
+    fixtures below; tests exercising confidence-tier behavior itself pass an
+    explicit value."""
     with Session(engine) as session:
         session.add(RetrievedChunkRow(turn_id=turn_id, chunk_id=chunk_id, rank=0, score=score))
-        generation = Generation(turn_id=turn_id, model=model, chunk_ids=[chunk_id], answer=answer)
+        generation = Generation(
+            turn_id=turn_id,
+            model=model,
+            chunk_ids=[chunk_id],
+            answer=answer,
+            retrieval_confidence_tier=retrieval_confidence_tier,
+        )
         session.add(generation)
         session.commit()
         session.refresh(generation)
@@ -291,6 +331,66 @@ def test_generate_unknown_turn_id_returns_404(client, qdrant_client):
     assert response.status_code == 404
 
 
+# --- /confidence-preview -----------------------------------------------------
+
+
+@_qdrant_skip
+def test_confidence_preview_matches_q009_persistent_retrieval_miss(
+    client, qdrant_client, dense_embedder, sparse_embedder, reranker
+):
+    """Q009 (eval/gold_dataset.csv) — the same real hybrid_search + rerank
+    pipeline, and the same confirmed persistent retrieval miss, as
+    tests/test_guardrail.py's own Q009 case: `generate_evaluation` used to
+    compute a "très faible" tier internally for this exact chunk set/scores.
+    /confidence-preview must return the same tier from the same (chunk_id,
+    score) pairs, via the one shared computation
+    (src.generation.signals.retrieval_confidence_tier) this endpoint and
+    /generate both call — docs/ROADMAP.md, the retrieval-confidence-split
+    correction."""
+    candidates = hybrid_search(qdrant_client, Q009_QUERY, dense_embedder, sparse_embedder, limit=10)
+    reranked = rerank(Q009_QUERY, candidates, reranker)[:5]
+    assert reranked, "expected at least one retrieved chunk"
+
+    response = client.post(
+        "/confidence-preview",
+        json={"chunks": [{"chunk_id": c.chunk_id, "score": c.rerank_score} for c in reranked]},
+    )
+    assert response.status_code == 200
+    assert response.json()["retrieval_confidence_tier"] == "très faible"
+
+
+def test_confidence_preview_malformed_body_returns_422(client):
+    assert client.post("/confidence-preview", json={}).status_code == 422
+    assert client.post("/confidence-preview", json={"chunks": []}).status_code == 422
+    assert client.post("/confidence-preview", json={"chunks": [{"score": 0.5}]}).status_code == 422
+
+
+@_qdrant_skip
+@_llm_skip
+def test_confidence_preview_and_generate_persisted_tier_agree(client, qdrant_client, engine):
+    """Consistency check: the tier /confidence-preview shows the user
+    pre-generation must match what /generate independently persists for the
+    same chunk set — both endpoints call the one shared function
+    (src.generation.signals.retrieval_confidence_tier), so they must never
+    diverge (docs/ROADMAP.md, the retrieval-confidence-split correction)."""
+    chunk = _load_chunk_input(qdrant_client, Q002_CHUNK_ID)
+
+    preview_response = client.post(
+        "/confidence-preview",
+        json={"chunks": [{"chunk_id": chunk["chunk_id"], "score": chunk["score"]}]},
+    )
+    assert preview_response.status_code == 200
+    preview_tier = preview_response.json()["retrieval_confidence_tier"]
+
+    generate_response = client.post("/generate", json={"query": Q002_QUERY, "chunks": [chunk]})
+    assert generate_response.status_code == 200
+    generation_id = generate_response.json()["generation_id"]
+
+    with Session(engine) as session:
+        generation = session.get(Generation, generation_id)
+        assert generation.retrieval_confidence_tier == preview_tier
+
+
 # --- /evaluate -----------------------------------------------------------
 
 
@@ -350,6 +450,25 @@ def test_evaluate_strong_case_auto_expands(client, qdrant_client, engine):
     response = client.post("/evaluate", json={"generation_id": generation_id})
     assert response.status_code == 200
     assert response.json()["should_auto_expand"] is True
+
+
+@_qdrant_skip
+@_judge_skip
+def test_evaluate_response_omits_retrieval_confidence_tier(client, engine):
+    """docs/ROADMAP.md, the retrieval-confidence-split correction:
+    /evaluate still uses the persisted retrieval confidence tier internally
+    to gate should_auto_expand (test_evaluate_strong_case_auto_expands,
+    test_evaluate_flags_known_hallucination above already exercise that),
+    but must not re-surface the tier itself in the response — it was
+    already shown to the user pre-generation via /confidence-preview.
+    Explicit negative assertion, not just an absent check elsewhere."""
+    turn_id = _create_turn(engine, Q001_QUERY)
+    generation_id = _insert_generation(
+        engine, turn_id, Q001_CHUNK_ID, f"une réponse [{Q001_CHUNK_ID}]."
+    )
+    response = client.post("/evaluate", json={"generation_id": generation_id})
+    assert response.status_code == 200
+    assert "retrieval_confidence_tier" not in response.json()
 
 
 def test_evaluate_malformed_body_returns_422(client):

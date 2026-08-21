@@ -11,7 +11,7 @@ export function QueryBubble({ query }: { query: string }) {
         style={{ background: 'var(--paper-2)', border: '0.5px solid var(--hairline)', color: 'var(--ink)' }}
       >
         {query}
-      </p>
+      </div>
     </div>
   )
 }

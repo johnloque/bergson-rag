@@ -42,12 +42,15 @@ Schema (`src/api/models.py`):
 `retrieved_chunks` stores only `chunk_id`, `rank`, and `score` — never the
 chunk's text, work_id, or section_path. If the corpus is later reindexed, a
 historical turn's chunk references could point to content that has since
-changed. `/evaluate` and `GET /turns/{id}` re-fetch chunk content live from
-Qdrant by `chunk_id` (`src/api/converters.py:fetch_chunk_input`) instead of
-reading a stored snapshot — a chunk_id no longer indexed is simply dropped
-from the reconstructed set rather than raising. Accepted for this
-single-user local portfolio demo: snapshotting full chunk text for every
-turn is unnecessary storage cost here, not solved on this branch.
+changed. `/evaluate` and `GET /turns/{id}` both re-fetch chunk content live
+from Qdrant by `chunk_id` (`src/api/converters.py:fetch_chunk_input`)
+instead of reading a stored snapshot: `/evaluate` drops a chunk_id no longer
+indexed from the reconstructed set rather than raising, and `GET
+/turns/{id}` returns it with empty text/work_id/section_path fields (the
+frontend renders its own placeholder for that case, `frontend/src/state/
+chunkCache.ts`). Accepted for this single-user local portfolio demo:
+snapshotting full chunk text for every turn is unnecessary storage cost
+here, not solved on this branch.
 
 ## `/generate`'s turn/conversation and chunk_judgments rules
 

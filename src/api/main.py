@@ -84,9 +84,12 @@ from src.api.dependencies import (
     get_reranker,
     get_sparse_embedder,
 )
+from src.api.models import Evaluation
 from src.api.schemas import (
     ClaimVerdictOut,
     ConversationDetailResponse,
+    ConversationListResponse,
+    ConversationSummaryOut,
     ConversationTurnOut,
     EvaluateRequest,
     EvaluateResponse,
@@ -96,6 +99,8 @@ from src.api.schemas import (
     GenerationOut,
     JudgeChunkRequest,
     JudgeChunkResponse,
+    PageRef,
+    RenameConversationRequest,
     RetrievedChunkOut,
     RetrieveRequest,
     RetrieveResponse,
@@ -182,7 +187,16 @@ def generate(body: GenerateRequest, session: Session = Depends(get_session)) -> 
         chunk_judgments=chunk_judgments,
     )
 
-    persistence.save_retrieved_chunks(session, turn.id, body.chunks)
+    if body.turn_id is None:
+        # Only the turn's initial /generate call establishes its retrieved-
+        # chunk set — a regeneration's body.chunks is the client's included
+        # subset (excluded chunks filtered out for the LLM call, useTurnController.ts's
+        # regenerate()), and persisting that here would overwrite the turn's
+        # full candidate set with just what survived exclusion, permanently
+        # losing the excluded chunks from GET /turns/{id} on the next reload
+        # (they'd vanish from the rail with no way back, contradicting the
+        # rail's "excluded stays visible to re-include" contract).
+        persistence.save_retrieved_chunks(session, turn.id, body.chunks)
     generation = persistence.save_generation(
         session,
         turn_id=turn.id,
@@ -213,12 +227,23 @@ def _evaluation_result_to_response(evaluation: EvaluationResult) -> EvaluateResp
             score=None if math.isnan(score) else score,
             model=evaluation.faithfulness.model,
             claims=[
-                ClaimVerdictOut(statement=c.statement, supported=c.supported, reason=c.reason)
+                ClaimVerdictOut(
+                    statement=c.statement, supported=c.supported, reason=c.reason, quote=c.quote
+                )
                 for c in evaluation.faithfulness.claims
             ],
         ),
         retrieval_confidence_tier=evaluation.retrieval_confidence,
         should_auto_expand=should_auto_expand(evaluation),
+    )
+
+
+def _evaluation_row_to_response(evaluation: Evaluation) -> EvaluateResponse:
+    return EvaluateResponse(
+        structural=StructuralCheckOut(**evaluation.structural_flags),
+        faithfulness=FaithfulnessOut(**evaluation.faithfulness_annotations),
+        retrieval_confidence_tier=evaluation.retrieval_confidence_tier,
+        should_auto_expand=evaluation.should_auto_expand,
     )
 
 
@@ -231,8 +256,19 @@ def evaluate(body: EvaluateRequest, session: Session = Depends(get_session)) -> 
     `(chunks, answer)` pairing that was never actually produced by
     `/generate`. Chunk text itself is re-fetched live from Qdrant by
     `chunk_id` (src/api/converters.py) — not snapshotted, see
-    src/api/models.py's module docstring."""
+    src/api/models.py's module docstring.
+
+    Idempotent per `generation_id`: if a prior call already persisted an
+    `Evaluation` row for it, that row is returned as-is instead of rerunning
+    the RAGAS/LLM faithfulness check (~8-9s, src/generation/faithfulness.py).
+    Without this, a page refresh or a second tab racing the first `/evaluate`
+    call before it commits would each trigger their own full recheck."""
     generation = persistence.get_generation_or_404(session, body.generation_id)
+
+    existing = persistence.get_evaluation_for_generation(session, generation.id)
+    if existing is not None:
+        return _evaluation_row_to_response(existing)
+
     turn = persistence.get_turn_or_404(session, generation.turn_id)
     scores = persistence.get_retrieved_chunk_scores(session, generation.turn_id)
 
@@ -281,26 +317,42 @@ def judge_chunk_endpoint(
 
 @app.get("/turns/{turn_id}", response_model=TurnDetailResponse)
 def get_turn(turn_id: int, session: Session = Depends(get_session)) -> TurnDetailResponse:
-    """Full turn state assembled purely from persisted rows — no Qdrant/LLM
-    dependency — so a reloaded page recovers a turn's final badge state
-    even if the live session that produced it is gone (module docstring,
-    the Sprint 6 risk this resolves). 404 if `turn_id` is unknown."""
+    """Full turn state assembled from persisted rows — no Qdrant/LLM
+    dependency for the turn/generation/evaluation/chunk_judgment state
+    itself — so a reloaded page recovers a turn's final badge state even if
+    the live session that produced it is gone (module docstring, the Sprint
+    6 risk this resolves). Chunk *content* is the exception: like
+    `/evaluate`, it's re-fetched live from Qdrant by chunk_id
+    (`fetch_chunk_input`) since `retrieved_chunks` never stores text
+    (src/api/schemas.py's `RetrievedChunkOut` docstring). 404 if `turn_id`
+    is unknown."""
     turn = persistence.get_turn_or_404(session, turn_id)
     retrieved_chunks = persistence.get_retrieved_chunks(session, turn_id)
     generations = persistence.get_turn_generations(session, turn_id)
     chunk_judgments = persistence.load_chunk_judgments(session, turn_id)
 
+    client = get_qdrant_client()
+    retrieved_chunk_outs = []
+    for row in retrieved_chunks:
+        chunk_input = fetch_chunk_input(client, row.chunk_id, row.score)
+        retrieved_chunk_outs.append(
+            RetrievedChunkOut(
+                chunk_id=row.chunk_id,
+                rank=row.rank,
+                score=row.score,
+                text=chunk_input.text if chunk_input is not None else "",
+                work_id=chunk_input.work_id if chunk_input is not None else "",
+                section_path=chunk_input.section_path if chunk_input is not None else "",
+                paragraph_ids=chunk_input.paragraph_ids if chunk_input is not None else [],
+                page_start=chunk_input.page_start if chunk_input is not None else PageRef(),
+                page_end=chunk_input.page_end if chunk_input is not None else PageRef(),
+            )
+        )
+
     generation_outs = []
     for generation in generations:
         evaluation = persistence.get_evaluation_for_generation(session, generation.id)
-        evaluation_out = None
-        if evaluation is not None:
-            evaluation_out = EvaluateResponse(
-                structural=StructuralCheckOut(**evaluation.structural_flags),
-                faithfulness=FaithfulnessOut(**evaluation.faithfulness_annotations),
-                retrieval_confidence_tier=evaluation.retrieval_confidence_tier,
-                should_auto_expand=evaluation.should_auto_expand,
-            )
+        evaluation_out = None if evaluation is None else _evaluation_row_to_response(evaluation)
         generation_outs.append(
             GenerationOut(
                 generation_id=generation.id,
@@ -318,13 +370,53 @@ def get_turn(turn_id: int, session: Session = Depends(get_session)) -> TurnDetai
         conversation_id=turn.conversation_id,
         query=turn.query,
         created_at=turn.created_at,
-        retrieved_chunks=[
-            RetrievedChunkOut(chunk_id=row.chunk_id, rank=row.rank, score=row.score)
-            for row in retrieved_chunks
-        ],
+        retrieved_chunks=retrieved_chunk_outs,
         generations=generation_outs,
         chunk_judgments=chunk_judgments,
     )
+
+
+@app.get("/conversations", response_model=ConversationListResponse)
+def list_conversations(session: Session = Depends(get_session)) -> ConversationListResponse:
+    """Sprint 8 (frontend) addition: newest-first conversation summaries for
+    the sidebar and the landing page's "last conversation" lookup (module
+    docstring's "Sprint 8 additions" note) — Sprint 7 only shipped
+    lookup-by-id."""
+    conversations = persistence.list_conversations(session)
+    return ConversationListResponse(
+        conversations=[
+            ConversationSummaryOut(
+                conversation_id=c.id,
+                created_at=c.created_at,
+                title=c.title,
+                first_query=persistence.get_first_turn_query(session, c.id),
+            )
+            for c in conversations
+        ]
+    )
+
+
+@app.patch("/conversations/{conversation_id}", response_model=ConversationSummaryOut)
+def rename_conversation(
+    conversation_id: int, body: RenameConversationRequest, session: Session = Depends(get_session)
+) -> ConversationSummaryOut:
+    """Sprint 8 (frontend) addition: the sidebar's rename action. 404 if
+    `conversation_id` is unknown."""
+    conversation = persistence.rename_conversation(session, conversation_id, body.title)
+    return ConversationSummaryOut(
+        conversation_id=conversation.id,
+        created_at=conversation.created_at,
+        title=conversation.title,
+        first_query=persistence.get_first_turn_query(session, conversation.id),
+    )
+
+
+@app.delete("/conversations/{conversation_id}", status_code=204)
+def delete_conversation(conversation_id: int, session: Session = Depends(get_session)) -> None:
+    """Sprint 8 (frontend) addition: the sidebar's delete action, cascading
+    through every child row (module docstring). 404 if `conversation_id` is
+    unknown."""
+    persistence.delete_conversation(session, conversation_id)
 
 
 @app.get("/conversations/{conversation_id}", response_model=ConversationDetailResponse)

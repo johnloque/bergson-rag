@@ -77,16 +77,44 @@ pass — just with the intermediate verdicts kept instead of thrown away.
 Uses `ragas.async_utils.run`, the same sync-wrapper helper
 `single_turn_score` itself uses internally, to run these two async calls in
 this module's otherwise-sync API.
+
+## Grounding claims back to a verbatim quote, for UI highlighting
+
+The frontend (`AnswerCard.tsx`, via `annotateAnswer.tsx`) wants to highlight
+the exact unsupported span inside the *original* answer text. RAGAS's own
+`StatementGeneratorPrompt` (`ragas.metrics._faithfulness`) is unsuitable as
+the source for that span: its instruction explicitly tells the judge to
+rewrite each sentence into a pronoun-free, self-contained statement — by
+design not a verbatim substring of the answer (confirmed against real
+output: the extracted statement essentially never `indexOf`-matches the
+answer it was drawn from). Using it for highlighting silently produced no
+highlights at all.
+
+Fix: replace RAGAS's own statement-generation step with
+`_GROUNDED_STATEMENT_PROMPT` below, a `PydanticPrompt` that asks for the
+same atomic, pronoun-free statements *plus* a `quote` field the instruction
+requires to be copied character-for-character from the answer. The NLI
+entailment step (`metric._create_verdicts`) is untouched — it still judges
+the paraphrased `statement` text against the cited chunks, so the
+faithfulness score's meaning doesn't change. `quote` is then validated
+against the real answer text (`_ground_quote_in_answer`) — a local judge
+does not reliably honor "copy verbatim" — and dropped (not fabricated) when
+it doesn't actually occur in the answer, same best-effort philosophy the
+old frontend-only matching already documented.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import asyncio
+import atexit
+import threading
+from collections.abc import Coroutine, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import litellm
 from langchain_litellm import ChatLiteLLM
-from ragas.async_utils import run as ragas_run
+from pydantic import BaseModel, Field
 from ragas.dataset_schema import SingleTurnSample
 
 # Imported from ragas.llms.base, not the public ragas.llms re-export: the
@@ -99,6 +127,14 @@ from ragas.dataset_schema import SingleTurnSample
 # is the only working option for these metrics in ragas 0.3.9.
 from ragas.llms.base import LangchainLLMWrapper
 from ragas.metrics import Faithfulness
+
+# `StatementGeneratorInput` (question, answer) is reused as-is as the input
+# to our own grounded-statement prompt below — only the *output* shape needs
+# to change (see "Grounding claims back to a verbatim quote" above).
+# Imported from the private module since `ragas.metrics` doesn't re-export
+# it; it's a stable-shaped Pydantic model, not internal machinery.
+from ragas.metrics._faithfulness import StatementGeneratorInput
+from ragas.prompt import PydanticPrompt
 
 from src.generation.generate import DEFAULT_MODEL
 from src.generation.signals import GenerationChunk
@@ -117,13 +153,74 @@ JUDGE_TEMPERATURE = 0.0
 # lengthy few-shot examples on top of the actual (query, answer, contexts)
 # triple, and truncation mid-generation was observed to produce free-text
 # instead of the requested JSON — RagasOutputParserException even after
-# RAGAS's own internal fix-the-format retry. Confirmed fixed empirically at
-# num_ctx=8192 against this project's real chunk sizes (up to 5 concatenated
-# chunks, eval/scripts/run_ragas_eval.py's end_to_end mode). Only applied
-# for an Ollama-served model — passing an Ollama-specific param to a hosted
+# RAGAS's own internal fix-the-format retry. num_ctx=8192 turned out not to
+# be a safe general default: tests/test_guardrail.py's Q009 case overflowed
+# it with as few as 5 real (long) chunks, and it reliably overflows on the
+# API's old default retrieval top_k of 10 (confirmed against a real
+# conversation, /evaluate raising the same RagasOutputParserException as an
+# unhandled 500). 16384 is the value that test already had to pass
+# explicitly to work around the overflow — promoted here to the default so
+# every caller gets it, not just that one test. Only applied for an
+# Ollama-served model — passing an Ollama-specific param to a hosted
 # provider (e.g. the Mistral API fallback) would error.
-JUDGE_NUM_CTX = 8192
+JUDGE_NUM_CTX = 16384
 _OLLAMA_PROVIDERS = ("ollama", "ollama_chat")
+
+# `ragas.async_utils.run` (RAGAS's own sync-wrapper, used here until the fix
+# below) drives each await with a fresh `asyncio.run(...)`, which opens and
+# then immediately closes a brand-new event loop per call. litellm's async
+# HTTP client cache keys clients by event-loop id specifically to avoid
+# reusing one across loops (`LLMClientCache.update_cache_key_with_event_loop`
+# in `litellm/caching/llm_caching_handler.py`), so every such call builds a
+# fresh `AsyncHTTPHandler` — and its underlying TCP connection to the judge
+# provider (typically local Ollama) is never closed, because the loop that
+# would run its cleanup is already gone by the time it'd be evicted. Two
+# calls per `check_faithfulness` invocation (statements, then verdicts) times
+# every `/evaluate` request leaks two connections each; against Ollama's
+# single-slot local server (`-np 1`) this was observed to eventually wedge it
+# entirely (near-idle CPU, no progress on any request) after enough
+# `/evaluate` calls piled up established-but-abandoned connections.
+#
+# Fix: run every judge-LLM coroutine on one persistent background event loop
+# instead of a new one per call, so litellm's cache key stays stable and it
+# reuses (rather than re-leaks) the same client and connection.
+_background_loop: asyncio.AbstractEventLoop | None = None
+_background_loop_thread: threading.Thread | None = None
+_background_loop_init_lock = threading.Lock()
+
+
+def _get_background_loop() -> asyncio.AbstractEventLoop:
+    global _background_loop, _background_loop_thread
+    with _background_loop_init_lock:
+        if _background_loop is None:
+            loop = asyncio.new_event_loop()
+            thread = threading.Thread(
+                target=loop.run_forever, name="faithfulness-judge-loop", daemon=True
+            )
+            thread.start()
+            _background_loop = loop
+            _background_loop_thread = thread
+            atexit.register(_stop_background_loop)
+        return _background_loop
+
+
+def _stop_background_loop() -> None:
+    global _background_loop, _background_loop_thread
+    loop, thread = _background_loop, _background_loop_thread
+    if loop is not None:
+        loop.call_soon_threadsafe(loop.stop)
+    if thread is not None:
+        thread.join(timeout=5)
+    _background_loop = None
+    _background_loop_thread = None
+
+
+def _run_on_background_loop[T](coro: Coroutine[Any, Any, T]) -> T:
+    """Schedules `coro` on the shared judge-LLM event loop and blocks the
+    calling (sync) thread for its result — this module's replacement for
+    `ragas.async_utils.run` (see the note above for why)."""
+    future = asyncio.run_coroutine_threadsafe(coro, _get_background_loop())
+    return future.result()
 
 
 def build_judge_llm(
@@ -139,15 +236,115 @@ def build_judge_llm(
     )
 
 
+class GroundedStatement(BaseModel):
+    statement: str = Field(
+        description="A fully understandable, standalone statement extracted "
+        "from the answer, with no pronouns"
+    )
+    quote: str = Field(
+        description="The exact, character-for-character substring of the "
+        "answer that this statement was derived from — copied verbatim, "
+        "never paraphrased or summarized"
+    )
+
+
+class GroundedStatementGeneratorOutput(BaseModel):
+    statements: list[GroundedStatement] = Field(
+        description="The generated statements, each paired with its verbatim source quote"
+    )
+
+
+class GroundedStatementGeneratorPrompt(
+    PydanticPrompt[StatementGeneratorInput, GroundedStatementGeneratorOutput]
+):
+    """Same decomposition RAGAS's own `StatementGeneratorPrompt` does
+    (`ragas.metrics._faithfulness`), plus a `quote` field per statement so
+    the UI can highlight the actual span in the answer — see this module's
+    docstring, "Grounding claims back to a verbatim quote"."""
+
+    instruction = (
+        "Given a question and an answer, analyze the complexity of each sentence in the "
+        "answer. Break down each sentence into one or more fully understandable statements. "
+        "Ensure that no pronouns are used in any statement. For each statement, also give a "
+        "'quote': the exact substring of the answer, copied character-for-character, that the "
+        "statement was derived from. The quote must appear verbatim in the answer — do not "
+        "paraphrase, summarize, or alter it in any way. Format the outputs in JSON."
+    )
+    input_model = StatementGeneratorInput
+    output_model = GroundedStatementGeneratorOutput
+    examples = [
+        (
+            StatementGeneratorInput(
+                question="Who was Albert Einstein and what is he best known for?",
+                answer="He was a German-born theoretical physicist, widely acknowledged to be "
+                "one of the greatest and most influential physicists of all time. He was best "
+                "known for developing the theory of relativity, he also made important "
+                "contributions to the development of the theory of quantum mechanics.",
+            ),
+            GroundedStatementGeneratorOutput(
+                statements=[
+                    GroundedStatement(
+                        statement="Albert Einstein was a German-born theoretical physicist.",
+                        quote="He was a German-born theoretical physicist",
+                    ),
+                    GroundedStatement(
+                        statement="Albert Einstein is recognized as one of the greatest and "
+                        "most influential physicists of all time.",
+                        quote="widely acknowledged to be one of the greatest and most "
+                        "influential physicists of all time",
+                    ),
+                    GroundedStatement(
+                        statement="Albert Einstein was best known for developing the theory "
+                        "of relativity.",
+                        quote="He was best known for developing the theory of relativity",
+                    ),
+                    GroundedStatement(
+                        statement="Albert Einstein also made important contributions to the "
+                        "development of the theory of quantum mechanics.",
+                        quote="he also made important contributions to the development of "
+                        "the theory of quantum mechanics",
+                    ),
+                ]
+            ),
+        )
+    ]
+
+
+_GROUNDED_STATEMENT_PROMPT = GroundedStatementGeneratorPrompt()
+
+
+def _ground_quote_in_answer(answer: str, quote: str) -> str | None:
+    """Validates that `quote` (as returned by `_GROUNDED_STATEMENT_PROMPT`)
+    actually occurs in `answer` — the judge is only asked to copy verbatim,
+    not guaranteed to. Tolerates a case mismatch (returning the answer's own
+    casing, so highlighting always matches what's on screen); anything else
+    (paraphrased or fabricated quote) is treated as ungrounded and dropped
+    rather than guessed at, same best-effort philosophy as the rest of this
+    module's claim handling."""
+    quote = quote.strip()
+    if not quote:
+        return None
+    if quote in answer:
+        return quote
+    idx = answer.lower().find(quote.lower())
+    if idx == -1:
+        return None
+    return answer[idx : idx + len(quote)]
+
+
 @dataclass(frozen=True)
 class ClaimVerdict:
     """One RAGAS-extracted claim from the scored answer, with its entailment
     verdict against `chunks`. `reason` is RAGAS's own judge-generated
-    explanation for the verdict, not post-hoc computed."""
+    explanation for the verdict, not post-hoc computed. `quote` is the
+    verbatim span of `answer` this claim was grounded to (for UI
+    highlighting) — `None` when the judge's quote couldn't be validated
+    against the answer text (`_ground_quote_in_answer`)."""
 
     statement: str
     supported: bool
     reason: str
+    quote: str | None = None
 
 
 @dataclass(frozen=True)
@@ -191,14 +388,37 @@ def check_faithfulness(
     metric = Faithfulness(llm=llm)
     row = sample.to_dict()
 
-    statements = ragas_run(metric._create_statements(row, None))
-    if not statements.statements:
-        return FaithfulnessResult(score=float("nan"), model=model, claims=())
+    async def _score() -> Any:
+        grounded = await _GROUNDED_STATEMENT_PROMPT.generate(
+            llm=llm, data=StatementGeneratorInput(question=query, answer=answer)
+        )
+        if not grounded.statements:
+            return None
+        statement_texts = [s.statement for s in grounded.statements]
+        verdicts = await metric._create_verdicts(row, statement_texts, None)
+        return grounded, verdicts
 
-    verdicts = ragas_run(metric._create_verdicts(row, statements.statements, None))
+    result = _run_on_background_loop(_score())
+    if result is None:
+        return FaithfulnessResult(score=float("nan"), model=model, claims=())
+    grounded, verdicts = result
+
     score = metric._compute_score(verdicts)
+    # NLI verdicts echo back the exact statement text they were given
+    # (`StatementFaithfulnessAnswer.statement`, "the original statement,
+    # word-by-word") — matched by that text back to the quote extracted
+    # alongside it, rather than assumed positional, since a local judge
+    # isn't guaranteed to preserve order/count between the two LLM calls.
+    quote_by_statement = {s.statement: s.quote for s in grounded.statements}
     claims = tuple(
-        ClaimVerdict(statement=v.statement, supported=bool(v.verdict), reason=v.reason)
+        ClaimVerdict(
+            statement=v.statement,
+            supported=bool(v.verdict),
+            reason=v.reason,
+            quote=_ground_quote_in_answer(answer, quote_by_statement[v.statement])
+            if v.statement in quote_by_statement
+            else None,
+        )
         for v in verdicts.statements
     )
     return FaithfulnessResult(score=score, model=model, claims=claims)

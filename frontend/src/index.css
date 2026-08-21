@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+/* Design tokens (docs/ROADMAP.md, Sprint 8). Raw custom properties are the
+   single source of truth — everything, including the Tailwind @theme
+   mapping below, consumes these rather than hardcoded hex values, so a
+   future dark-mode pass is a values-swap here, not a rewrite. Only light
+   values are defined this sprint; dark mode is deliberately not designed
+   yet (see docs/ROADMAP.md's Sprint 8 scope note) — do not add a
+   prefers-color-scheme or [data-theme="dark"] block until that design pass
+   happens. */
+:root {
+  --paper: #faf6ee;
+  --paper-2: #f3eddf;
+  --ink: #201e1a;
+  --ink-2: #6b675f;
+  --ink-3: #a8a296;
+  --hairline: #e4ddcb;
+
+  --red: #a32d2d;
+  --red-bg: #f3e3e1;
+
+  --green: #3b6d11;
+  --green-bg: #eaf3de;
+  --amber: #854f0b;
+  --amber-bg: #faeeda;
+
+  --gray-light: #8c887e;
+  --gray-light-bg: #edeae0;
+  --blue: #2f5c8a;
+  --blue-bg: #e4edf4;
+  --gray-dark: #4a4844;
+  --gray-dark-bg: #e3dfd3;
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-wordmark: Georgia, "Times New Roman", serif;
+}
+
+@theme {
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-hairline: var(--hairline);
+
+  --color-red: var(--red);
+  --color-red-bg: var(--red-bg);
+  --color-green: var(--green);
+  --color-green-bg: var(--green-bg);
+  --color-amber: var(--amber);
+  --color-amber-bg: var(--amber-bg);
+  --color-gray-light: var(--gray-light);
+  --color-gray-light-bg: var(--gray-light-bg);
+  --color-blue: var(--blue);
+  --color-blue-bg: var(--blue-bg);
+  --color-gray-dark: var(--gray-dark);
+  --color-gray-dark-bg: var(--gray-dark-bg);
+
+  --font-sans: var(--font-sans);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+.font-wordmark {
+  font-family: var(--font-wordmark);
+}

@@ -26,10 +26,19 @@ from src.generation.faithfulness import DEFAULT_JUDGE_MODEL
 from src.generation.generate import DEFAULT_MODEL
 from src.generation.signals import RetrievalConfidenceTier
 
-# Mirrors src.retrieval.hybrid.hybrid_search's own `limit: int = 10` default
-# (also the default already used by scripts/query_retrieval.py and
-# scripts/query_hybrid_retrieval.py) — not a new default introduced here.
-DEFAULT_TOP_K = 10
+# Was 10, mirroring src.retrieval.hybrid.hybrid_search's own `limit: int =
+# 10` default (also the default used by scripts/query_retrieval.py and
+# scripts/query_hybrid_retrieval.py). Lowered to 3: `/generate` and
+# `/evaluate` both operate on however many chunks `/retrieve` handed back
+# (neither has its own independent cap), so the old default of 10 chunks
+# flowed straight into the faithfulness judge's prompt — reliably
+# overflowing its context window (`JUDGE_NUM_CTX`,
+# src/generation/faithfulness.py) and making `/evaluate` fail with an
+# unhandled 500 on every turn that kept most of its retrieved chunks.
+# Retrieval candidate breadth for reranking is unaffected — this only trims
+# the final `[:top_k]` slice returned to the client (src/api/main.py's
+# `retrieve`), not the `DEFAULT_RERANK_CANDIDATES` pool reranked over.
+DEFAULT_TOP_K = 3
 
 
 class PageRef(BaseModel):
@@ -111,6 +120,10 @@ class ClaimVerdictOut(BaseModel):
     statement: str
     supported: bool
     reason: str
+    # Verbatim span of the answer this claim was grounded to (for UI
+    # highlighting, src/generation/faithfulness.py:_ground_quote_in_answer);
+    # None when the judge's quote couldn't be validated against the answer.
+    quote: str | None = None
 
 
 class StructuralCheckOut(BaseModel):
@@ -150,17 +163,29 @@ class JudgeChunkResponse(BaseModel):
 
 # --- GET /turns/{id}, GET /conversations/{id} -------------------------------
 #
-# Assembled entirely from persisted state (src/api/persistence.py) — no
-# Qdrant/LLM dependency — so a reloaded page can recover a turn's final
-# badge state (should_auto_expand, faithfulness annotations) even if the
-# live session that produced it, or the retrieval/generation stack itself,
-# is gone (docs/ROADMAP.md, Sprint 6's flagged risk this resolves).
+# Assembled from persisted state (src/api/persistence.py) — turn/generation/
+# evaluation/chunk_judgment rows never depend on Qdrant or an LLM, so a
+# reloaded page can recover a turn's final badge state (should_auto_expand,
+# faithfulness annotations) even if the live session that produced it, or
+# the retrieval/generation stack itself, is gone (docs/ROADMAP.md, Sprint 6's
+# flagged risk this resolves). Chunk *content* is the one exception: like
+# `/evaluate`, `GET /turns/{id}` re-fetches it live from Qdrant by chunk_id
+# (`src/api/converters.py:fetch_chunk_input`) since `retrieved_chunks`
+# (src/api/models.py) stores only chunk_id/rank/score, never text — see that
+# module's docstring for the accepted snapshot limitation this leaves (a
+# reindexed/deleted chunk_id comes back empty rather than raising).
 
 
 class RetrievedChunkOut(BaseModel):
     chunk_id: str
     rank: int
     score: float
+    text: str
+    work_id: str
+    section_path: str
+    paragraph_ids: list[str]
+    page_start: PageRef
+    page_end: PageRef
 
 
 class GenerationOut(BaseModel):
@@ -192,3 +217,23 @@ class ConversationTurnOut(BaseModel):
 class ConversationDetailResponse(BaseModel):
     conversation_id: int
     turns: list[ConversationTurnOut]
+
+
+# --- Sprint 8 (frontend) additions: list / rename / delete conversations ---
+# Needed by the sidebar (docs/ROADMAP.md, Screen 2) and the landing page's
+# "last conversation" lookup — Sprint 7 only shipped lookup-by-id.
+
+
+class ConversationSummaryOut(BaseModel):
+    conversation_id: int
+    created_at: datetime
+    title: str | None
+    first_query: str | None
+
+
+class ConversationListResponse(BaseModel):
+    conversations: list[ConversationSummaryOut]
+
+
+class RenameConversationRequest(BaseModel):
+    title: str = Field(min_length=1)

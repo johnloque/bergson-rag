@@ -1,4 +1,4 @@
-import { IconInfoCircle } from '@tabler/icons-react'
+import { IconCircleCheck, IconInfoCircle } from '@tabler/icons-react'
 import type { EvaluateResponse } from '../api/types'
 import type { EvaluationStatus } from '../state/useTurnController'
 import { annotateAnswer } from '../lib/annotateAnswer'
@@ -26,6 +26,11 @@ export function AnswerCard({
   const expanded = revealed || evaluation?.should_auto_expand === true
   const unsupportedClaims = evaluation?.faithfulness.claims.filter((c) => !c.supported) ?? []
   const hasFlaggedClaims = unsupportedClaims.length > 0
+  // Every claim the faithfulness judge extracted from the answer was
+  // grounded in the cited chunks — the converse of the "highlighted passage"
+  // flag below, stated explicitly rather than left implicit in the absence
+  // of a warning.
+  const fullyEndorsed = !!evaluation && evaluation.faithfulness.claims.length > 0 && !hasFlaggedClaims
   // Reading early via "Lire quand même" must not strand the evaluate control —
   // /evaluate is only ever triggered by this button now, so it has to stay
   // reachable after reveal too, not just in the collapsed overlay.
@@ -72,6 +77,13 @@ export function AnswerCard({
         <p className="mt-3 flex items-start gap-1.5 text-xs" style={{ color: 'var(--gray-dark)' }}>
           <IconInfoCircle size={14} className="mt-0.5 shrink-0" />
           <span>Passage surligné : non retrouvé tel quel dans les sources citées</span>
+        </p>
+      )}
+
+      {expanded && fullyEndorsed && (
+        <p className="mt-3 flex items-start gap-1.5 text-xs" style={{ color: 'var(--green)' }}>
+          <IconCircleCheck size={14} className="mt-0.5 shrink-0" />
+          <span>Réponse intégralement confirmée par les passages cités.</span>
         </p>
       )}
 

@@ -110,7 +110,7 @@ import atexit
 import threading
 from collections.abc import Coroutine, Sequence
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any
 
 import litellm
 from langchain_litellm import ChatLiteLLM
@@ -166,8 +166,6 @@ JUDGE_TEMPERATURE = 0.0
 JUDGE_NUM_CTX = 16384
 _OLLAMA_PROVIDERS = ("ollama", "ollama_chat")
 
-T = TypeVar("T")
-
 # `ragas.async_utils.run` (RAGAS's own sync-wrapper, used here until the fix
 # below) drives each await with a fresh `asyncio.run(...)`, which opens and
 # then immediately closes a brand-new event loop per call. litellm's async
@@ -217,7 +215,7 @@ def _stop_background_loop() -> None:
     _background_loop_thread = None
 
 
-def _run_on_background_loop(coro: Coroutine[Any, Any, T]) -> T:
+def _run_on_background_loop[T](coro: Coroutine[Any, Any, T]) -> T:
     """Schedules `coro` on the shared judge-LLM event loop and blocks the
     calling (sync) thread for its result — this module's replacement for
     `ragas.async_utils.run` (see the note above for why)."""

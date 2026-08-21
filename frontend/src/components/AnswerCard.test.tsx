@@ -83,6 +83,67 @@ describe('AnswerCard reveal behavior', () => {
   })
 })
 
+describe('AnswerCard full-endorsement statement', () => {
+  function evaluationWithClaims(claims: EvaluateResponse['faithfulness']['claims']): EvaluateResponse {
+    return {
+      structural: { citations: [], unknown_citations: [], has_citation: true, passed: true },
+      faithfulness: { score: claims.every((c) => c.supported) ? 1 : 0.5, model: 'judge', claims },
+      retrieval_confidence_tier: 'moyenne',
+      should_auto_expand: claims.every((c) => c.supported),
+    }
+  }
+
+  it('states explicitly that the answer is fully endorsed once every claim is supported', () => {
+    render(
+      <AnswerCard
+        answer="Une réponse fondée."
+        evaluation={evaluationWithClaims([
+          { statement: 'A', supported: true, reason: 'ok', quote: null },
+          { statement: 'B', supported: true, reason: 'ok', quote: null },
+        ])}
+        evaluationStatus="done"
+        revealed={true}
+        onReveal={() => {}}
+      />,
+    )
+    expect(screen.getByText('Réponse intégralement confirmée par les passages cités.')).toBeInTheDocument()
+    expect(screen.queryByText(/non retrouvé tel quel/)).not.toBeInTheDocument()
+  })
+
+  it('does not claim full endorsement when a claim is unsupported', () => {
+    render(
+      <AnswerCard
+        answer="Une réponse."
+        evaluation={evaluationWithClaims([
+          { statement: 'A', supported: true, reason: 'ok', quote: null },
+          { statement: 'B', supported: false, reason: 'non étayé', quote: null },
+        ])}
+        evaluationStatus="done"
+        revealed={true}
+        onReveal={() => {}}
+      />,
+    )
+    expect(
+      screen.queryByText('Réponse intégralement confirmée par les passages cités.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('does not claim full endorsement when no claims were extracted', () => {
+    render(
+      <AnswerCard
+        answer="Une réponse."
+        evaluation={evaluationWithClaims([])}
+        evaluationStatus="done"
+        revealed={true}
+        onReveal={() => {}}
+      />,
+    )
+    expect(
+      screen.queryByText('Réponse intégralement confirmée par les passages cités.'),
+    ).not.toBeInTheDocument()
+  })
+})
+
 describe('AnswerCard evaluation failure', () => {
   it('never shows "Vérifié" when /evaluate errored, and offers a retry', () => {
     const onEvaluate = vi.fn()

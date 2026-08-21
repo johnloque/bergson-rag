@@ -1,12 +1,17 @@
+// Deliberately not styled as a chat bubble (no bubble background, no
+// right-alignment): each turn is an independent retrieve+generate cycle,
+// not a message in a remembered dialogue (docs/ROADMAP.md, Sprint 8
+// addendum — no cross-turn context). A plain labeled heading avoids
+// implying otherwise.
 export function QueryBubble({ query }: { query: string }) {
   return (
-    <div className="flex justify-end">
-      <div
-        className="max-w-[70%] rounded-xl px-4 py-2.5 text-sm"
-        style={{ background: 'var(--paper-2)', color: 'var(--ink)' }}
-      >
+    <div className="flex flex-col gap-1">
+      <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-3)' }}>
+        Question
+      </span>
+      <p className="text-[15px] font-medium" style={{ color: 'var(--ink)' }}>
         {query}
-      </div>
+      </p>
     </div>
   )
 }

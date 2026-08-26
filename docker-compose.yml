@@ -24,8 +24,15 @@ services:
       retries: 10
       start_period: 10s
 
+  # Opt-in only (docs/dockerization.md): `docker compose up` does NOT
+  # start this service. Docker Desktop on Apple Silicon has no Metal
+  # passthrough, so containerized Ollama runs CPU-only -- measured 3-5x
+  # slower than native host Ollama. Native (via `make setup-ollama`) is
+  # the default path; this service is the explicit fallback, started with
+  # `docker compose --profile with-ollama up` / `make run-with-ollama`.
   ollama:
     image: ollama/ollama:latest
+    profiles: ["with-ollama"]
     ports:
       - "11434:11434"   # host-side debugging convenience only -- the api
                          # container talks to ollama over the internal
@@ -34,12 +41,12 @@ services:
     volumes:
       - ollama_data:/root/.ollama   # model persistence across restarts --
                                      # the container itself starts with no
-                                     # models; `make pull-model` fetches
+                                     # models; `make run-with-ollama` pulls
                                      # one explicitly (see Makefile)
     restart: unless-stopped
-    # CPU-only inference (docs/ROADMAP.md, Sprint 9): no GPU passthrough
-    # is configured here. Adequate for this project's portfolio-demo
-    # scope, not a production performance target.
+    # CPU-only inference: no GPU passthrough is configured here (Docker
+    # Desktop on Apple Silicon can't do Metal passthrough at all). Fine
+    # for the opt-in fallback path; not a production performance target.
     healthcheck:
       # `ollama list` is a real client call to the local server (not just
       # a port probe) and needs no curl/wget, which this image doesn't
@@ -70,7 +77,12 @@ services:
       # name here would silently leave it defaulting to
       # http://localhost:11434, i.e. the api container itself, and every
       # generate/judge call would fail to reach ollama.
-      OLLAMA_API_BASE: http://ollama:11434
+      #
+      # Default is native host Ollama (host.docker.internal, the fast
+      # Metal-accelerated path on Mac -- see docs/dockerization.md).
+      # Override to http://ollama:11434 when running with the
+      # `with-ollama` Compose profile instead (`make run-with-ollama`).
+      OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://host.docker.internal:11434}
       # Additive to FRONTEND_DEV_ORIGIN (src/api/main.py), which stays
       # hardcoded for the non-Docker `npm run dev` workflow. Must match
       # the frontend service's host-mapped port below.
@@ -92,8 +104,19 @@ services:
     depends_on:
       qdrant:
         condition: service_healthy
+      # `required: false`: ollama is opt-in (`with-ollama` profile, see
+      # above). When that profile isn't active, this dependency is
+      # skipped entirely -- api starts against native host Ollama with no
+      # wait. When it IS active, api still waits for the container's
+      # healthcheck before starting, same as before this branch.
       ollama:
         condition: service_healthy
+        required: false
+    extra_hosts:
+      # host.docker.internal is automatic on Docker Desktop (Mac/
+      # Windows) but not on native Linux Docker Engine -- this makes the
+      # native-Ollama default (OLLAMA_API_BASE above) resolve there too.
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
   frontend:

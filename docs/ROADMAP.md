@@ -276,17 +276,19 @@ Rationale and implementation:
 
 **Implemented.** Four services in `docker-compose.yml` (`qdrant`, `ollama`,
 `api`, `frontend`), a `Makefile` with a `quickstart` target chaining
-`fetch-data → build-index → run → pull-model`, containerized (not
-host-native) Ollama, healthchecks gating startup order, and three test
-scripts (`test_frontend_arg.sh`, `test_container_connectivity.sh`,
-`smoke_test.py`) guarding the failure modes specific to this sprint — most
-notably the browser-vs-internal-URL split between `VITE_API_BASE` (baked
-in at frontend build time) and the API's own internal
-`QDRANT_URL`/`OLLAMA_API_BASE`. CPU-only inference by default (no GPU
-passthrough), with the resulting latency characterized and an `hf_cache`
-volume added to avoid re-downloading model weights on every container
-recreation. Full design rationale, the exact env-var/build-arg mechanics,
-and test coverage: [`docs/dockerization.md`](dockerization.md).
+`fetch-data → build-index → setup-ollama → run`, healthchecks gating
+startup order, and three test scripts (`test_frontend_arg.sh`,
+`test_container_connectivity.sh`, `smoke_test.py`) guarding the failure
+modes specific to this sprint — most notably the browser-vs-internal-URL
+split between `VITE_API_BASE` (baked in at frontend build time) and the
+API's own internal `QDRANT_URL`/`OLLAMA_API_BASE`. An `hf_cache` volume
+avoids re-downloading model weights on every container recreation. Full
+design rationale, the exact env-var/build-arg mechanics, and test
+coverage: [`docs/dockerization.md`](dockerization.md).
+
+**Ollama: native by default, containerized opt-in — see
+[`docs/dockerization.md`](dockerization.md)** (`fix/ollama-native-default`,
+superseding this sprint's original "containerize Ollama by default").
 
 ### Sprint 10 — MCP layer
 Pure search tools (hybrid search, exact-reference lookup), tested with

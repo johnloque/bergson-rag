@@ -2,25 +2,100 @@
 
 Four services in `docker-compose.yml` (`qdrant`, `ollama`, `api`,
 `frontend`), a `Makefile` with a `quickstart` target chaining
-`fetch-data → build-index → run → pull-model`, and three new test scripts
-covering the failure modes this sprint specifically had to guard against
-(below).
+`fetch-data → build-index → setup-ollama → run`, and three new test
+scripts covering the failure modes this sprint specifically had to guard
+against (below).
 
-## Ollama is containerized (`ollama/ollama` image), not host-native
+**Amended by `fix/ollama-native-default`** — see "Ollama: native by
+default, containerized opt-in" below. Sprint 9 originally containerized
+Ollama by default; that decision is superseded. The rest of this
+document (healthchecks, CORS, the internal-vs-browser-facing URL split,
+the Makefile dependency order rationale, the frontend build-ARG test)
+still describes the current, shipped behavior.
 
-The prior dev setup used a host-installed Ollama; that's a one-machine
-solution, not a bootstrap anyone can clone and run. `ollama_data` (a named
-volume, `/root/.ollama`) persists pulled models across restarts; the
-container itself always starts empty — `make pull-model` (`docker compose
-exec ollama ollama pull mistral`) pulls the model explicitly, matching
-`src/generation/generate.py`'s `DEFAULT_MODEL = "ollama_chat/mistral"`.
+## Ollama: native by default, containerized opt-in (`fix/ollama-native-default`)
 
-**CPU-only inference by default** — no GPU passthrough is configured in
-`docker-compose.yml`. This is adequate for this project's portfolio-demo
-scope; it is explicitly not a production performance target, and anyone
-adding GPU passthrough later should expect to add the corresponding
-`deploy.resources.reservations.devices` block themselves. The same
-CPU-only reasoning was applied to the `api` image's own torch dependency
+**The finding.** Docker Desktop on Apple Silicon has no Metal (GPU)
+passthrough into its Linux VM — unlike `nvidia-container-toolkit` on a
+Linux host, there is no equivalent path for Apple's GPU. A container's
+Ollama process is therefore always CPU-only, regardless of anything in
+`docker-compose.yml`. Measured against native host Ollama (which
+`sentence-transformers`/Ollama both pick up automatically via Metal/MPS)
+on the same machine, containerized generation was **~3-5x slower**,
+consistent with the multi-minute cold-generate times logged in "Observed
+CPU-only latency" below. This supersedes Sprint 9's original decision to
+containerize Ollama by default — that decision optimized for
+"one-command bootstrap," but paid for it with a GPU-passthrough
+limitation that a from-scratch clone-and-run flow shouldn't default into
+on the platform this project is actually developed on.
+
+**The fix: split the fast default from the portable fallback**, instead
+of picking one:
+
+- **Native Ollama is now the default path** (`make setup-ollama`,
+  `scripts/setup_ollama.sh` — not Docker-based). Fast, Metal-accelerated
+  on Apple Silicon, same as the pre-Sprint-9 dev flow.
+- **Containerized Ollama becomes an explicit, opt-in fallback**, gated
+  behind a Compose profile (`profiles: ["with-ollama"]` on the `ollama`
+  service in `docker-compose.yml`) so a plain `docker compose up` /
+  `make run` does **not** start it. It's still there for anyone without a
+  usable host Ollama install (e.g. CI, a Linux box without `sudo`, a
+  quick one-off clone) — started explicitly with `docker compose
+  --profile with-ollama up` / `make run-with-ollama`. Still CPU-only,
+  still the slower path — that tradeoff is now opt-in and named, not the
+  silent default.
+
+**The mechanism — `OLLAMA_API_BASE` is now environment-configurable**,
+not hardcoded to the internal service name. `docker-compose.yml`'s
+`api.environment.OLLAMA_API_BASE` defaults to
+`http://host.docker.internal:11434` (native host Ollama — Docker
+Desktop resolves this automatically on Mac/Windows; an `extra_hosts:
+host.docker.internal:host-gateway` entry was added to the `api` service
+so it also resolves on native Linux Docker Engine, which doesn't wire it
+up by default). `make run-with-ollama` overrides it to
+`http://ollama:11434` (the internal Docker service name) when the
+`with-ollama` profile is active — this override is necessary, not just
+documentation: Compose does not recreate `api` just because a profile
+service it doesn't directly depend on started, so without the explicit
+override `api` would still be pointed at `host.docker.internal` even
+with the `ollama` container up and healthy. `api`'s own `depends_on:
+ollama` carries `required: false` (Compose ≥2.20 syntax) specifically so
+this is legal either way — with the profile inactive, the dependency is
+skipped entirely (no error, no wait); with it active, `api` still waits
+for `ollama`'s healthcheck before starting, same as before this branch.
+
+Both directions were verified live: with only `qdrant`/`api`/`frontend`
+up (native mode, no `ollama` container running at all), `docker compose
+exec api curl http://host.docker.internal:11434/` reaches a real
+Ollama process running directly on the host. With `--profile
+with-ollama up` and `OLLAMA_API_BASE=http://ollama:11434`,
+`docker compose exec api curl http://ollama:11434/` reaches the
+container instead. `scripts/test_container_connectivity.sh` now
+auto-detects which mode is active (whether the `ollama` service
+container is running) and checks the corresponding target — see
+"Tests" below.
+
+**`ollama_data` (a named volume, `/root/.ollama`) still persists pulled
+models across restarts** for the containerized path; the container
+itself always starts empty — `make run-with-ollama` pulls the model
+explicitly into it (`docker compose exec ollama ollama pull mistral`),
+matching `src/generation/generate.py`'s `DEFAULT_MODEL =
+"ollama_chat/mistral"`. The native path pulls into the host's own Ollama
+model store instead, via `scripts/setup_ollama.sh` (`ollama pull
+mistral`), verified at the end with a real generation request/response —
+not just a successful pull exit code, which would miss a
+pulled-but-unloadable model or a server that accepts connections but
+can't actually serve.
+
+**CPU-only inference remains the default for the containerized fallback
+path specifically** — no GPU passthrough is configured for the `ollama`
+service in `docker-compose.yml`, and (per the finding above) none is
+achievable on Docker Desktop/Apple Silicon regardless. Anyone running the
+containerized path on a Linux host with an NVIDIA GPU could add the
+corresponding `deploy.resources.reservations.devices` block themselves —
+not done here, since the native path is the intended fast route on any
+platform where GPU acceleration matters for this project. The same
+CPU-only reasoning was separately applied to the `api` image's own torch dependency
 (pulled in transitively by `sentence-transformers` for the dense embedder
 and cross-encoder reranker, `src/indexing/embeddings.py`,
 `src/retrieval/reranking.py`): PyPI's default `linux/*` torch wheel bundles
@@ -59,11 +134,16 @@ host-facing URL and never the internal service name.
 
 ## Healthchecks and startup ordering
 
-`qdrant` and `ollama` both get `healthcheck:` entries and `api` depends on
-both via `condition: service_healthy` (not just container-start order) —
-this closes a real race where `api` could otherwise start serving before
-Qdrant/Ollama are actually ready to accept requests. Neither base image
-ships `curl`/`wget` (qdrant's Debian-slim base has bash but no HTTP
+`qdrant` and `ollama` both get `healthcheck:` entries. `api` depends on
+`qdrant` unconditionally via `condition: service_healthy` (not just
+container-start order); it depends on `ollama` the same way but with
+`required: false` (`fix/ollama-native-default` — see above), so the
+dependency is skipped entirely when the `ollama` service isn't part of
+the active profile (the default, native-Ollama mode) and only actually
+gates startup when `--profile with-ollama` is active. Either way, this
+closes a real race where `api` could otherwise start serving before
+Qdrant (or containerized Ollama, when in use) is actually ready to accept
+requests. Neither base image ships `curl`/`wget` (qdrant's Debian-slim base has bash but no HTTP
 client; ollama's image has neither), so `qdrant`'s check is a raw HTTP/1.1
 request over bash's `/dev/tcp`, and `ollama`'s check is `ollama list`
 itself (a real client call to the local server, succeeds as soon as it
@@ -87,23 +167,30 @@ host-mapped port) is added on top via a new `CORS_ORIGINS` env var
 
 ## Internal vs. browser-facing URLs — the two directions, and the two tests that guard each one
 
-`api`'s own outbound calls to Qdrant/Ollama *should* use internal Docker
-service names (`QDRANT_URL=http://qdrant:6333`,
-`OLLAMA_API_BASE=http://ollama:11434`) — that's correct,
-container-to-container traffic. Note the second one is `OLLAMA_API_BASE`,
-not a generic `OLLAMA_URL`: LiteLLM's `ollama_chat` provider
-(`src/generation/generate.py`'s `DEFAULT_MODEL`) specifically reads
-`OLLAMA_API_BASE` (`litellm/llms/ollama/common_utils.py`) — setting a
-differently-named env var would silently do nothing and leave every
-generate/judge call falling back to `localhost:11434`, i.e. the `api`
-container itself. `scripts/test_container_connectivity.sh` (`docker
-compose exec api curl qdrant:6333/healthz` / `ollama:11434/`) checks this
-direction. The frontend's `VITE_API_BASE` is the mirror-image case in the
-opposite direction — see above, and `scripts/test_frontend_arg.sh`.
+`api`'s own outbound call to Qdrant *should* use the internal Docker
+service name (`QDRANT_URL=http://qdrant:6333`) — that's correct,
+container-to-container traffic, always. Its call to Ollama is
+environment-configurable (`fix/ollama-native-default` — see above):
+`OLLAMA_API_BASE` defaults to `http://host.docker.internal:11434`
+(native host Ollama) and is overridden to `http://ollama:11434` (the
+internal service name) specifically when `make run-with-ollama` is used.
+Note it's `OLLAMA_API_BASE`, not a generic `OLLAMA_URL`: LiteLLM's
+`ollama_chat` provider (`src/generation/generate.py`'s `DEFAULT_MODEL`)
+specifically reads `OLLAMA_API_BASE` (`litellm/llms/ollama/common_utils.py`)
+— setting a differently-named env var would silently do nothing and leave
+every generate/judge call falling back to `localhost:11434`, i.e. the
+`api` container itself. `scripts/test_container_connectivity.sh` checks
+this direction for whichever mode is active — `docker compose exec api
+curl qdrant:6333/healthz` always, plus either
+`host.docker.internal:11434/` (native, default) or `ollama:11434/`
+(containerized, `with-ollama` profile), auto-detected from whether the
+`ollama` service container is running. The frontend's `VITE_API_BASE` is
+the mirror-image case in the opposite direction — see above, and
+`scripts/test_frontend_arg.sh`.
 
 ## Makefile — actual dependency order implemented
 
-`fetch-data → build-index → run → pull-model` (`quickstart` chains
+`fetch-data → build-index → setup-ollama → run` (`quickstart` chains
 exactly this). `build-index` must follow `fetch-data` (it ingests
 `data/raw/corpus`, which doesn't exist until fetched) and precede a
 *useful* `run` (an `api` container against an empty Qdrant collection
@@ -111,18 +198,33 @@ starts and passes its healthcheck fine, it just has nothing to retrieve).
 `build-index` itself runs Sprint 1 ingestion + Sprint 2 indexing on the
 **host** via `uv run` (not inside a container — these scripts need the
 dev venv's spaCy model, and reach Qdrant over its published host port),
-starting `qdrant` alone first if it isn't already running. `pull-model`
-only needs the `ollama` container started, which `run` already
-guarantees; it's last in the chain, but nothing actually breaks if it runs
-any time after `run` and before a real `/generate` call — `api`'s own
-healthcheck (`GET /docs`) never calls the LLM, so `api` starts and reports
-healthy whether or not a model has been pulled yet.
+starting `qdrant` alone first if it isn't already running. `setup-ollama`
+(`scripts/setup_ollama.sh`, `fix/ollama-native-default` — not
+Docker-based) installs/starts native host Ollama and pulls `mistral` into
+it; nothing actually breaks if it runs any time before a real
+`/generate` call rather than strictly before `run` — `api`'s own
+healthcheck (`GET /docs`) never calls the LLM, so `api` starts and
+reports healthy whether or not a model has been pulled yet — but it's
+ordered before `run` in `quickstart` so the chain leaves a fully working
+stack with no follow-up step required. The containerized fallback path
+(`make run-with-ollama`) has its own self-contained order instead:
+`docker compose --profile with-ollama up -d --build` (with
+`OLLAMA_API_BASE=http://ollama:11434` set for that invocation) then
+`docker compose exec ollama ollama pull mistral` — it isn't part of
+`quickstart`, since native is the default.
 
-## Observed CPU-only latency, and why it's slower than pre-Sprint-9 dev
+## Observed CPU-only latency (containerized path) — the measurement behind `fix/ollama-native-default`
 
-Verified end-to-end against this sprint's own stack (`docker compose up
---build`, real `fetch-data`/`build-index` history already on disk, `make
-pull-model`): `/retrieve` and `/generate` both work, but a cold
+This is the original Sprint 9 measurement, taken against the
+then-fully-containerized stack, that motivated superseding "containerize
+Ollama by default" — see "Ollama: native by default, containerized
+opt-in" above for the fix and the ~3-5x native-vs-containerized
+comparison. It still applies as-is to today's opt-in `with-ollama`
+fallback path.
+
+Verified end-to-end (`docker compose --profile with-ollama up --build`,
+real `fetch-data`/`build-index` history already on disk, `docker compose
+exec ollama ollama pull mistral`): `/retrieve` and `/generate` both work, but a cold
 `/generate` call — `ollama_chat/mistral` on CPU inside Docker Desktop's
 VM, `ollama ps` showing ~400% CPU (four cores) — took several minutes end
 to end, well past a naive 120s client timeout
@@ -174,3 +276,22 @@ that generation produced a non-empty answer — confirming corpus fetch,
 indexing, all four services, and the pulled model actually work together,
 not just that each piece works in isolation. `make test-frontend-arg` /
 `make test-connectivity` / `make smoke-test` wrap all three.
+
+**`fix/ollama-native-default` coverage.** `test_container_connectivity.sh`
+now covers both Ollama modes from one script, auto-detecting which is
+active (see "Internal vs. browser-facing URLs" above) — this is what
+actually proves `OLLAMA_API_BASE` is consumed at runtime rather than
+hardcoded to one value, since the same script asserts a different
+reachable target depending on which mode is up. `smoke_test.py` needed no
+changes to cover both paths: it only talks to `api`'s published port, so
+the same Q002 end-to-end check exercises whichever backend `api` was
+actually configured to reach — run once against `make run` (native) and
+once against `make run-with-ollama` (containerized) to confirm generation
+actually works through both. Verified live during this branch's own
+implementation: `docker compose exec api curl
+http://host.docker.internal:11434/` succeeded against a real native
+`ollama serve` process with no `ollama` container running at all, and
+`docker compose exec api curl http://ollama:11434/` succeeded separately
+against the containerized service with `OLLAMA_API_BASE` overridden —
+confirming the mechanism itself, independent of the model-pull time a
+full Q002 run would add.

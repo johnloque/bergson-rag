@@ -52,47 +52,63 @@ It deliberately does not attempt:
 ## Status
 
 🚧 In development — Sprint 9 (Integration and bootstrap) complete: the
-whole stack (Qdrant, Ollama, API, frontend) now runs via Docker Compose.
+whole stack (Qdrant, Ollama, API, frontend) runs via Docker Compose, with
+Ollama itself defaulting to a fast, native (non-Docker) install rather
+than a container (`fix/ollama-native-default`, see below).
 See [`docs/ROADMAP.md`](docs/ROADMAP.md) for architecture details,
 evaluation methodology, and sprint breakdown.
 
 ## Quickstart
 
-Requires Docker, `uv`, and `git`.
+Requires Docker, `uv`, and `git`. On macOS, also requires (or installs via
+Homebrew) native Ollama; on Linux, the official Ollama install script.
 
 ```sh
-make quickstart   # fetch corpus -> build index -> start all services -> pull model
+make quickstart   # fetch corpus -> build index -> setup native Ollama -> start qdrant/api/frontend
 ```
 
 This chains `fetch-data` (clones the source XML), `build-index` (runs
 ingestion + indexing against a `qdrant` container, on the host via `uv
-run`), `run` (`docker compose up -d --build` — all four services), and
-`pull-model` (`ollama pull mistral` inside the `ollama` container, which
-always starts empty). Once it finishes: frontend at
-`http://localhost:3000`, API at `http://localhost:8000`. Ollama runs
-CPU-only by default (no GPU passthrough configured) — adequate for this
-project's demo scope, not a production performance target. See
-`docs/dockerization.md` for the exact dependency order and what each
-Makefile target does, and `Makefile`/`docker-compose.yml` directly for the
-underlying commands.
+run`), `setup-ollama` (`scripts/setup_ollama.sh` — installs/starts Ollama
+directly on the host, not in Docker, and pulls `mistral` into it), and
+`run` (`docker compose up -d --build` — `qdrant`, `api`, `frontend`; the
+containerized `ollama` service does *not* start by default). Once it
+finishes: frontend at `http://localhost:3000`, API at
+`http://localhost:8000`, talking to native host Ollama
+(Metal-accelerated on Apple Silicon). See `docs/dockerization.md` for the
+exact dependency order and what each Makefile target does, and
+`Makefile`/`docker-compose.yml` directly for the underlying commands.
 
-### Faster local dev (native, GPU-accelerated on Apple Silicon)
+### Why native Ollama is the default (`fix/ollama-native-default`)
 
-The full Docker stack is for reproducibility ("clone and run one
-command"), not for fast day-to-day iteration — on Apple Silicon
-specifically, everything running inside a container loses access to the
-Mac's GPU (Metal), since Docker Desktop has no passthrough for it into a
-Linux container the way `nvidia-container-toolkit` does on a Linux host.
-`ollama`, and the API's own in-process BGE-M3 embedder / cross-encoder
-reranker (`sentence-transformers`, which auto-detects Metal when
-available), all fall back to CPU-only inside Docker — noticeably slower
-than running them natively. For active development, run everything except
-Qdrant natively instead:
+Docker Desktop on Apple Silicon has no Metal (GPU) passthrough into its
+Linux VM — a containerized Ollama is always CPU-only there, regardless of
+Compose config, and was measured ~3-5x slower than native host Ollama for
+the same generation call. `make quickstart` / `make run` reflect that:
+native Ollama (`make setup-ollama`) is the default, and the containerized
+`ollama` service is gated behind a Compose profile so it never starts
+unless asked for explicitly:
+
+```sh
+make run-with-ollama   # opt-in fallback: containerized Ollama, CPU-only, slower
+```
+
+Useful when a usable host Ollama install isn't an option (CI, a
+locked-down Linux box, a quick one-off clone) — see `docs/dockerization.md`
+for the full mechanism (the `with-ollama` Compose profile, and how
+`OLLAMA_API_BASE` switches between `host.docker.internal` and the
+internal `ollama` service name).
+
+### Faster local dev (everything native, not just Ollama)
+
+The Docker stack (`qdrant`/`api`/`frontend` containerized, Ollama native)
+is for reproducibility ("clone and run one command"), not necessarily the
+fastest loop for active backend/frontend iteration. For that, run
+everything except Qdrant directly on the host instead:
 
 ```sh
 docker compose up -d qdrant        # keep Qdrant containerized
-ollama serve &                     # native Ollama picks up Metal automatically
-ollama pull mistral
+make setup-ollama                  # or: ollama serve & ; ollama pull mistral
 uv run uvicorn src.api.main:app --reload --port 8000
 cd frontend && npm run dev         # http://localhost:5173
 ```
@@ -103,7 +119,7 @@ frontend's dev-mode `VITE_API_BASE` fallback is already
 `http://localhost:8000` (`frontend/src/api/client.ts`), and the API's CORS
 allowlist already includes the Vite dev server origin unconditionally
 (`FRONTEND_DEV_ORIGIN`, `src/api/main.py`) regardless of `CORS_ORIGINS`.
-This is exactly the pre-Sprint-9 dev flow; Sprint 9 only added the fully
+This is exactly the pre-Sprint-9 dev flow; Sprint 9 only added the
 containerized path on top of it, it didn't replace it.
 
 ## Stack

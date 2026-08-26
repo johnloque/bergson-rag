@@ -1,0 +1,26 @@
+# Backend build context (docker-compose.yml's `api` service, context ".").
+# Keeps the context small and avoids ever copying secrets into a layer.
+
+.venv/
+.git/
+.github/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+frontend/
+node_modules/
+
+data/raw/
+data/processed/
+data/app.db*
+
+eval/results/
+docs/
+
+.env
+.env.*
+.DS_Store
+*.log

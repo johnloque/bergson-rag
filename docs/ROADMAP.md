@@ -241,161 +241,52 @@ to Sprint 7. Full design rationale, judge-model choice, and test coverage:
 - **Deliverable**: fully functional, tested API, usable independently of
   any frontend
 
-**Backend API — implemented (Sprint 7a, `feat/api-endpoints`).** FastAPI
-scaffold in `src/api/`, each endpoint a thin wrapper around an existing,
-already-tested function, no persistence or session history yet
-(`feat/api-persistence`, still pending). Full design rationale, the known
-`/evaluate`-trusts-its-input simplification, and test coverage:
+**Implemented (Sprint 7a `feat/api-endpoints` + Sprint 7b
+`feat/api-persistence`).** FastAPI scaffold in `src/api/`, each endpoint a
+thin wrapper around an existing, already-tested function, plus SQLite
+persistence (conversations, turns, retrieved chunks, generations,
+evaluations, chunk judgments) closing two risks flagged as deferred in
+prior sprints. Full design rationale, schema, and test coverage:
 [`docs/backend_api.md`](backend_api.md).
-
-**SQLite persistence — implemented (Sprint 7b, `feat/api-persistence`).**
-SQLModel over a single local SQLite file (`data/app.db`), storing
-conversations, turns, retrieved chunks, generations, evaluations, and
-chunk judgments. `/generate` now creates or resumes a turn, and two new
-read endpoints — `GET /turns/{id}`, `GET /conversations/{id}` — recover a
-turn's full state after a reload. This branch closes two risks flagged as
-deferred in prior sprints: Sprint 7a's `/evaluate` trusting a
-client-submitted `(query, chunks, answer)` triple, and Sprint 6's lost
-badge state for a user who left before evaluation completed. Full schema,
-the accepted chunk-text-snapshot limitation, and design rationale:
-[`docs/backend_api.md`](backend_api.md).
-
-Sprint 7 (backend API + persistence) is complete.
 
 ### Sprint 8 — Frontend
 - React (Vite) + Tailwind + TanStack Query, consuming the Sprint 7 API
 - Inspect → explain → curate → regenerate loop
 - **Deliverable**: working UI against the real API, demoable locally
 
-**Frontend — implemented.** React 19 + Vite + Tailwind v4 + TanStack Query in
-`frontend/`. Desktop light mode is the primary deliverable, built exactly to
-the design consigne (exact hex tokens, spacing, copy) since no mockup image
-files exist for this sprint — the design was approved in a separate
-conversation and specified in full in the sprint consigne instead. Five
-screens: landing (session-scoped via `sessionStorage`, not `localStorage` —
-must reappear on a new tab/session), the sidebar app shell, the conversation
-view (query bubble, accumulating processing-steps list, chunk rail with its
-pre-generation confidence gauge, collapsed/expanded answer card with
-faithfulness highlighting — see the retrieval-confidence-split correction
-below), the chunk detail view (`Expliquer`/`Exclure`/`Inclure`), and
-an in-app documentation page. State split three ways: TanStack Query for
-server reads (`GET /turns/{id}`, `GET /conversations/{id}`), a small React
-context (`frontend/src/state/turnUi.tsx`) for the client-owned
-included/excluded chunk set and the accumulated `chunk_judgments` dict (both
-explicitly client-side until a `/generate` or `/judge-chunk` call sends
-them, per this sprint's spec), and a module-level chunk-text cache
-(`frontend/src/state/chunkCache.ts`) working around the backend's own
-accepted chunk-text-snapshot limitation (`docs/backend_api.md`) — a turn
-whose chunks were never fetched client-side this session (e.g. a cold
-reload of an old conversation) falls back to a placeholder rather than
-fabricating content. Verified against the real API (Qdrant + local Ollama
-judge/generation models running) as well as 19 component/integration tests
-(Vitest + Testing Library, mocked fetch) covering every behavior called out
-in the sprint's Tests section — see `frontend/src/**/*.test.tsx`.
+**Implemented.** React 19 + Vite + Tailwind v4 + TanStack Query in
+`frontend/`, five screens (landing, sidebar app shell, conversation view,
+chunk detail, in-app documentation), verified against the real API and
+covered by 19 component/integration tests. Includes a deliberate scope
+decision (no cross-turn context within a conversation), in-app
+documentation of the evaluation design, a small additive backend surface
+(conversation list/rename/delete), and a known gap (no dark mode / full
+responsive layout yet). Full design rationale: [`docs/frontend.md`](frontend.md).
 
-**Addendum — multi-turn handling within a conversation, no cross-turn
-context (scope decision, not an oversight).** Sprint 7b's schema already
-supports multiple turns per conversation, but nothing in this project gives
-a turn access to prior turns: each query is its own independent
-retrieve+generate cycle, with zero memory of earlier turns in the same
-conversation. This is deliberate, not deferred — context threading (e.g.
-conversation history folded into the retrieval query or the generation
-prompt) is a real feature a future sprint could add, but it isn't planned
-now, and the UI must not imply it exists. Consequences, applied to
-`frontend/`:
-- Each turn renders as one visually self-contained unit (query, processing
-  steps, chunk rail, answer card), stacked in the conversation view — not as
-  continuous chat bubbles, which would imply dialogue memory
-  (`components/TurnCard.tsx`, restyled `components/QueryBubble.tsx`).
-- Régénérer is scoped strictly to its own turn — it already was, structurally:
-  `state/useTurnController.ts` is instantiated once per `TurnCard`, and the
-  client-only include/exclude and `chunk_judgments` state in
-  `state/turnUi.tsx` is keyed by `turnId`, so there is no shared state a
-  regenerate on one turn could read from or write into another.
-- From the second query onward in a conversation, a small transparency note
-  next to the composer states this explicitly ("Chaque question est traitée
-  indépendamment, sans mémoire des échanges précédents.", `--ink-3`,
-  `routes/Conversation.tsx`) — the same transparency-over-silence principle
-  already applied to the confidence gauge and citation flags in Screen 3.
-
-**Addendum — evaluation design documented in-app, and an explicit
-full-endorsement statement.** The in-app "Guide d'utilisation"
-(`routes/Documentation.tsx`) gained a "Comment la réponse est vérifiée"
-section explaining the two independent post-generation checks from Sprint 6
-(structural citation check, per-claim faithfulness check) plus the
-retrieval-confidence signal, and how `should_auto_expand` combines them —
-written for the end user, not a repeat of `docs/anti_hallucination_
-guardrails.md`'s implementation-level detail. Separately, `AnswerCard.tsx`
-now states explicitly when every claim the faithfulness judge extracted was
-supported by the cited chunks ("Réponse intégralement confirmée par les
-passages cités.", green, next to the existing unsupported-claim highlight
-note) — previously the UI only ever surfaced the negative case (a
-highlighted unsupported passage) and stayed silent otherwise. This is a
-narrower exception to `CitationFlag.tsx`'s "no success state" rule from
-Screen 3: that rule is about Layer 1 (citation resolution, still silent on
-success), not Layer 2 (faithfulness) — the two are independent checks
-(`docs/anti_hallucination_guardrails.md`), and only the latter gained an
-explicit success state here, on direct request.
-
-Small, additive backend surface added alongside this sprint (not part of
-Sprint 7): `GET /conversations` (list, newest first), `PATCH
-/conversations/{id}` (rename), `DELETE /conversations/{id}` (cascading
-delete) — Sprint 7 only shipped lookup-by-id, but the sidebar's
-conversation list and the landing page's "last conversation" redirect have
-no way to enumerate conversations without it. `Conversation` gained a
-nullable `title` column for the rename action.
-
-**Known gap, not a finished feature: dark mode and full responsive layout.**
-The design tokens are CSS custom properties (`frontend/src/index.css`), not
-hardcoded Tailwind colors, specifically so a dark-mode pass is a values-swap
-later rather than a rewrite — but no dark-mode values are defined yet, since
-that design pass hasn't happened. Likewise, only the sidebar/chunk-rail
-breakpoints that were straightforward with Tailwind's responsive utilities
-are in place; the layout has not been comprehensively designed or tested
-for mobile/tablet widths. Both remain explicitly open, to be picked up in a
-later, dedicated design pass rather than assumed complete from this sprint.
-
-**Correction to Sprint 6/7a-b/8's original design: retrieval confidence
-moved from post-evaluation display to a pre-generation preview.**
-Originally, the retrieval confidence tier was computed inside
-`generate_evaluation` (Sprint 6) and surfaced as a field on `/evaluate`'s
-response (Sprint 7a-b), rendered as a gauge inside the expanded,
-post-evaluation answer card (Sprint 8). On reflection this showed the
-signal at the wrong moment and in the wrong place: retrieval confidence is
-a property of the *evidence*, knowable before generation ever runs, not a
-property of the *answer* — showing it only after `/evaluate` completed
-meant the user had already committed to generating (and had to wait through
-the full generate → evaluate round trip) before seeing a signal that could
-have informed whether to curate the chunk rail first. It also duplicated
-`should_auto_expand`'s own internal use of the same tier without adding
-information, since a low tier already suppresses auto-expand.
-
-Fixed by extracting the tier computation into `src.generation.signals.
-retrieval_confidence_tier` (already a standalone function; `generate_evaluation`
-now takes the tier as a parameter instead of computing it) and giving it two
-call sites, not the previous single implicit one: a new `POST
-/confidence-preview` endpoint, called live by the frontend at the chunk-rail
-level on every include/exclude toggle (debounced ~300ms), and `POST
-/generate`, which computes the same tier server-side over the chunks it was
-actually given and persists it on the `generations` row — never a
-client-submitted value, the same trust boundary Sprint 7b already applied to
-`/evaluate`'s `(query, chunks, answer)`. `/evaluate` reads that persisted
-value back purely to gate `should_auto_expand` internally; its response no
-longer carries a `retrieval_confidence_tier` field, since re-showing it
-there would just duplicate what `/confidence-preview` already showed before
-generation. `should_auto_expand`'s decision logic itself is unchanged (tier
-at "moyenne" or above AND no unsupported claims) — only where its confidence
-input comes from changed. On the frontend, the confidence gauge
-(`ConfidenceGauge.tsx`, unchanged visually — same 4-segment bar, `--blue`
-for the confident tiers, `--gray-dark` for the two weak tiers) moved from
-the expanded answer card to directly above the chunk rail (`ChunkRail.tsx`);
-the answer card now renders only the citation integrity flag and
-faithfulness highlighting.
+**Correction to Sprint 6/7's design: retrieval confidence moved from
+post-evaluation display to a pre-generation preview**, computed live at
+the chunk-rail level instead of shown only after generation completes.
+Rationale and implementation:
+[`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md).
 
 ### Sprint 9 — Integration and bootstrap
 - Full dockerization (API, frontend, Qdrant) via Docker Compose
 - Bootstrap script/Makefile chaining fetch-data → build-index → run
 - **Deliverable**: entire application launchable locally in one command
+
+**Implemented.** Four services in `docker-compose.yml` (`qdrant`, `ollama`,
+`api`, `frontend`), a `Makefile` with a `quickstart` target chaining
+`fetch-data → build-index → run → pull-model`, containerized (not
+host-native) Ollama, healthchecks gating startup order, and three test
+scripts (`test_frontend_arg.sh`, `test_container_connectivity.sh`,
+`smoke_test.py`) guarding the failure modes specific to this sprint — most
+notably the browser-vs-internal-URL split between `VITE_API_BASE` (baked
+in at frontend build time) and the API's own internal
+`QDRANT_URL`/`OLLAMA_API_BASE`. CPU-only inference by default (no GPU
+passthrough), with the resulting latency characterized and an `hf_cache`
+volume added to avoid re-downloading model weights on every container
+recreation. Full design rationale, the exact env-var/build-arg mechanics,
+and test coverage: [`docs/dockerization.md`](dockerization.md).
 
 ### Sprint 10 — MCP layer
 Pure search tools (hybrid search, exact-reference lookup), tested with

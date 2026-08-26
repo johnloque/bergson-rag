@@ -81,6 +81,7 @@ as 404s directly from `src/api/persistence.py` (FastAPI's own
 from __future__ import annotations
 
 import math
+import os
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -135,15 +136,24 @@ from src.retrieval.hybrid import hybrid_search
 from src.retrieval.reranking import DEFAULT_RERANK_CANDIDATES, rerank
 
 # Sprint 8's frontend (a separate, later branch, docs/ROADMAP.md) is a Vite
-# dev server on this default port. A single hardcoded local-dev origin is
-# sufficient at this project's current stage — not a configurable allowlist.
+# dev server on this default port. Always allowed, regardless of
+# CORS_ORIGINS below, so a locally-run `npm run dev` keeps working against
+# either a host-native or a dockerized api.
 FRONTEND_DEV_ORIGIN = "http://localhost:5173"
+
+# Sprint 9 (docs/ROADMAP.md): the dockerized frontend is a separate origin
+# (nginx on its own mapped port, e.g. http://localhost:3000) the browser
+# actually loads the app from -- not a container-to-container address, and
+# not knowable at import time the way FRONTEND_DEV_ORIGIN is, since the
+# host port is a docker-compose.yml choice. Comma-separated, additive to
+# FRONTEND_DEV_ORIGIN.
+_EXTRA_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
 
 app = FastAPI(title="bergson-rag API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_DEV_ORIGIN],
+    allow_origins=[FRONTEND_DEV_ORIGIN, *_EXTRA_ORIGINS],
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -9,6 +9,7 @@ built lazily on first request rather than at import time.
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 
 from qdrant_client import QdrantClient
@@ -17,7 +18,12 @@ from src.indexing.embeddings import DenseEmbedder, SparseEmbedder
 from src.indexing.qdrant_index import COLLECTION_NAME
 from src.retrieval.reranking import CrossEncoderReranker
 
-QDRANT_URL = "http://localhost:6333"
+# Overridable so the api container can reach Qdrant by its internal Docker
+# service name (QDRANT_URL=http://qdrant:6333, docker-compose.yml) --
+# "localhost" inside that container would mean the api container itself,
+# not the qdrant one. Defaults to the non-Docker dev setup (docker-compose
+# up qdrant, published on the host's localhost).
+QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
 
 
 @lru_cache(maxsize=1)

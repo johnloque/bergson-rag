@@ -22,6 +22,12 @@ dependencies = [
     "fastapi==0.141.1",
     "fastembed==0.8.0",
     "fr-core-news-lg==3.8.0",
+    # Already resolved transitively (litellm, qdrant-client, ...) but now
+    # imported directly by src/api/ml_client.py (feat/native-ml-service) --
+    # promoted to a direct dependency for the same reason torch was, below:
+    # a name only ever pulled in transitively isn't a dependency this
+    # project's own pyproject.toml can rely on staying resolved.
+    "httpx==0.28.1",
     "langchain-community==0.3.30",
     "langchain-litellm==0.7.0",
     "litellm==1.97.0",

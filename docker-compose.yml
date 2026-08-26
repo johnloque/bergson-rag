@@ -83,6 +83,20 @@ services:
       # Override to http://ollama:11434 when running with the
       # `with-ollama` Compose profile instead (`make run-with-ollama`).
       OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://host.docker.internal:11434}
+      # feat/native-ml-service (docs/dockerization.md): same native-by-
+      # default, containerized-opt-in split as OLLAMA_API_BASE above, now
+      # applied to dense/sparse embedding and cross-encoder reranking (the
+      # ~31x CPU-in-container slowdown measured for reranking alone). No
+      # `ml_service` service block exists in this file -- it's started
+      # natively (`make setup-ml-service` / scripts/setup_ml_service.sh),
+      # never containerized by default. Set here (host.docker.internal --
+      # same host.docker.internal:host-gateway extra_hosts entry below
+      # already makes this resolve) so `api` reaches it by default; a
+      # fully-containerized stack is still possible by simply not running
+      # that script and overriding this to an empty string, which falls
+      # back to src/api/dependencies.py's pre-existing in-process model
+      # loading.
+      ML_SERVICE_URL: ${ML_SERVICE_URL:-http://host.docker.internal:8100}
       # Additive to FRONTEND_DEV_ORIGIN (src/api/main.py), which stays
       # hardcoded for the non-Docker `npm run dev` workflow. Must match
       # the frontend service's host-mapped port below.

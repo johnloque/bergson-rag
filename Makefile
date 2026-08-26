@@ -1,4 +1,4 @@
-.PHONY: fetch-data build-index setup-ollama run run-with-ollama quickstart test-connectivity test-frontend-arg smoke-test
+.PHONY: fetch-data build-index setup-ollama setup-ml-service run run-with-ollama quickstart test-connectivity test-frontend-arg smoke-test
 
 # Fetches the paragraph-level XML corpus (scripts/fetch_corpus.sh). First
 # step, no other dependency.
@@ -22,14 +22,27 @@ build-index:
 setup-ollama:
 	./scripts/setup_ollama.sh
 
+# Native ml_service setup (docs/dockerization.md, feat/native-ml-service) --
+# the fast, default path for dense/sparse embedding and cross-encoder
+# reranking: installs no new software (deps already declared in
+# pyproject.toml), just starts `uvicorn` directly on the host (Metal-
+# accelerated on Apple Silicon) and verifies all three endpoints with real
+# requests. NOT Docker-based -- no service block for this exists in
+# docker-compose.yml. See scripts/setup_ml_service.sh.
+setup-ml-service:
+	./scripts/setup_ml_service.sh
+
 # Brings up qdrant, api, and frontend only, building any image that's
 # missing or stale -- the `ollama` service is gated behind the
 # `with-ollama` Compose profile (docker-compose.yml) and does NOT start
 # here. api talks to native host Ollama via OLLAMA_API_BASE, which
 # defaults to http://host.docker.internal:11434 (see `make setup-ollama`,
-# above). api won't actually start serving until qdrant reports healthy,
-# and frontend won't start until api is healthy in turn -- no manual wait
-# needed here.
+# above), and to native ml_service via ML_SERVICE_URL, which defaults to
+# http://host.docker.internal:8100 (see `make setup-ml-service`, above) --
+# there is no ml_service equivalent of `ollama`'s Compose profile, since
+# this service is never containerized at all, opt-in or otherwise. api
+# won't actually start serving until qdrant reports healthy, and frontend
+# won't start until api is healthy in turn -- no manual wait needed here.
 run:
 	docker compose up -d --build
 
@@ -46,18 +59,18 @@ run-with-ollama:
 	docker compose exec ollama ollama pull mistral
 
 # Dependency order actually implemented: fetch-data -> build-index ->
-# setup-ollama -> run.
+# setup-ollama -> setup-ml-service -> run.
 #   - build-index must follow fetch-data: it ingests data/raw/corpus,
 #     which doesn't exist until fetch-data runs.
 #   - build-index must precede a *useful* run: an api container against an
 #     empty Qdrant collection starts and reports healthy fine, it just has
 #     nothing to retrieve.
-#   - setup-ollama only needs to finish before a real /generate call --
-#     api's own healthcheck (GET /docs, no LLM call involved) starts and
-#     reports healthy either way -- but it's ordered before `run` here so
-#     `make quickstart` leaves a fully working stack with no follow-up
-#     step required.
-quickstart: fetch-data build-index setup-ollama run
+#   - setup-ollama / setup-ml-service only need to finish before a real
+#     /generate or /retrieve call -- api's own healthcheck (GET /docs, no
+#     model call involved) starts and reports healthy either way -- but
+#     both are ordered before `run` here so `make quickstart` leaves a
+#     fully working stack with no follow-up step required.
+quickstart: fetch-data build-index setup-ollama setup-ml-service run
 	@echo ""
 	@echo "Stack is up: frontend http://localhost:3000, api http://localhost:8000"
 	@echo "Run 'make smoke-test' to verify the full retrieve -> generate chain."

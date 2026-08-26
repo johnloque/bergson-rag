@@ -54,7 +54,9 @@ It deliberately does not attempt:
 🚧 In development — Sprint 9 (Integration and bootstrap) complete: the
 whole stack (Qdrant, Ollama, API, frontend) runs via Docker Compose, with
 Ollama itself defaulting to a fast, native (non-Docker) install rather
-than a container (`fix/ollama-native-default`, see below).
+than a container (`fix/ollama-native-default`), and the same split now
+also applied to dense/sparse embedding and cross-encoder reranking via a
+native `ml_service` process (`feat/native-ml-service`, see below).
 See [`docs/ROADMAP.md`](docs/ROADMAP.md) for architecture details,
 evaluation methodology, and sprint breakdown.
 
@@ -64,30 +66,39 @@ Requires Docker, `uv`, and `git`. On macOS, also requires (or installs via
 Homebrew) native Ollama; on Linux, the official Ollama install script.
 
 ```sh
-make quickstart   # fetch corpus -> build index -> setup native Ollama -> start qdrant/api/frontend
+make quickstart   # fetch corpus -> build index -> setup native Ollama -> setup native ml_service -> start qdrant/api/frontend
 ```
 
 This chains `fetch-data` (clones the source XML), `build-index` (runs
 ingestion + indexing against a `qdrant` container, on the host via `uv
 run`), `setup-ollama` (`scripts/setup_ollama.sh` — installs/starts Ollama
-directly on the host, not in Docker, and pulls `mistral` into it), and
-`run` (`docker compose up -d --build` — `qdrant`, `api`, `frontend`; the
-containerized `ollama` service does *not* start by default). Once it
-finishes: frontend at `http://localhost:3000`, API at
-`http://localhost:8000`, talking to native host Ollama
-(Metal-accelerated on Apple Silicon). See `docs/dockerization.md` for the
-exact dependency order and what each Makefile target does, and
-`Makefile`/`docker-compose.yml` directly for the underlying commands.
+directly on the host, not in Docker, and pulls `mistral` into it),
+`setup-ml-service` (`scripts/setup_ml_service.sh` — starts the dense/sparse
+embedding + cross-encoder reranking service directly on the host, also not
+in Docker), and `run` (`docker compose up -d --build` — `qdrant`, `api`,
+`frontend`; neither the containerized `ollama` service nor any
+containerized `ml_service` starts by default — the latter has no
+containerized form at all, see below). Once it finishes: frontend at
+`http://localhost:3000`, API at `http://localhost:8000`, talking to native
+host Ollama and native host `ml_service` (both Metal-accelerated on Apple
+Silicon). See `docs/dockerization.md` for the exact dependency order and
+what each Makefile target does, and `Makefile`/`docker-compose.yml`
+directly for the underlying commands.
 
-### Why native Ollama is the default (`fix/ollama-native-default`)
+### Why native Ollama and native ml_service are the default (`fix/ollama-native-default`, `feat/native-ml-service`)
 
 Docker Desktop on Apple Silicon has no Metal (GPU) passthrough into its
-Linux VM — a containerized Ollama is always CPU-only there, regardless of
-Compose config, and was measured ~3-5x slower than native host Ollama for
-the same generation call. `make quickstart` / `make run` reflect that:
-native Ollama (`make setup-ollama`) is the default, and the containerized
-`ollama` service is gated behind a Compose profile so it never starts
-unless asked for explicitly:
+Linux VM. Containerized Ollama is always CPU-only there, regardless of
+Compose config — measured ~3-5x slower than native host Ollama for the
+same generation call. The same root cause hits the API's own dense
+embedder, sparse embedder, and cross-encoder reranker (`sentence-transformers`/
+`fastembed`, none of which pin a device) — measured directly for the
+reranker alone: **~31x slower containerized (258s) than native (8.3s)**
+for the same 15-candidate batch (`docs/dockerization.md`). `make
+quickstart` / `make run` reflect both findings the same way: native Ollama
+(`make setup-ollama`) and native `ml_service` (`make setup-ml-service`)
+are the defaults. The containerized `ollama` service is gated behind a
+Compose profile so it never starts unless asked for explicitly:
 
 ```sh
 make run-with-ollama   # opt-in fallback: containerized Ollama, CPU-only, slower
@@ -97,14 +108,18 @@ Useful when a usable host Ollama install isn't an option (CI, a
 locked-down Linux box, a quick one-off clone) — see `docs/dockerization.md`
 for the full mechanism (the `with-ollama` Compose profile, and how
 `OLLAMA_API_BASE` switches between `host.docker.internal` and the
-internal `ollama` service name).
+internal `ollama` service name). `ml_service` has no equivalent
+containerized fallback service at all — its fallback is the in-process
+model loading `api` already had before this branch, reached simply by not
+running `make setup-ml-service` and leaving `ML_SERVICE_URL` unset/empty
+(`src/api/dependencies.py`).
 
-### Faster local dev (everything native, not just Ollama)
+### Faster local dev (everything native, not just Ollama/ml_service)
 
-The Docker stack (`qdrant`/`api`/`frontend` containerized, Ollama native)
-is for reproducibility ("clone and run one command"), not necessarily the
-fastest loop for active backend/frontend iteration. For that, run
-everything except Qdrant directly on the host instead:
+The Docker stack (`qdrant`/`api`/`frontend` containerized, Ollama and
+`ml_service` native) is for reproducibility ("clone and run one command"),
+not necessarily the fastest loop for active backend/frontend iteration.
+For that, run everything except Qdrant directly on the host instead:
 
 ```sh
 docker compose up -d qdrant        # keep Qdrant containerized
@@ -114,13 +129,19 @@ cd frontend && npm run dev         # http://localhost:5173
 ```
 
 No env var overrides needed — `QDRANT_URL`/`OLLAMA_API_BASE` default to
-`localhost` (`src/api/dependencies.py`, litellm's own default), the
-frontend's dev-mode `VITE_API_BASE` fallback is already
-`http://localhost:8000` (`frontend/src/api/client.ts`), and the API's CORS
-allowlist already includes the Vite dev server origin unconditionally
-(`FRONTEND_DEV_ORIGIN`, `src/api/main.py`) regardless of `CORS_ORIGINS`.
-This is exactly the pre-Sprint-9 dev flow; Sprint 9 only added the
-containerized path on top of it, it didn't replace it.
+`localhost` (`src/api/dependencies.py`, litellm's own default), and
+`ML_SERVICE_URL` defaults to empty (`src/api/dependencies.py`), which
+means `api` loads the dense embedder, sparse embedder, and cross-encoder
+reranker in-process directly, exactly as it always has — no separate
+`make setup-ml-service` call needed for this flow at all, since a bare
+host `uvicorn` process already gets Metal acceleration for these models
+without going through a second service. The frontend's dev-mode
+`VITE_API_BASE` fallback is already `http://localhost:8000`
+(`frontend/src/api/client.ts`), and the API's CORS allowlist already
+includes the Vite dev server origin unconditionally (`FRONTEND_DEV_ORIGIN`,
+`src/api/main.py`) regardless of `CORS_ORIGINS`. This is exactly the
+pre-Sprint-9 dev flow; Sprint 9 only added the containerized path on top
+of it, it didn't replace it.
 
 ## Stack
 
@@ -141,6 +162,10 @@ containerized path on top of it, it didn't replace it.
 - SQLite — conversation history (questions, answers, curated chunk
   selections, requested relevance judgments); fast-follow, not required
   for the first working version
+- `ml_service` — standalone native FastAPI process serving the dense
+  embedder, sparse embedder, and cross-encoder reranker
+  (`feat/native-ml-service`); `api` calls it over HTTP when
+  `ML_SERVICE_URL` is set, otherwise loads the same models in-process
 
 **Frontend**
 - React (Vite) — inspect → explain → curate → regenerate flow

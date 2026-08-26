@@ -108,6 +108,77 @@ at all — `uv`'s `tool.uv.sources` overrides apply to packages your own
 `pyproject.toml` requests directly, not to a name that only ever shows up
 transitively.
 
+## Dense embedding, sparse embedding, and cross-encoder reranking: native by default, containerized opt-in (`feat/native-ml-service`)
+
+**The finding.** Already established above, and reproduced in isolation
+with hard numbers in "`/retrieve` reranking, reproduced in isolation
+(`fix/model-caching`)": the same Metal-passthrough gap that motivated
+`fix/ollama-native-default` for generation applies identically to
+`DenseEmbedder`, `SparseEmbedder`, and `CrossEncoderReranker`
+(`src/indexing/embeddings.py`, `src/retrieval/reranking.py`) — none of
+them pin a device, so `sentence-transformers`/`fastembed` auto-select
+Metal (MPS) natively but silently fall back to CPU inside a container.
+Measured directly for the cross-encoder reranker alone, on identical
+model/revision/candidates: **8.330s native (MPS) vs. 258.220s
+containerized (CPU) — ~31x**. This branch applies the same fix already
+shipped for Ollama to these three models.
+
+**The fix: the same split, not a new one.** A new standalone service,
+`src/ml_service/` (separate from `src/api/` — see its module docstring),
+loads all three models once at startup and exposes them over HTTP
+(`POST /embed/dense`, `POST /embed/sparse`, `POST /rerank`). It runs
+**natively only** — there is no service block for it in
+`docker-compose.yml` at all, not even an opt-in one behind a Compose
+profile like `ollama`'s `with-ollama`: unlike Ollama, this project has no
+reason to offer a containerized fallback for these three models
+specifically, since the in-process loading `api` already had before this
+branch (`src/indexing/embeddings.py`, `src/retrieval/reranking.py`
+instantiated directly) *is* that fallback, already shipped, already the
+default for anyone who doesn't run the new setup script. Started via
+`make setup-ml-service` (`scripts/setup_ml_service.sh`, mirrors
+`scripts/setup_ollama.sh`'s conventions — backgrounded via `nohup ... &
+disown`, verified at the end with a real request to each of the three
+endpoints rather than a successful process start).
+
+**The mechanism — `ML_SERVICE_URL` is environment-configurable**, same
+shape as `OLLAMA_API_BASE`. `docker-compose.yml`'s `api.environment.ML_SERVICE_URL`
+defaults to `http://host.docker.internal:8100` (native `ml_service`,
+resolved via the same `host.docker.internal:host-gateway` `extra_hosts`
+entry already added for Ollama). `src/api/dependencies.py` reads it at
+import time; unset/empty (a plain host `uv run uvicorn` dev process, with
+no Docker involved) keeps the pre-existing in-process model loading —
+this module's own default is the empty string, deliberately *not*
+`http://host.docker.internal:8100`, since that default belongs to the
+containerized profile in `docker-compose.yml`, not to a bare host dev
+process that never asked to talk to Docker-anything. `src/api/ml_client.py`
+supplies three thin wrapper classes (`RemoteDenseEmbedder`,
+`RemoteSparseEmbedder`, `RemoteCrossEncoderReranker`) implementing exactly
+the subset of `DenseEmbedder`/`SparseEmbedder`/`CrossEncoderReranker`'s
+interface that `src/retrieval/hybrid.py`/`src/retrieval/reranking.py`
+actually call (`.embed()`, `.embed_query()`, `.score()`) — so
+`get_dense_embedder()` etc. in `dependencies.py` can hand either the local
+model or the remote client to the same call sites with zero branching
+downstream in `hybrid_search`/`rerank` themselves.
+
+**Only `/retrieve` is affected.** Per this project's architecture,
+`/retrieve` (`src/api/main.py`) is the only endpoint that calls
+`get_dense_embedder()` / `get_sparse_embedder()` / `get_reranker()` at
+request time — `/generate`, `/evaluate`, and `/judge-chunk` operate on
+chunks already retrieved (client-resent `ChunkInput`s or DB-persisted
+rows) and never re-embed or re-rerank anything. Indexing
+(`scripts/build_index.py`, `src/indexing/indexer.py`) instantiates
+`DenseEmbedder`/`SparseEmbedder` directly too, but that already runs
+natively via `uv run` (`make build-index`) and never goes through `api`
+or `ml_service` at all — so `ml_service`'s `/embed/sparse` only ever needs
+`SparseEmbedder.embed_query` (query-side, flat presence weighting), never
+`.embed` (document-side, TF/length-saturation weighting) — see
+`src/ml_service/main.py`'s module docstring.
+
+**`hf_cache` (the named volume already added for `api`'s own model
+downloads) is not needed for `ml_service`** — it runs natively, using the
+host's own `~/.cache/huggingface` directly, no container involved to lose
+its cache on recreation.
+
 ## CRITICAL: `VITE_API_BASE` must be a browser-reachable URL, baked in at build time
 
 The frontend runs in the user's browser, never inside the Docker network —
@@ -190,28 +261,36 @@ the mirror-image case in the opposite direction — see above, and
 
 ## Makefile — actual dependency order implemented
 
-`fetch-data → build-index → setup-ollama → run` (`quickstart` chains
-exactly this). `build-index` must follow `fetch-data` (it ingests
-`data/raw/corpus`, which doesn't exist until fetched) and precede a
-*useful* `run` (an `api` container against an empty Qdrant collection
-starts and passes its healthcheck fine, it just has nothing to retrieve).
-`build-index` itself runs Sprint 1 ingestion + Sprint 2 indexing on the
-**host** via `uv run` (not inside a container — these scripts need the
-dev venv's spaCy model, and reach Qdrant over its published host port),
-starting `qdrant` alone first if it isn't already running. `setup-ollama`
-(`scripts/setup_ollama.sh`, `fix/ollama-native-default` — not
-Docker-based) installs/starts native host Ollama and pulls `mistral` into
-it; nothing actually breaks if it runs any time before a real
-`/generate` call rather than strictly before `run` — `api`'s own
-healthcheck (`GET /docs`) never calls the LLM, so `api` starts and
-reports healthy whether or not a model has been pulled yet — but it's
-ordered before `run` in `quickstart` so the chain leaves a fully working
-stack with no follow-up step required. The containerized fallback path
-(`make run-with-ollama`) has its own self-contained order instead:
-`docker compose --profile with-ollama up -d --build` (with
-`OLLAMA_API_BASE=http://ollama:11434` set for that invocation) then
-`docker compose exec ollama ollama pull mistral` — it isn't part of
-`quickstart`, since native is the default.
+`fetch-data → build-index → setup-ollama → setup-ml-service → run`
+(`quickstart` chains exactly this). `build-index` must follow `fetch-data`
+(it ingests `data/raw/corpus`, which doesn't exist until fetched) and
+precede a *useful* `run` (an `api` container against an empty Qdrant
+collection starts and passes its healthcheck fine, it just has nothing to
+retrieve). `build-index` itself runs Sprint 1 ingestion + Sprint 2
+indexing on the **host** via `uv run` (not inside a container — these
+scripts need the dev venv's spaCy model, and reach Qdrant over its
+published host port), starting `qdrant` alone first if it isn't already
+running. `setup-ollama` (`scripts/setup_ollama.sh`,
+`fix/ollama-native-default` — not Docker-based) installs/starts native
+host Ollama and pulls `mistral` into it. `setup-ml-service`
+(`scripts/setup_ml_service.sh`, `feat/native-ml-service` — likewise not
+Docker-based) starts the native `ml_service` (dense/sparse embedding,
+cross-encoder reranking) in the background and verifies all three of its
+endpoints with real requests. Neither needs to finish strictly before
+`run` — `api`'s own healthcheck (`GET /docs`) calls neither the LLM nor
+any of the three ml_service-backed models, so `api` starts and reports
+healthy either way — but both are ordered before `run` in `quickstart` so
+the chain leaves a fully working stack with no follow-up step required.
+The containerized Ollama fallback path (`make run-with-ollama`) has its
+own self-contained order instead: `docker compose --profile with-ollama
+up -d --build` (with `OLLAMA_API_BASE=http://ollama:11434` set for that
+invocation) then `docker compose exec ollama ollama pull mistral` — it
+isn't part of `quickstart`, since native is the default. There is no
+equivalent containerized fallback for `ml_service` at all (see "Dense
+embedding, sparse embedding, and cross-encoder reranking" above) — the
+in-process model loading `api` already had before `feat/native-ml-service`
+*is* the fallback, reached simply by not running `setup-ml-service` and
+leaving `ML_SERVICE_URL` unset/empty.
 
 ## Observed CPU-only latency (containerized path) — the measurement behind `fix/ollama-native-default`
 

@@ -264,6 +264,84 @@ every container recreation. Fixed by adding an `hf_cache` named volume
 `down -v`, same as `qdrant_data`/`ollama_data`), so only the very first
 run after a fresh `docker compose up --build` pays the download cost.
 
+### `/retrieve` reranking, reproduced in isolation (`fix/model-caching`)
+
+A later investigation (unrelated to Ollama — no LLM call in the loop at
+all) hit the exact same root cause above from a different symptom: a
+plain `POST /retrieve` taking 269s end to end. Reported here because the
+diagnostic method matters as much as the result — every step below used
+direct measurement, not an indirect signal, and each of the four
+hypotheses below was ruled out (or confirmed) by a specific measurement,
+not inference:
+
+- **Not a caching bug.** The `lru_cache`-wrapped singletons in
+  `src/api/dependencies.py` behave as intended — one instance per process,
+  reused across requests.
+- **Not healthcheck-driven load.** `docker stats`, sampled continuously
+  through the call (not a single snapshot), shows `qdrant` flat at ~0% CPU
+  for the entire request; the api container's own `GET /docs` healthcheck
+  traffic is lightweight and doesn't correlate with the CPU spike window.
+- **Not an oversized candidate set.** `DEFAULT_RERANK_CANDIDATES = 15`
+  (`src/retrieval/reranking.py`) — confirmed correct.
+- **Not a per-pair `CrossEncoder` loop.** `CrossEncoderReranker.score`
+  calls `self._model.predict([(query, text) for text in texts])` once, on
+  the full batch — read directly from source, not paraphrased. Confirmed
+  further that `sentence-transformers` 5.7.0's `CrossEncoder.predict` is
+  itself decorated `@torch.inference_mode()`, so gradient tracking is off;
+  the memory growth below is not an accumulated autograd graph.
+- **Not a misconfigured/oversized pinned revision.** The pinned
+  `bge_reranker_v2_m3_revision` resolves to the standard
+  `BAAI/bge-reranker-v2-m3` checkpoint — `XLMRobertaForSequenceClassification`,
+  hidden_size 1024, 24 layers, 16 heads, 567,755,777 params, `torch_dtype`
+  float32, 2.27GB weight file — exactly the expected base model, not an
+  unexpectedly larger or non-quantized variant.
+- **Candidate texts checked directly, not assumed.** Tokenized the 15
+  real candidates from a live query with the actual reranker tokenizer:
+  27–1,905 tokens per (query, passage) pair, 15,220 tokens total, none
+  truncated (`model_max_length` = 8192). No pathological input.
+
+With every code-level explanation ruled out, stage-by-stage wall-clock
+timing (temporary `time.perf_counter()` instrumentation in
+`hybrid_search` and the `/retrieve` handler, reverted after use — this
+isn't code that should live in the module) isolated the cost to one
+stage:
+
+| Stage | Time |
+|---|---|
+| Dense query embedding | 0.491s |
+| Sparse query embedding | 5.676s |
+| Qdrant prefetch + RRF query | 0.052s |
+| **Cross-encoder reranking (15 candidates)** | **258.220s** |
+| `/retrieve` total | 269.305s |
+
+`docker stats` during that same window: `bergson-rag-api-1` pegged at
+380–413% CPU (all 4 available torch threads) and RSS climbing 883MB →
+4.9GB for the exact duration of the reranking stage, dropping to idle CPU
+the instant it finished (RSS did not release — expected allocator
+behavior for one large fp32 CPU forward pass, not a leak). `qdrant`
+stayed flat the entire time.
+
+This reproduces the root cause documented above, isolated to reranking
+specifically with hard numbers instead of an inferred connection: neither
+`DenseEmbedder` nor `CrossEncoderReranker` pins a `device`, so
+`sentence-transformers` auto-selects Metal (MPS) on the native host but
+silently falls back to CPU inside the container (no Metal passthrough).
+Confirmed empirically, not just by re-reading the finding above — running
+the identical model/revision/candidates natively on the host,
+`sentence-transformers` auto-selected `mps:0` and the same `predict()`
+call over the same 15 pairs took **8.330s**, ~31x faster than the 258.220s
+measured in-container.
+
+No code defect exists in `src/retrieval/reranking.py` — `predict()` is
+called exactly as the library intends, on the full batch. This is the
+same category of tradeoff as the Ollama native-vs-containerized decision
+above, not a new problem: accept CPU-only reranking as the cost of
+running `api` in Docker on Apple Silicon (as today), or run `api` natively
+per README's "Faster local dev" section to get MPS back. One
+disproportionate secondary number surfaced along the way and is not yet
+investigated: sparse query embedding alone took 5.676s for one query,
+worth a separate look.
+
 ## Tests
 
 `scripts/test_frontend_arg.sh` (the build-ARG regression test, above) and

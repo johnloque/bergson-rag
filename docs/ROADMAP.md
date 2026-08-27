@@ -290,6 +290,18 @@ coverage: [`docs/dockerization.md`](dockerization.md).
 [`docs/dockerization.md`](dockerization.md)** (`fix/ollama-native-default`,
 superseding this sprint's original "containerize Ollama by default").
 
+**Dense/sparse embedding + cross-encoder reranking: native by default,
+containerized opt-in — see [`docs/dockerization.md`](dockerization.md)**
+(`feat/native-ml-service`). Same rationale as Ollama above, extended to
+`src/indexing/embeddings.py` and the cross-encoder reranker: measured
+8.3s (native MPS) vs. 258s (containerized CPU) for the reranker alone.
+New `src/ml_service/` FastAPI app runs these natively; `api` reaches it
+via `ML_SERVICE_URL` (defaults to `http://host.docker.internal:8100`,
+same shape as `OLLAMA_API_BASE`), with no dockerized fallback service —
+unset/empty `ML_SERVICE_URL` falls back to `api`'s pre-existing
+in-process model loading. `make setup-ml-service` starts it, folded into
+`quickstart`.
+
 ### v0 retrospective — checkpoint before Sprint 10
 
 Sprints 0–9 shipped a complete, dockerized, locally-runnable v0 (retrieval
@@ -418,6 +430,7 @@ bergson-rag/
 │   ├── retrieval/         # reformulation, hybrid, reranking
 │   ├── generation/         # prompts, anti-hallucination validation
 │   ├── api/                # FastAPI endpoints — Sprint 7
+│   ├── ml_service/         # native embedding/reranking service — Sprint 9
 │   └── mcp_server/         # Sprint 13
 ├── frontend/               # React (Vite) UI — Sprint 8
 ├── eval/

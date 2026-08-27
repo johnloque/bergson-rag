@@ -156,16 +156,33 @@ def _load_chunk_input(client: QdrantClient, chunk_id: str, score: float = 1.0) -
     }
 
 
-def _create_turn(engine, query: str) -> int:
+def _create_turn(
+    engine,
+    query: str,
+    conversation_id: int | None = None,
+    retrieved_chunks: list[tuple[str, float]] | None = None,
+) -> int:
+    """Direct DB insertion of a turn, standing in for a prior /retrieve call
+    (docs/ROADMAP.md, Sprint 10 turn-lifecycle fix — /generate no longer
+    creates turns itself). `retrieved_chunks` optionally seeds
+    `retrieved_chunks` rows, mirroring what /retrieve now persists."""
     with Session(engine) as session:
-        conversation = Conversation()
-        session.add(conversation)
-        session.commit()
-        session.refresh(conversation)
+        if conversation_id is not None:
+            conversation = session.get(Conversation, conversation_id)
+        else:
+            conversation = Conversation()
+            session.add(conversation)
+            session.commit()
+            session.refresh(conversation)
         turn = Turn(conversation_id=conversation.id, query=query)
         session.add(turn)
         session.commit()
         session.refresh(turn)
+        for rank, (chunk_id, score) in enumerate(retrieved_chunks or []):
+            session.add(
+                RetrievedChunkRow(turn_id=turn.id, chunk_id=chunk_id, rank=rank, score=score)
+            )
+        session.commit()
         return turn.id
 
 
@@ -229,7 +246,7 @@ def _fake_completion(captured: list, chunk_id: str = Q007_CHUNK_ID) -> object:
 @_qdrant_skip
 @_judge_skip
 def test_persisted_chunk_judgment_auto_loaded_into_regeneration_prompt(
-    client, qdrant_client, monkeypatch
+    client, qdrant_client, engine, monkeypatch
 ):
     """A chunk judged via /judge-chunk on a turn is auto-loaded into that
     turn's next /generate call when chunk_judgments is omitted — and its
@@ -239,10 +256,10 @@ def test_persisted_chunk_judgment_auto_loaded_into_regeneration_prompt(
     monkeypatch.setattr(litellm, "completion", _fake_completion(captured))
 
     chunk = _load_chunk_input(qdrant_client, Q007_CHUNK_ID)
+    turn_id = _create_turn(engine, Q007_QUERY)
 
-    first = client.post("/generate", json={"query": Q007_QUERY, "chunks": [chunk]})
+    first = client.post("/generate", json={"turn_id": turn_id, "chunks": [chunk]})
     assert first.status_code == 200
-    turn_id = first.json()["turn_id"]
     # No chunk_judgments applied yet.
     assert CHUNK_JUDGMENT_INSTRUCTION not in captured[-1][-1]["content"]
 
@@ -270,7 +287,7 @@ def test_persisted_chunk_judgment_auto_loaded_into_regeneration_prompt(
 @_qdrant_skip
 @_judge_skip
 def test_generate_explicit_chunk_judgments_overrides_persisted_default(
-    client, qdrant_client, monkeypatch
+    client, qdrant_client, engine, monkeypatch
 ):
     """A turn with a persisted judgment for chunk A, then a /generate call
     on that turn_id with an explicit (even empty) chunk_judgments — the
@@ -280,8 +297,9 @@ def test_generate_explicit_chunk_judgments_overrides_persisted_default(
     monkeypatch.setattr(litellm, "completion", _fake_completion(captured))
 
     chunk = _load_chunk_input(qdrant_client, Q007_CHUNK_ID)
-    first = client.post("/generate", json={"query": Q007_QUERY, "chunks": [chunk]})
-    turn_id = first.json()["turn_id"]
+    turn_id = _create_turn(engine, Q007_QUERY)
+    first = client.post("/generate", json={"turn_id": turn_id, "chunks": [chunk]})
+    assert first.status_code == 200
 
     monkeypatch.setattr(litellm, "completion", _REAL_LITELLM_COMPLETION)
     client.post("/judge-chunk", json={"query": Q007_QUERY, "chunk": chunk, "turn_id": turn_id})
@@ -290,7 +308,6 @@ def test_generate_explicit_chunk_judgments_overrides_persisted_default(
     second = client.post(
         "/generate",
         json={
-            "query": Q007_QUERY,
             "chunks": [chunk],
             "turn_id": turn_id,
             "chunk_judgments": {},
@@ -320,8 +337,9 @@ def test_generate_persists_correct_retrieval_confidence_tier(
         [chunk_input_to_generation_chunk(ChunkInput(**chunk))]
     )
 
+    turn_id = _create_turn(engine, Q007_QUERY)
     monkeypatch.setattr(litellm, "completion", _fake_completion([], chunk_id=Q007_CHUNK_ID))
-    response = client.post("/generate", json={"query": Q007_QUERY, "chunks": [chunk]})
+    response = client.post("/generate", json={"turn_id": turn_id, "chunks": [chunk]})
     assert response.status_code == 200
     generation_id = response.json()["generation_id"]
 
@@ -362,19 +380,22 @@ def test_evaluate_via_generation_id_flags_known_hallucination(
 @_qdrant_skip
 @_judge_skip
 def test_get_turn_assembles_full_state_after_generate_evaluate_judge(
-    client, qdrant_client, monkeypatch
+    client, qdrant_client, engine, monkeypatch
 ):
     """The "user returns later" scenario (docs/ROADMAP.md, Sprint 6's
-    flagged risk this branch resolves): after a full generate -> evaluate
-    -> judge-chunk sequence, GET /turns/{id} must return all of it
-    correctly assembled, not just satisfy a schema check."""
+    flagged risk this branch resolves): after a full retrieve (standing in
+    here as `_create_turn`'s `retrieved_chunks`, Sprint 10 turn-lifecycle
+    fix) -> generate -> evaluate -> judge-chunk sequence, GET /turns/{id}
+    must return all of it correctly assembled, not just satisfy a schema
+    check."""
     monkeypatch.setattr(litellm, "completion", _fake_completion([], chunk_id=Q001_CHUNK_ID))
 
     chunk = _load_chunk_input(qdrant_client, Q001_CHUNK_ID)
-    generate_response = client.post("/generate", json={"query": Q001_QUERY, "chunks": [chunk]})
+    turn_id = _create_turn(engine, Q001_QUERY, retrieved_chunks=[(Q001_CHUNK_ID, chunk["score"])])
+    generate_response = client.post("/generate", json={"turn_id": turn_id, "chunks": [chunk]})
     assert generate_response.status_code == 200
     generate_body = generate_response.json()
-    turn_id = generate_body["turn_id"]
+    assert generate_body["turn_id"] == turn_id
     generation_id = generate_body["generation_id"]
 
     evaluate_response = client.post("/evaluate", json={"generation_id": generation_id})
@@ -417,28 +438,36 @@ def test_get_turn_assembles_full_state_after_generate_evaluate_judge(
 
 @_qdrant_skip
 def test_regenerate_with_excluded_chunk_keeps_it_in_retrieved_chunks(
-    client, qdrant_client, monkeypatch
+    client, qdrant_client, engine, monkeypatch
 ):
     """Regression: excluding a chunk in the UI (frontend/src/state/turnUi.tsx)
     filters it out of the *regeneration's* /generate call, but that chunk
     must still come back from GET /turns/{id} afterwards — the chunk rail's
     "excluded stays visible to re-include" contract (frontend/src/components/
     ChunkRail.tsx) depends on the turn's persisted retrieved_chunks set never
-    shrinking to just whatever the most recent generation used."""
+    shrinking to just whatever the most recent generation used. Both chunks
+    are seeded as `retrieved_chunks` up front, standing in for a prior
+    /retrieve call (docs/ROADMAP.md, Sprint 10 turn-lifecycle fix — /generate
+    itself never writes to that table any more)."""
     monkeypatch.setattr(litellm, "completion", _fake_completion([], chunk_id=Q001_CHUNK_ID))
 
     chunk_a = _load_chunk_input(qdrant_client, Q001_CHUNK_ID)
     chunk_b = _load_chunk_input(qdrant_client, Q007_CHUNK_ID)
+    turn_id = _create_turn(
+        engine,
+        Q001_QUERY,
+        retrieved_chunks=[
+            (chunk_a["chunk_id"], chunk_a["score"]),
+            (chunk_b["chunk_id"], chunk_b["score"]),
+        ],
+    )
 
-    first = client.post("/generate", json={"query": Q001_QUERY, "chunks": [chunk_a, chunk_b]})
+    first = client.post("/generate", json={"turn_id": turn_id, "chunks": [chunk_a, chunk_b]})
     assert first.status_code == 200
-    turn_id = first.json()["turn_id"]
 
     # Regenerate with chunk_b excluded — mirrors useTurnController.ts's
     # regenerate() sending only turnUi-included chunks.
-    second = client.post(
-        "/generate", json={"query": Q001_QUERY, "chunks": [chunk_a], "turn_id": turn_id}
-    )
+    second = client.post("/generate", json={"chunks": [chunk_a], "turn_id": turn_id})
     assert second.status_code == 200
 
     turn_response = client.get(f"/turns/{turn_id}")
@@ -458,18 +487,17 @@ def test_get_turn_unknown_id_returns_404(client):
 # --- GET /conversations/{id} -------------------------------------------------
 
 
-@_qdrant_skip
-def test_get_conversation_lists_its_turns(client, qdrant_client, monkeypatch):
-    monkeypatch.setattr(litellm, "completion", _fake_completion([]))
-    chunk = _load_chunk_input(qdrant_client, Q001_CHUNK_ID)
-
-    first = client.post("/generate", json={"query": Q001_QUERY, "chunks": [chunk]})
-    conversation_id = first.json()["conversation_id"]
-    second = client.post(
-        "/generate",
-        json={"query": Q007_QUERY, "chunks": [chunk], "conversation_id": conversation_id},
-    )
-    assert second.status_code == 200
+def test_get_conversation_lists_its_turns(client, engine):
+    """Two turns in one conversation — direct DB insertion via
+    `_create_turn`, standing in for two successive /retrieve calls
+    (docs/ROADMAP.md, Sprint 10 turn-lifecycle fix: /retrieve is what
+    creates turns/conversations now, not /generate), independent of Qdrant
+    or an LLM since GET /conversations/{id} only ever reads persisted
+    turn rows."""
+    turn_id_1 = _create_turn(engine, Q001_QUERY)
+    with Session(engine) as session:
+        conversation_id = session.get(Turn, turn_id_1).conversation_id
+    _create_turn(engine, Q007_QUERY, conversation_id=conversation_id)
 
     response = client.get(f"/conversations/{conversation_id}")
     assert response.status_code == 200

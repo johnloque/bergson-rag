@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { Composer } from '../components/Composer'
 import { TurnCard } from '../components/TurnCard'
+import { startOrAttachPendingConversation } from '../state/pendingConversations'
 
 interface Draft {
   key: string
@@ -17,7 +18,16 @@ interface Draft {
 export function Conversation() {
   const params = useParams()
   const conversationId = params.conversationId ? Number(params.conversationId) : undefined
+  // Present only on /new/:draftId (App.tsx) — a brand-new conversation's
+  // first submission, rendered below straight from this param rather than
+  // from `drafts` state seeded at mount: react-router reuses this same
+  // <Conversation> instance across sibling routes rendering the same
+  // component (it doesn't remount just because the matched Route changed),
+  // so anything read only once at mount time here would go stale the
+  // moment the URL's draftId changes without a fresh mount to notice it.
+  const draftId = params.draftId
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [drafts, setDrafts] = useState<Draft[]>([])
   const [pendingCount, setPendingCount] = useState(0)
 
@@ -38,6 +48,18 @@ export function Conversation() {
   // is exactly what broke chunk exclusion surviving into Régénérer. So the
   // persisted list instead skips any turn a draft already covers.
   function handleSubmit(query: string) {
+    if (conversationId === undefined && !draftId) {
+      // Brand-new conversation: register (and start) it under a stable id
+      // *before* navigating, so the sidebar's pending placeholder
+      // (Sidebar.tsx) and the browser back/forward stack both have
+      // somewhere real to point while it's still running, and the
+      // /new/:draftId page below always finds it already registered
+      // rather than needing anything passed through the navigation itself.
+      const newDraftId = crypto.randomUUID()
+      startOrAttachPendingConversation(queryClient, newDraftId, query)
+      navigate(`/new/${newDraftId}`, { replace: true })
+      return
+    }
     setPendingCount((c) => c + 1)
     setDrafts((d) => [...d, { key: crypto.randomUUID(), query }])
   }
@@ -48,6 +70,7 @@ export function Conversation() {
   // second (or later) in this conversation — the point at which the
   // no-cross-turn-context note near the input becomes relevant.
   const hasPriorTurn = persistedTurns.length + drafts.length >= 1
+  const isEmpty = !data?.turns.length && drafts.length === 0 && !draftId
 
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col gap-8 p-8">
@@ -55,6 +78,20 @@ export function Conversation() {
         {data?.turns
           .filter((t) => !draftTurnIds.has(t.turn_id))
           .map((t) => <TurnCard key={t.turn_id} turnId={t.turn_id} />)}
+
+        {draftId && (
+          <TurnCard
+            key={draftId}
+            draftId={draftId}
+            conversationId={undefined}
+            onCreated={(_turnId, newConversationId) => navigate(`/c/${newConversationId}`, { replace: true })}
+            // A stale /new/:draftId visit — the submission it pointed to
+            // already resolved (and left the pending list) or never
+            // existed. Nothing to resume; send the user to a genuinely
+            // blank composer instead of an inert page.
+            onUnknownDraft={() => navigate('/new', { replace: true })}
+          />
+        )}
 
         {drafts.map((draft) => (
           <TurnCard
@@ -71,14 +108,14 @@ export function Conversation() {
           />
         ))}
 
-        {!data?.turns.length && drafts.length === 0 && (
+        {isEmpty && (
           <p className="text-sm" style={{ color: 'var(--ink-3)' }}>
             Posez une première question pour démarrer cette conversation.
           </p>
         )}
       </div>
 
-      <Composer onSubmit={handleSubmit} disabled={pendingCount > 0} />
+      <Composer onSubmit={handleSubmit} disabled={pendingCount > 0 || Boolean(draftId)} />
 
       {hasPriorTurn && (
         <p className="-mt-4 text-xs" style={{ color: 'var(--ink-3)' }}>

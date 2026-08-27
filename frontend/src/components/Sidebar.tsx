@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { IconBook2, IconMessagePlus, IconPencil, IconTrash } from '@tabler/icons-react'
+import { IconBook2, IconLoader2, IconMessagePlus, IconPencil, IconTrash } from '@tabler/icons-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { deriveTitle } from '../lib/title'
+import { usePendingConversationsList } from '../state/pendingConversations'
 import { Wordmark } from './Wordmark'
 
 export function Sidebar() {
@@ -18,6 +19,7 @@ export function Sidebar() {
     queryKey: ['conversations'],
     queryFn: () => api.listConversations(),
   })
+  const pendingConversations = usePendingConversationsList()
 
   const renameMutation = useMutation({
     mutationFn: ({ id, title }: { id: number; title: string }) => api.renameConversation(id, title),
@@ -52,6 +54,21 @@ export function Sidebar() {
       </button>
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
+        {pendingConversations.map((pending) => (
+          <button
+            key={pending.draftId}
+            type="button"
+            onClick={() => navigate(`/new/${pending.draftId}`)}
+            className="flex items-center gap-2 rounded-md px-2 py-1.5"
+            title="Création de la conversation en cours… — cliquer pour la rouvrir"
+          >
+            <IconLoader2 size={13} className="shrink-0 animate-spin" style={{ color: 'var(--ink-3)' }} />
+            <span className="min-w-0 flex-1 truncate text-left text-xs" style={{ color: 'var(--ink-3)' }}>
+              {deriveTitle(pending.query)}
+            </span>
+          </button>
+        ))}
+
         {(data?.conversations ?? []).map((conv) => {
           const title = conv.title ?? (conv.first_query ? deriveTitle(conv.first_query) : 'Nouvelle conversation')
           const isActive = conv.conversation_id === activeConversationId

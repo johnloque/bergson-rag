@@ -54,15 +54,23 @@ here, not solved on this branch.
 
 ## `/generate`'s turn/conversation and chunk_judgments rules
 
-- No `turn_id`: creates a new turn (and a new conversation, if
-  `conversation_id` is also absent). `turn_id` present: a regeneration
-  within that existing turn (404 if unknown).
+**Superseded by Sprint 10** (`fix/turn-lifecycle-and-manual-generation`,
+[`docs/turn_lifecycle.md`](turn_lifecycle.md)): turn/conversation creation
+moved to `/retrieve`. `POST /retrieve` now takes an optional
+`conversation_id` (absent creates a new conversation) and returns
+`turn_id`/`conversation_id` alongside `chunks`, persisting the turn and its
+retrieved chunk set immediately. `POST /generate`'s `turn_id` is now
+**required** — it never creates a turn itself, whether this is the turn's
+first, manually-triggered generation or a later regeneration (404 if
+unknown) — and `query` is no longer part of the request body; it's read
+back from the persisted turn instead. The rules below otherwise stand:
+
 - `chunk_judgments` explicitly provided in the request (including an empty
   dict) is used as-is and overrides any persisted judgments for that turn.
-  Omitted (or explicit `null`) AND `turn_id` provided -> the server
-  auto-loads that turn's persisted `chunk_judgments` as the default — this
-  is what lets a plain "regenerate" click work without the client resending
-  every judgment it already made.
+  Omitted (or explicit `null`) -> the server auto-loads that turn's
+  persisted `chunk_judgments` as the default — this is what lets a plain
+  "regenerate" click work without the client resending every judgment it
+  already made.
 - Response gains `generation_id`, `turn_id`, `conversation_id`.
 
 ## Two risks this branch resolves

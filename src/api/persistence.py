@@ -26,29 +26,17 @@ from src.api.models import (
     RetrievedChunkRow,
     Turn,
 )
-from src.api.schemas import ChunkInput
+from src.api.schemas import ChunkInput, ChunkResult
 from src.generation.chunk_judgment import ChunkJudgment
 
 
-def resolve_turn(
-    session: Session,
-    conversation_id: int | None,
-    turn_id: int | None,
-    query: str,
-) -> Turn:
-    """`/generate`'s turn-resolution rule (docs/ROADMAP.md):
-    - `turn_id` given: this is a regeneration within that existing turn —
-      looked up as-is (404 if unknown), `query` is not used.
-    - `turn_id` absent, `conversation_id` given: a new turn in that
-      existing conversation (404 if `conversation_id` is unknown).
-    - both absent: a brand new conversation and its first turn.
-    """
-    if turn_id is not None:
-        turn = session.get(Turn, turn_id)
-        if turn is None:
-            raise HTTPException(status_code=404, detail=f"turn_id {turn_id} not found")
-        return turn
-
+def create_turn(session: Session, conversation_id: int | None, query: str) -> Turn:
+    """`/retrieve`'s turn-creation rule (docs/ROADMAP.md, Sprint 10
+    turn-lifecycle fix): a query always starts a brand-new turn immediately,
+    before any generation happens — `conversation_id` absent also creates a
+    new conversation; given, it must already exist (404 if unknown).
+    `/generate` never creates a turn itself any more (see `get_turn_or_404`
+    below) — it only ever attaches to one this function already created."""
     if conversation_id is not None:
         conversation = session.get(Conversation, conversation_id)
         if conversation is None:
@@ -68,14 +56,18 @@ def resolve_turn(
     return turn
 
 
-def save_retrieved_chunks(session: Session, turn_id: int, chunks: Sequence[ChunkInput]) -> None:
-    """Replaces `turn_id`'s chunk set wholesale. Callers (src/api/main.py's
-    `generate`) must only invoke this for a turn's *initial* `/generate`
-    call — a regeneration's chunk list is the client's included subset with
-    exclusions already filtered out, and saving that here would shrink the
-    turn's persisted retrieved-chunk set to just the survivors, permanently
-    losing the excluded chunks (they're tracked separately, correctly, per
-    generation via `Generation.chunk_ids`)."""
+def save_retrieved_chunks(
+    session: Session, turn_id: int, chunks: Sequence[ChunkInput] | Sequence[ChunkResult]
+) -> None:
+    """Replaces `turn_id`'s chunk set wholesale. `/retrieve` (src/api/main.py)
+    is the only caller (docs/ROADMAP.md, Sprint 10 turn-lifecycle fix) — it
+    runs exactly once per turn, right when the turn is created, so "replace
+    wholesale" and "the turn's one true retrieved-chunk set" coincide.
+    `/generate` never calls this: a regeneration's chunk list is the
+    client's included subset with exclusions already filtered out, and
+    saving that here would shrink the turn's persisted retrieved-chunk set
+    to just the survivors, permanently losing the excluded chunks (they're
+    tracked separately, correctly, per generation via `Generation.chunk_ids`)."""
     existing = session.exec(
         select(RetrievedChunkRow).where(RetrievedChunkRow.turn_id == turn_id)
     ).all()
@@ -132,7 +124,7 @@ def save_generation(
     chunk_judgments_used: dict[str, ChunkJudgment] | None,
 ) -> Generation:
     """404s if `turn_id` no longer exists — re-checked here (not just at
-    `resolve_turn`, the start of `/generate`) because the conversation may
+    `get_turn_or_404`, the start of `/generate`) because the conversation may
     have been deleted mid-request, while `generate_from_chunks` was
     running. Without this, since SQLite FKs aren't enforced (module
     docstring), the insert would silently succeed and leave an orphaned

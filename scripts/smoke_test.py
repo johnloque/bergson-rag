@@ -58,6 +58,7 @@ def _post(path: str, body: dict) -> dict:
 def main() -> None:
     print(f"Retrieving against {API_BASE} for Q002...")
     retrieve_response = _post("/retrieve", {"query": Q002_QUERY, "top_k": 5})
+    turn_id = retrieve_response["turn_id"]
     chunks = retrieve_response["chunks"]
     if not chunks:
         sys.exit("FAIL: /retrieve returned no chunks for Q002 -- is the corpus indexed?")
@@ -74,7 +75,7 @@ def main() -> None:
 
     print("Generating an answer from the retrieved chunks...")
     generate_body = {
-        "query": Q002_QUERY,
+        "turn_id": turn_id,
         "chunks": [
             {
                 "chunk_id": c["chunk_id"],

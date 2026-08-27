@@ -32,7 +32,7 @@ import pytest
 from fastapi.testclient import TestClient
 from qdrant_client import QdrantClient
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 
 from src.api.converters import chunk_input_to_generation_chunk
 from src.api.db import get_session
@@ -210,19 +210,37 @@ def _load_chunk_input(client: QdrantClient, chunk_id: str, score: float = 1.0) -
     }
 
 
-def _create_turn(engine, query: str) -> int:
-    """Direct DB insertion of a bare turn (and its conversation), bypassing
-    /generate entirely — for tests that only need a valid turn_id to anchor
-    a /judge-chunk or /evaluate call, without exercising generation itself."""
+def _create_turn(
+    engine,
+    query: str,
+    conversation_id: int | None = None,
+    retrieved_chunks: list[tuple[str, float]] | None = None,
+) -> int:
+    """Direct DB insertion of a bare turn, bypassing /retrieve entirely —
+    for tests that only need a valid turn_id to anchor a /generate,
+    /judge-chunk, or /evaluate call, without exercising retrieval itself.
+    `conversation_id` given reuses that conversation (else a new one is
+    created); `retrieved_chunks` optionally seeds `retrieved_chunks` rows,
+    mirroring what a real /retrieve call now persists for a turn
+    (docs/ROADMAP.md, Sprint 10 turn-lifecycle fix) — needed by tests that
+    check /generate never touches that table."""
     with Session(engine) as session:
-        conversation = Conversation()
-        session.add(conversation)
-        session.commit()
-        session.refresh(conversation)
+        if conversation_id is not None:
+            conversation = session.get(Conversation, conversation_id)
+        else:
+            conversation = Conversation()
+            session.add(conversation)
+            session.commit()
+            session.refresh(conversation)
         turn = Turn(conversation_id=conversation.id, query=query)
         session.add(turn)
         session.commit()
         session.refresh(turn)
+        for rank, (chunk_id, score) in enumerate(retrieved_chunks or []):
+            session.add(
+                RetrievedChunkRow(turn_id=turn.id, chunk_id=chunk_id, rank=rank, score=score)
+            )
+        session.commit()
         return turn.id
 
 
@@ -265,8 +283,52 @@ def _insert_generation(
 def test_retrieve_known_strong_query_returns_expected_chunk(client):
     response = client.post("/retrieve", json={"query": Q002_QUERY, "top_k": 5})
     assert response.status_code == 200
-    chunk_ids = {c["chunk_id"] for c in response.json()["chunks"]}
+    body = response.json()
+    chunk_ids = {c["chunk_id"] for c in body["chunks"]}
     assert chunk_ids & Q002_GOLD_CHUNK_IDS
+
+
+@_qdrant_skip
+def test_retrieve_persists_turn_and_retrieved_chunks(client, engine):
+    """docs/ROADMAP.md, Sprint 10 turn-lifecycle fix: /retrieve creates the
+    turn (and a new conversation) immediately, and the chunk set it returns
+    is already persisted — before any /generate call happens."""
+    response = client.post("/retrieve", json={"query": Q002_QUERY, "top_k": 5})
+    assert response.status_code == 200
+    body = response.json()
+    turn_id = body["turn_id"]
+    conversation_id = body["conversation_id"]
+    assert turn_id
+    assert conversation_id
+
+    with Session(engine) as session:
+        turn = session.get(Turn, turn_id)
+        assert turn is not None
+        assert turn.query == Q002_QUERY
+        assert turn.conversation_id == conversation_id
+        rows = session.exec(
+            select(RetrievedChunkRow).where(RetrievedChunkRow.turn_id == turn_id)
+        ).all()
+        assert {r.chunk_id for r in rows} == {c["chunk_id"] for c in body["chunks"]}
+
+
+@_qdrant_skip
+def test_retrieve_second_call_with_conversation_id_reuses_conversation(client, engine):
+    first = client.post("/retrieve", json={"query": Q002_QUERY, "top_k": 3})
+    conversation_id = first.json()["conversation_id"]
+
+    second = client.post(
+        "/retrieve", json={"query": Q007_QUERY, "top_k": 3, "conversation_id": conversation_id}
+    )
+    assert second.status_code == 200
+    body = second.json()
+    assert body["conversation_id"] == conversation_id
+    assert body["turn_id"] != first.json()["turn_id"]
+
+
+def test_retrieve_unknown_conversation_id_returns_404(client):
+    response = client.post("/retrieve", json={"query": Q002_QUERY, "conversation_id": 999999})
+    assert response.status_code == 404
 
 
 def test_retrieve_malformed_body_returns_422(client):
@@ -283,24 +345,29 @@ def test_retrieve_malformed_body_returns_422(client):
     ("query", "chunk_id"),
     [(Q001_QUERY, Q001_CHUNK_ID), (Q004_QUERY, Q004_CHUNK_ID)],
 )
-def test_generate_plumbing_produces_an_answer(client, qdrant_client, query, chunk_id):
+def test_generate_plumbing_produces_an_answer(client, qdrant_client, engine, query, chunk_id):
     """Confirms the endpoint plumbing end to end — not correctness of the
     generated content, that's /evaluate's job (docs/ROADMAP.md scope note).
-    Also confirms a fresh conversation/turn/generation is persisted and
-    their ids are returned (feat/api-persistence)."""
+    Also confirms the generation is persisted and its id, plus the turn's
+    own (already-existing, per Sprint 10) turn_id/conversation_id, are
+    returned. `turn_id` is created directly here (`_create_turn`), standing
+    in for a prior /retrieve call — /generate no longer creates turns
+    itself (docs/ROADMAP.md, Sprint 10 turn-lifecycle fix)."""
     chunk = _load_chunk_input(qdrant_client, chunk_id)
-    response = client.post("/generate", json={"query": query, "chunks": [chunk]})
+    turn_id = _create_turn(engine, query)
+    response = client.post("/generate", json={"turn_id": turn_id, "chunks": [chunk]})
     assert response.status_code == 200
     body = response.json()
     assert body["answer"].strip()
     assert body["model_used"]
     assert body["generation_id"]
-    assert body["turn_id"]
+    assert body["turn_id"] == turn_id
     assert body["conversation_id"]
 
 
-def test_generate_malformed_body_returns_422(client):
-    assert client.post("/generate", json={"query": Q001_QUERY, "chunks": []}).status_code == 422
+def test_generate_malformed_body_returns_422(client, engine):
+    turn_id = _create_turn(engine, Q001_QUERY)
+    assert client.post("/generate", json={"turn_id": turn_id, "chunks": []}).status_code == 422
     assert (
         client.post("/generate", json={"chunks": [{"chunk_id": "x", "text": "y"}]}).status_code
         == 422
@@ -308,7 +375,7 @@ def test_generate_malformed_body_returns_422(client):
 
 
 @_qdrant_skip
-def test_generate_unreachable_provider_returns_503(client, qdrant_client, monkeypatch):
+def test_generate_unreachable_provider_returns_503(client, qdrant_client, engine, monkeypatch):
     def _raise(*args, **kwargs):
         raise litellm.exceptions.APIConnectionError(
             message="Connection refused", llm_provider="ollama_chat", model="mistral"
@@ -316,7 +383,8 @@ def test_generate_unreachable_provider_returns_503(client, qdrant_client, monkey
 
     monkeypatch.setattr(litellm, "completion", _raise)
     chunk = _load_chunk_input(qdrant_client, Q001_CHUNK_ID)
-    response = client.post("/generate", json={"query": Q001_QUERY, "chunks": [chunk]})
+    turn_id = _create_turn(engine, Q001_QUERY)
+    response = client.post("/generate", json={"turn_id": turn_id, "chunks": [chunk]})
     assert response.status_code == 503
     assert "ollama_chat" in response.json()["detail"]
     assert "mistral" in response.json()["detail"]
@@ -325,9 +393,7 @@ def test_generate_unreachable_provider_returns_503(client, qdrant_client, monkey
 @_qdrant_skip
 def test_generate_unknown_turn_id_returns_404(client, qdrant_client):
     chunk = _load_chunk_input(qdrant_client, Q001_CHUNK_ID)
-    response = client.post(
-        "/generate", json={"query": Q001_QUERY, "chunks": [chunk], "turn_id": 999999}
-    )
+    response = client.post("/generate", json={"chunks": [chunk], "turn_id": 999999})
     assert response.status_code == 404
 
 
@@ -382,7 +448,8 @@ def test_confidence_preview_and_generate_persisted_tier_agree(client, qdrant_cli
     assert preview_response.status_code == 200
     preview_tier = preview_response.json()["retrieval_confidence_tier"]
 
-    generate_response = client.post("/generate", json={"query": Q002_QUERY, "chunks": [chunk]})
+    turn_id = _create_turn(engine, Q002_QUERY)
+    generate_response = client.post("/generate", json={"turn_id": turn_id, "chunks": [chunk]})
     assert generate_response.status_code == 200
     generation_id = generate_response.json()["generation_id"]
 

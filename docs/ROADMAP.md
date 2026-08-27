@@ -323,21 +323,24 @@ both are planned, tracked below under Sprint 10.
 Two independent branches, grouped as one product-level sprint because
 both address the trust/reliability surface of the shipped v0.
 
-- **`fix/turn-lifecycle-and-manual-generation`** (planned). Turn creation
-  moves from `/generate` to `/retrieve`, fixing the `/new` "inactive new
-  conversation" bug and enabling review-before-generation. Automatic
-  generation is **removed** — a deliberate reversal of the Sprint 5/6
-  default (generation always follows retrieval), driven by direct user
-  feedback: researchers want to manually review retrieved chunks before
-  committing to a generation call. `should_auto_expand` and the
-  collapsed-by-default answer card
+- **`fix/turn-lifecycle-and-manual-generation`** — **Implemented.** Turn
+  creation moved from `/generate` to `/retrieve`, fixing the "vérifié status
+  lost on navigation" bug (root cause: the `/new -> /c/{id}` redirect used
+  to fire mid-flight of an automatic generate/evaluate call) and enabling
+  review-before-generation. Automatic generation is **removed** — a
+  deliberate reversal of the Sprint 5/6 default (generation always followed
+  retrieval), driven by direct user feedback: researchers want to manually
+  review retrieved chunks before committing to a generation call.
+  `should_auto_expand` and the collapsed-by-default answer card
   ([`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md))
-  are unchanged — they still govern post-generation display; only the
-  generation trigger becomes an explicit button (unified with Sprint 12's
-  single "Générer"/"Régénérer" control). Also fixes the "vérifié status
-  lost on navigation" bug — root cause likely shared with the
-  turn-lifecycle work, to be verified during implementation rather than
-  assumed as a second, separate fix.
+  are unchanged — they still govern post-generation display; the generation
+  trigger became a single "Générer"/"Régénérer" control (functional
+  placement only — Sprint 12 owns the final visual design). The `/new`
+  "inactive new conversation" bug turned out to be a separate, unrelated
+  router issue (a same-path `navigate()` call is a no-op in react-router),
+  fixed by keying `/new`'s route element on `location.key`. Full diagnosis
+  of both bugs, the turn-lifecycle schema/endpoint changes, and test
+  coverage: [`docs/turn_lifecycle.md`](turn_lifecycle.md).
 - **`fix/faithfulness-citation-detection`** (planned). Investigate before
   fixing (standing project discipline) whether "correct passages flagged
   as unsupported" — already known as judge noise from Q008

@@ -11,6 +11,14 @@ import { useTurnUi } from './turnUi'
 export type StepState = 'pending' | 'active' | 'done'
 export type EvaluationStatus = 'idle' | 'pending' | 'done' | 'error'
 
+// How long the hydrate effect below will keep polling GET /turns/{id} for a
+// turn whose retrieved_chunks come back empty before giving up and showing
+// it anyway (see the hydrate effect's own comment for why empty means "not
+// finished", not "nothing found"). 30 * 2s = 60s, comfortably above this
+// deployment's observed worst-case /retrieve latency.
+const HYDRATE_MAX_RETRIES = 30
+const HYDRATE_RETRY_DELAY_MS = 2000
+
 // One row in the turn's generation history: the first, manually-triggered
 // /generate plus one entry per subsequent Régénérer click, each keeping its
 // own answer, evaluation and reveal state so earlier generations stay
@@ -179,10 +187,32 @@ export function useTurnController(options: TurnControllerOptions) {
     if (!options.turnId || options.pendingQuery) return
     let cancelled = false
     const id = options.turnId
-    async function hydrate() {
+    async function hydrate(attempt = 0) {
       try {
         const detail = await api.getTurn(id)
         if (cancelled) return
+
+        // persistence.create_turn (src/api/persistence.py) commits the turn
+        // well before /retrieve finishes hybrid search + reranking and
+        // saves its retrieved_chunks (src/api/main.py) — so a turn hydrated
+        // right in that window (this page reached before the client that
+        // started it ever saw /retrieve resolve: a hard refresh, or the
+        // sidebar's real row appearing early via React Query's default
+        // refetch-on-window-focus while the conversation's first retrieve
+        // is still running) can legitimately come back with none yet.
+        // Reporting that as "done" was the actual bug here: it showed a
+        // checkmark plus an empty chunk rail and a generate button as if
+        // retrieval had genuinely found nothing, when it just hadn't
+        // finished. Poll briefly instead — hybrid search over a real corpus
+        // always returns top_k candidates once it runs, so an empty result
+        // means "not finished", never "nothing found".
+        if (detail.retrieved_chunks.length === 0 && attempt < HYDRATE_MAX_RETRIES) {
+          setRetrieveState('active')
+          await new Promise((resolve) => setTimeout(resolve, HYDRATE_RETRY_DELAY_MS))
+          if (!cancelled) await hydrate(attempt + 1)
+          return
+        }
+
         setConversationId(detail.conversation_id)
         setQuery(detail.query)
         // GET /turns/{id} now re-fetches chunk content live from Qdrant

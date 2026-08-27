@@ -370,3 +370,79 @@ describe('TurnCard — resuming an in-flight generation after navigate-away-and-
     expect(generateCallCount).toBe(1)
   })
 })
+
+// Regression test: persistence.create_turn (src/api/persistence.py) commits
+// a turn well before its /retrieve call finishes hybrid search + reranking
+// and saves retrieved_chunks (src/api/main.py) — so GET /turns/{id} can
+// legitimately come back with an empty retrieved_chunks list for a turn
+// whose retrieval simply hasn't finished yet (a hard refresh landing mid-
+// retrieval; the sidebar's real row appearing early via React Query's
+// default refetch-on-window-focus while the first retrieve is still
+// running). The hydrate effect used to report that as `retrieveState:
+// 'done'` unconditionally — a checkmark, an empty chunk rail, and a
+// "Générer" button, as if retrieval had genuinely found nothing, when it
+// just hadn't finished. It now polls instead of trusting an empty result at
+// face value.
+describe('TurnCard — hydrating a turn whose retrieval has not finished yet', () => {
+  it('keeps the spinner and polls instead of showing a false "done" with an empty chunk rail', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let turnsCallCount = 0
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/turns/1')) {
+          turnsCallCount += 1
+          return jsonResponse({
+            turn_id: 1,
+            conversation_id: 1,
+            query: 'Quelle est la nature du temps ?',
+            created_at: new Date().toISOString(),
+            // Empty on the first two calls -- retrieval hasn't saved its
+            // chunks yet -- then populated from the third call onward.
+            retrieved_chunks: turnsCallCount < 3 ? [] : [{ ...CHUNK_A, rank: 0 }],
+            chunk_judgments: {},
+            generations: [],
+          })
+        }
+        if (url.endsWith('/confidence-preview')) {
+          return jsonResponse({ retrieval_confidence_tier: 'moyenne' })
+        }
+        throw new Error(`Unhandled fetch: ${url}`)
+      }),
+    )
+
+    try {
+      const client = new QueryClient()
+      render(
+        <QueryClientProvider client={client}>
+          <TurnUiProvider>
+            <MemoryRouter>
+              <TurnCard turnId={1} conversationId={1} />
+            </MemoryRouter>
+          </TurnUiProvider>
+        </QueryClientProvider>,
+      )
+
+      // Not a false "done": spinner still showing, no checkmark, no chunk
+      // rail content, no "Générer" button inviting a click over an empty
+      // result.
+      await vi.waitFor(() => expect(screen.getByText('Recherche des passages pertinents')).toBeInTheDocument())
+      expect(turnsCallCount).toBe(1)
+      expect(screen.queryByText('Générer')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('chunk-rail')).not.toBeInTheDocument()
+
+      await vi.advanceTimersByTimeAsync(2000)
+      await vi.waitFor(() => expect(turnsCallCount).toBe(2))
+      expect(screen.queryByText('Générer')).not.toBeInTheDocument()
+
+      await vi.advanceTimersByTimeAsync(2000)
+      await vi.waitFor(() => expect(screen.getByText('Générer')).toBeInTheDocument())
+      expect(turnsCallCount).toBe(3)
+      expect(screen.getByTestId('chunk-rail')).toBeInTheDocument()
+      expect(screen.getByText('Texte du chunk A')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

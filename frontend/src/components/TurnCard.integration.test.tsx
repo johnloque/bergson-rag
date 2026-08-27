@@ -273,3 +273,100 @@ describe('TurnCard full cycle survives a simulated navigate-away-and-back', () =
     expect(screen.queryByText('Lire quand même')).not.toBeInTheDocument()
   })
 })
+
+// Regression test: a "Générer" click's /generate call has no persisted trace
+// until it resolves (persistence.save_generation only runs at the end of
+// the request) — so a user who clicks it, then navigates away before it
+// finishes and back again, used to land on a freshly hydrated TurnCard
+// showing no generation in progress at all, indistinguishable from never
+// having clicked "Générer". That invited a second click, firing a genuine
+// duplicate /generate call. state/pendingGenerations.ts (keyed by turn_id,
+// which is already known and stable) now lets the resumed TurnCard notice
+// the call is still running and reattach to it instead.
+describe('TurnCard — resuming an in-flight generation after navigate-away-and-back', () => {
+  it('shows the spinner again and does not fire a second /generate call', async () => {
+    const user = userEvent.setup()
+    let resolveGenerate: (value: unknown) => void = () => {}
+    const pendingGenerate = new Promise((resolve) => {
+      resolveGenerate = resolve
+    })
+    let generateCallCount = 0
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/retrieve')) {
+          return jsonResponse({ turn_id: 1, conversation_id: 1, chunks: [CHUNK_A] })
+        }
+        if (url.endsWith('/generate')) {
+          generateCallCount += 1
+          return pendingGenerate.then(jsonResponse)
+        }
+        if (url.endsWith('/confidence-preview')) {
+          return jsonResponse({ retrieval_confidence_tier: 'moyenne' })
+        }
+        if (url.endsWith('/turns/1')) {
+          return jsonResponse({
+            turn_id: 1,
+            conversation_id: 1,
+            query: 'Quelle est la nature du temps ?',
+            created_at: new Date().toISOString(),
+            retrieved_chunks: [{ ...CHUNK_A, rank: 0 }],
+            chunk_judgments: {},
+            // No persisted generation yet -- /generate hasn't resolved.
+            generations: [],
+          })
+        }
+        throw new Error(`Unhandled fetch: ${url}`)
+      }),
+    )
+
+    const client = new QueryClient()
+    const first = render(
+      <QueryClientProvider client={client}>
+        <TurnUiProvider>
+          <MemoryRouter>
+            <TurnCard pendingQuery="Quelle est la nature du temps ?" />
+          </MemoryRouter>
+        </TurnUiProvider>
+      </QueryClientProvider>,
+    )
+
+    await user.click(await screen.findByText('Générer'))
+    await screen.findByText('Génération de la réponse')
+    expect(generateCallCount).toBe(1)
+
+    // Navigate away mid-generation: the live TurnCard/useTurnController
+    // instance is gone, but the /generate call it started keeps running.
+    first.unmount()
+
+    // Navigate back: a brand-new instance, hydrating from GET /turns/{id}
+    // (which has nothing yet) plus whatever's still in flight.
+    render(
+      <QueryClientProvider client={client}>
+        <TurnUiProvider>
+          <MemoryRouter>
+            <TurnCard turnId={1} conversationId={1} />
+          </MemoryRouter>
+        </TurnUiProvider>
+      </QueryClientProvider>,
+    )
+
+    await screen.findByText('Génération de la réponse')
+    // Still just the one call -- resumed, not duplicated.
+    expect(generateCallCount).toBe(1)
+    expect(screen.queryByText('Générer')).not.toBeInTheDocument()
+    expect(screen.queryByText('Régénérer')).not.toBeInTheDocument()
+
+    resolveGenerate({
+      answer: 'Réponse fondée [W_c1].',
+      model_used: 'test-model',
+      generation_id: 9,
+      turn_id: 1,
+      conversation_id: 1,
+    })
+
+    await screen.findByText('Régénérer')
+    expect(generateCallCount).toBe(1)
+  })
+})

@@ -8,11 +8,20 @@ interface TurnCardProps {
   turnId?: number
   pendingQuery?: string
   conversationId?: number
+  draftId?: string
   onCreated?: (turnId: number, conversationId: number) => void
+  onUnknownDraft?: () => void
 }
 
-export function TurnCard({ turnId, pendingQuery, conversationId, onCreated }: TurnCardProps) {
-  const turn = useTurnController({ turnId, pendingQuery, conversationId, onCreated })
+export function TurnCard({
+  turnId,
+  pendingQuery,
+  conversationId,
+  draftId,
+  onCreated,
+  onUnknownDraft,
+}: TurnCardProps) {
+  const turn = useTurnController({ turnId, pendingQuery, conversationId, draftId, onCreated, onUnknownDraft })
   const hasGenerated = turn.generations.length > 0
   const generateLabel = hasGenerated
     ? turn.isGenerating

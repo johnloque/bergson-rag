@@ -100,6 +100,7 @@ describe('Conversation — draft turn stays on one controller instance', () => {
           <MemoryRouter initialEntries={['/new']}>
             <Routes>
               <Route path="/new" element={<Conversation />} />
+              <Route path="/new/:draftId" element={<Conversation />} />
               <Route path="/c/:conversationId" element={<Conversation />} />
             </Routes>
           </MemoryRouter>

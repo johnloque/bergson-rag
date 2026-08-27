@@ -4,6 +4,8 @@ import { api } from '../api/client'
 import type { ChunkResult, EvaluateResponse } from '../api/types'
 import { toChunkInput } from '../lib/chunkInput'
 import { cacheChunks, getCachedChunk } from './chunkCache'
+import { getPendingConversation, startOrAttachPendingConversation } from './pendingConversations'
+import { pendingGenerations } from './pendingGenerations'
 import { useTurnUi } from './turnUi'
 
 export type StepState = 'pending' | 'active' | 'done'
@@ -31,7 +33,18 @@ export interface TurnControllerOptions {
   pendingQuery?: string
   /** Conversation this new turn belongs to; undefined starts a new conversation. */
   conversationId?: number
+  /** Set only for a brand-new conversation's first turn — the id in the
+   * `/new/:draftId` URL. Routes the initial /retrieve call through
+   * state/pendingConversations.ts instead of calling it directly, so
+   * revisiting the same `/new/:draftId` (sidebar click, browser back)
+   * reattaches to it instead of firing a second one. */
+  draftId?: string
   onCreated?: (turnId: number, conversationId: number) => void
+  /** Called when `draftId` doesn't resolve to anything startable — no
+   * pending/errored entry for it and no query to start fresh with either
+   * (e.g. a stale /new/:draftId visit after that submission already
+   * resolved and was dropped from the pending list). */
+  onUnknownDraft?: () => void
 }
 
 function patchAt<T>(arr: T[], index: number, patch: Partial<T>): T[] {
@@ -75,7 +88,9 @@ export function useTurnController(options: TurnControllerOptions) {
   // resolves, so `onCreated` (the /new -> /c/{id} redirect) fires here too,
   // well before any generation/evaluation network call ever starts —
   // removing the race that used to arise from a route change landing right
-  // as the answer/evaluation state was still resolving.
+  // as the answer/evaluation state was still resolving. This path is for a
+  // follow-up turn in an already-existing conversation only — a brand-new
+  // conversation's first turn always goes through `runDraftTurn` below.
   const runNewTurn = useCallback(
     async (submittedQuery: string) => {
       setQuery(submittedQuery)
@@ -95,10 +110,6 @@ export function useTurnController(options: TurnControllerOptions) {
           response.turn_id,
           response.chunks.map((c) => c.chunk_id),
         )
-        // The sidebar's conversation list (Sidebar.tsx) doesn't remount on
-        // client-side navigation within AppShell, so a freshly created
-        // conversation would otherwise never appear there without this.
-        void queryClient.invalidateQueries({ queryKey: ['conversations'] })
         void queryClient.invalidateQueries({ queryKey: ['conversation', response.conversation_id] })
         options.onCreated?.(response.turn_id, response.conversation_id)
       } catch (e) {
@@ -109,14 +120,59 @@ export function useTurnController(options: TurnControllerOptions) {
     [options, queryClient, turnUi],
   )
 
-  // Auto-start a brand-new turn exactly once.
+  // A brand-new conversation's first turn: the /retrieve call itself is
+  // owned by state/pendingConversations.ts, keyed by `draftId` (the
+  // `/new/:draftId` URL), not by this component — see that module's
+  // docstring for why. This function just attaches to it and mirrors the
+  // result into local state exactly like `runNewTurn` above.
+  const runDraftTurn = useCallback(
+    async (draftId: string, submittedQuery: string) => {
+      setQuery(submittedQuery)
+      setError(null)
+      setRetrieveState('active')
+      try {
+        const result = await startOrAttachPendingConversation(queryClient, draftId, submittedQuery)
+        cacheChunks(result.chunks)
+        setChunks(result.chunks)
+        setRetrieveState('done')
+        setTurnId(result.turnId)
+        setConversationId(result.conversationId)
+        turnUi.initTurn(
+          result.turnId,
+          result.chunks.map((c) => c.chunk_id),
+        )
+        void queryClient.invalidateQueries({ queryKey: ['conversation', result.conversationId] })
+        options.onCreated?.(result.turnId, result.conversationId)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+        setRetrieveState('pending')
+      }
+    },
+    [options, queryClient, turnUi],
+  )
+
+  // Auto-start a brand-new turn exactly once — via the draft-attaching path
+  // when `draftId` is set, directly otherwise (an existing conversation's
+  // follow-up turn, which needs no cross-navigation resumability since its
+  // conversation already has a stable, always-reachable sidebar entry).
   useEffect(() => {
-    if (options.pendingQuery && !hasStarted.current) {
+    if (hasStarted.current) return
+    if (options.draftId) {
+      hasStarted.current = true
+      const draftId = options.draftId
+      const existing = getPendingConversation(draftId)
+      const initialQuery = existing?.query ?? options.pendingQuery
+      if (!initialQuery) {
+        options.onUnknownDraft?.()
+        return
+      }
+      void runDraftTurn(draftId, initialQuery)
+    } else if (options.pendingQuery) {
       hasStarted.current = true
       void runNewTurn(options.pendingQuery)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [options.pendingQuery])
+  }, [options.pendingQuery, options.draftId])
 
   // Hydrate a persisted turn.
   useEffect(() => {
@@ -145,7 +201,7 @@ export function useTurnController(options: TurnControllerOptions) {
           detail.retrieved_chunks.map((rc) => rc.chunk_id),
           detail.chunk_judgments,
         )
-        const entries: GenerationEntry[] = detail.generations.map((g) => ({
+        const persistedEntries: GenerationEntry[] = detail.generations.map((g) => ({
           generationId: g.generation_id,
           chunkIds: g.chunk_ids,
           state: 'done',
@@ -155,7 +211,51 @@ export function useTurnController(options: TurnControllerOptions) {
           evaluationStatus: g.evaluation ? 'done' : 'idle',
           revealed: false,
         }))
-        setGenerations(entries)
+        setGenerations(persistedEntries)
+
+        // A "Générer"/"Régénérer" click made before this mount (e.g. the
+        // user navigated away right after clicking, then back) may still be
+        // running server-side with no persisted row to show for it yet —
+        // resume its spinner and attach to the same call instead of leaving
+        // the UI looking idle (which is what invited a second click; see
+        // pendingGenerations.ts).
+        const inFlight = pendingGenerations.get(String(id))
+        if (inFlight) {
+          const resumeIndex = persistedEntries.length
+          setIsGenerating(true)
+          setGenerations((prev) => [
+            ...prev,
+            {
+              generationId: null,
+              chunkIds: [],
+              state: 'active',
+              answer: '',
+              model: '',
+              evaluation: null,
+              evaluationStatus: 'idle',
+              revealed: false,
+            },
+          ])
+          inFlight.promise.then(
+            (result) => {
+              if (cancelled) return
+              setGenerations((prev) =>
+                patchAt(prev, resumeIndex, {
+                  generationId: result.generationId,
+                  answer: result.answer,
+                  model: result.model,
+                  state: 'done',
+                }),
+              )
+              setIsGenerating(false)
+            },
+            () => {
+              if (cancelled) return
+              setGenerations((prev) => prev.slice(0, resumeIndex))
+              setIsGenerating(false)
+            },
+          )
+        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
       }
@@ -210,16 +310,23 @@ export function useTurnController(options: TurnControllerOptions) {
           revealed: false,
         },
       ])
-      const result = await api.generate({
-        turn_id: turnId,
-        chunks: includedChunks.map(toChunkInput),
-        chunk_judgments: judgments,
-      })
+      // Registered under the turn id (pendingGenerations.ts) so that if this
+      // component unmounts before /generate resolves — the user navigated
+      // away — a later remount of this same turn's card (the hydrate effect
+      // above) can find it still running and reattach, instead of the UI
+      // just looking idle again and inviting a second "Générer" click.
+      const result = await pendingGenerations.start(String(turnId), () =>
+        api.generate({
+          turn_id: turnId,
+          chunks: includedChunks.map(toChunkInput),
+          chunk_judgments: judgments,
+        }).then((r) => ({ generationId: r.generation_id, answer: r.answer, model: r.model_used })),
+      )
       setGenerations((prev) =>
         patchAt(prev, newIndex, {
-          generationId: result.generation_id,
+          generationId: result.generationId,
           answer: result.answer,
-          model: result.model_used,
+          model: result.model,
           state: 'done',
         }),
       )

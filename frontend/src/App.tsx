@@ -18,12 +18,20 @@ export function AppRoutes() {
   // `drafts` state (routes/Conversation.tsx) stale instead of starting a
   // genuinely fresh turn. `location.key` changes on every navigation, push
   // or not, so keying on it forces a real remount every time.
+  //
+  // /new/:draftId needs no such key: Conversation reads its `draftId` param
+  // straight from `useParams()` on every render (not just at mount), since
+  // it renders the very same <Conversation> element type as its /new
+  // sibling at the same position in this tree — react-router reuses one
+  // instance across them rather than remounting, so anything read only
+  // once at mount time there would go stale.
   const location = useLocation()
   return (
     <Routes location={location}>
       <Route path="/" element={<Landing />} />
       <Route element={<AppShell />}>
         <Route path="/new" element={<Conversation key={location.key} />} />
+        <Route path="/new/:draftId" element={<Conversation />} />
         <Route path="/c/:conversationId" element={<Conversation />} />
         <Route path="/c/:conversationId/turn/:turnId/chunk/:chunkId" element={<ChunkDetail />} />
         <Route path="/docs" element={<Documentation />} />

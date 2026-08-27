@@ -290,11 +290,125 @@ coverage: [`docs/dockerization.md`](dockerization.md).
 [`docs/dockerization.md`](dockerization.md)** (`fix/ollama-native-default`,
 superseding this sprint's original "containerize Ollama by default").
 
-### Sprint 10 — MCP layer
-Pure search tools (hybrid search, exact-reference lookup), tested with
-an MCP client. First to drop if time is constrained.
+**Dense/sparse embedding + cross-encoder reranking: native by default,
+containerized opt-in — see [`docs/dockerization.md`](dockerization.md)**
+(`feat/native-ml-service`). Same rationale as Ollama above, extended to
+`src/indexing/embeddings.py` and the cross-encoder reranker: measured
+8.3s (native MPS) vs. 258s (containerized CPU) for the reranker alone.
+New `src/ml_service/` FastAPI app runs these natively; `api` reaches it
+via `ML_SERVICE_URL` (defaults to `http://host.docker.internal:8100`,
+same shape as `OLLAMA_API_BASE`), with no dockerized fallback service —
+unset/empty `ML_SERVICE_URL` falls back to `api`'s pre-existing
+in-process model loading. `make setup-ml-service` starts it, folded into
+`quickstart`.
 
-### Sprint 11 — Portfolio polish
+### v0 retrospective — checkpoint before Sprint 10
+
+Sprints 0–9 shipped a complete, dockerized, locally-runnable v0 (retrieval
++ reranking + generation + guardrails + persistence + frontend +
+one-command bootstrap). A retrospective against real usage of that v0,
+before any further implementation branch lands, produced the Sprint
+10–14 plan below — Sprint 15 (portfolio polish) remains the final sprint,
+after this plan lands rather than immediately following Sprint 9. Two
+bugs and one process question drove Sprints 10–11 specifically: the
+`/new` "inactive new conversation" bug, the "vérifié status lost on
+navigation" bug, and a higher-than-expected real-usage rate of "correct
+passage flagged as unsupported" reports against the Sprint 6 guardrail.
+Neither `fix/turn-lifecycle-and-manual-generation` nor
+`fix/faithfulness-citation-detection` had landed as of this writeup —
+both are planned, tracked below under Sprint 10.
+
+### Sprint 10 — Critical fixes (post-v0)
+
+Two independent branches, grouped as one product-level sprint because
+both address the trust/reliability surface of the shipped v0.
+
+- **`fix/turn-lifecycle-and-manual-generation`** (planned). Turn creation
+  moves from `/generate` to `/retrieve`, fixing the `/new` "inactive new
+  conversation" bug and enabling review-before-generation. Automatic
+  generation is **removed** — a deliberate reversal of the Sprint 5/6
+  default (generation always follows retrieval), driven by direct user
+  feedback: researchers want to manually review retrieved chunks before
+  committing to a generation call. `should_auto_expand` and the
+  collapsed-by-default answer card
+  ([`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md))
+  are unchanged — they still govern post-generation display; only the
+  generation trigger becomes an explicit button (unified with Sprint 12's
+  single "Générer"/"Régénérer" control). Also fixes the "vérifié status
+  lost on navigation" bug — root cause likely shared with the
+  turn-lifecycle work, to be verified during implementation rather than
+  assumed as a second, separate fix.
+- **`fix/faithfulness-citation-detection`** (planned). Investigate before
+  fixing (standing project discipline) whether "correct passages flagged
+  as unsupported" — already known as judge noise from Q008
+  ([`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md))
+  — occurs at a higher-than-expected rate in real usage, a genuine gap in
+  Layer 1's `check_structure` (prose-embedded fabricated titles, e.g. the
+  Q004 case, may be outside Layer 1's original citation-resolution
+  scope), or both.
+
+### Sprint 11 — Backend: filtering + chunk mapping
+
+- Chunk retrieval filtering by work and by chronological bounds — a
+  Qdrant payload filter on the existing `work_id` field; a static
+  work_id → year table derives date-range filtering, so no new indexed
+  field or reindex is needed.
+- Paragraph-to-chunk_id mapping script, keyed on `paragraph_ids` (stable
+  across re-chunking, per the Sprint 1 ingestion design) — resolves the
+  gold-dataset-remapping cost that has blocked chunk-size experiments
+  since it was first identified (see `docs/gold_dataset_protocol.md`'s
+  chunk_id lookup discipline). A plain internal script, not an MCP tool —
+  deterministic internal remapping was already ruled out as the wrong
+  problem for the MCP layer to solve.
+
+Functional but has no UI in this sprint — the filter UI (work checklist,
+date slider) lands in Sprint 12. Between Sprint 11 and Sprint 12, this
+capability is real but only exercisable via direct API calls.
+
+### Sprint 12 — UI/UX overhaul
+
+- Landing page reachable only via clicking the app icon after first
+  visit — no longer shown once per session automatically (revises
+  Sprint 8's behavior).
+- Sidebar: three resizable, collapsible sections (user guide + sources
+  description; conversation list; settings panel).
+- Settings panel exposes `top_k_retrieval`, generation prompt,
+  explanation prompt, LLM choice. Defaults remain fixed at whatever
+  configuration the gold-dataset evaluation was run against — this panel
+  is an optional advanced mode, not a replacement for having one
+  evaluated default configuration. Document the exact evaluated default
+  values alongside this panel's implementation.
+- Chunk rail shows the top 15 post-reranking chunks, top 3 checked by
+  default (down from "all included by default"), up to 5 selectable.
+- Chunk detail view becomes a chunk-selection expansion view: keeps the
+  scrolling rail, adds inspection of a chunk's immediate previous/next
+  neighbor in the source work, with the same explain/include actions
+  extended to neighbors.
+- Chunk card shows the real citation (work, year, page, paragraph)
+  instead of the raw `chunk_id`.
+- Single "Générer"/"Régénérer" button to the right of the chunk rail —
+  the manual-generation trigger from Sprint 10, unified into one
+  control.
+- Answer display: included chunks listed as bullets; most recent
+  generation for a given question shown first; markdown rendering
+  enabled for generated text.
+
+### Sprint 13 — MCP layer
+Pure search tools: `/retrieve` and `/lookup` (work + paragraph number, or
+page number → relevant text), tested with an MCP client. Supersedes the
+original Sprint 10 placeholder — scheduled after Sprint 12 per explicit
+prioritization; previously this project's lowest-priority item, still
+true, now simply next in a defined queue rather than indefinite.
+
+### Sprint 14 — Experimentation
+`top_k_retrieval`, RRF `k`, generation prompt, explanation (`judge_chunk`)
+prompt, chunk size, LLM choice, LLM temperature. Gated by the same
+gold-dataset-volume threshold already established for this class of
+decision throughout the project (stems vs. lemmas, cross-encoder vs.
+multi-vector — see Sprint 2 and Sprint 4's deferred notes) — unchanged
+principle, just a fuller list of candidates now queued behind it.
+
+### Sprint 15 — Portfolio polish
 Complete README, "Known limitations & scope" section finalized,
 evaluation results presented clearly, technical blog post, accessible
 demo, curated set of demo questions drawn from the gold dataset for live
@@ -316,7 +430,8 @@ bergson-rag/
 │   ├── retrieval/         # reformulation, hybrid, reranking
 │   ├── generation/         # prompts, anti-hallucination validation
 │   ├── api/                # FastAPI endpoints — Sprint 7
-│   └── mcp_server/         # Sprint 10
+│   ├── ml_service/         # native embedding/reranking service — Sprint 9
+│   └── mcp_server/         # Sprint 13
 ├── frontend/               # React (Vite) UI — Sprint 8
 ├── eval/
 │   ├── gold_dataset.csv

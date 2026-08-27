@@ -27,7 +27,12 @@ const CHUNKS = ['c1', 'c2', 'c3', 'c4', 'c5'].map(chunk)
 // the conversation's turns list caught up (see the comment above
 // `draftTurnIds` in Conversation.tsx) — a chunk excluded right around that
 // swap could land on the about-to-be-discarded instance and silently be
-// lost, so Régénérer sent every chunk instead of only the included ones.
+// lost, so Générer sent every chunk instead of only the included ones.
+// Since turn/conversation creation now happens at /retrieve, not /generate
+// (docs/ROADMAP.md, Sprint 10 turn-lifecycle fix), the redirect that
+// triggers this swap fires right after retrieval — before any generation
+// exists yet — so the exclusions below race that swap ahead of the turn's
+// very first, manually-triggered "Générer" click.
 describe('Conversation — draft turn stays on one controller instance', () => {
   let generateBodies: Array<{ chunks: { chunk_id: string }[] }> = []
 
@@ -37,7 +42,7 @@ describe('Conversation — draft turn stays on one controller instance', () => {
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) => {
         const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: async () => body })
-        if (url.endsWith('/retrieve')) return ok({ chunks: CHUNKS })
+        if (url.endsWith('/retrieve')) return ok({ turn_id: 1, conversation_id: 1, chunks: CHUNKS })
         if (url.endsWith('/generate')) {
           const body = JSON.parse(init!.body as string)
           generateBodies.push(body)
@@ -86,7 +91,7 @@ describe('Conversation — draft turn stays on one controller instance', () => {
     )
   })
 
-  it('keeps chunk exclusions made right after the first answer once the turns list catches up', async () => {
+  it('keeps chunk exclusions made right after retrieval once the turns list catches up', async () => {
     const user = userEvent.setup()
     const client = new QueryClient()
     render(
@@ -105,19 +110,19 @@ describe('Conversation — draft turn stays on one controller instance', () => {
     const input = await screen.findByPlaceholderText(/./)
     await user.type(input, 'Ma question{Enter}')
 
-    await screen.findByText('Régénérer')
+    await screen.findByText('Générer')
     // No settle wait: exclude immediately, the way an impatient real user
     // would, racing the conversation-list refetch this component triggers
-    // right after the first generation.
+    // right after retrieval creates the turn.
     const excludeButtons = await screen.findAllByText('Exclure')
     expect(excludeButtons).toHaveLength(5)
     for (const btn of excludeButtons.slice(1)) {
       await user.click(btn)
     }
 
-    await user.click(screen.getByText('Régénérer'))
-    await waitFor(() => expect(generateBodies).toHaveLength(2))
-    expect(generateBodies[1].chunks.map((c) => c.chunk_id)).toEqual(['c1'])
+    await user.click(screen.getByText('Générer'))
+    await waitFor(() => expect(generateBodies).toHaveLength(1))
+    expect(generateBodies[0].chunks.map((c) => c.chunk_id)).toEqual(['c1'])
   })
 })
 

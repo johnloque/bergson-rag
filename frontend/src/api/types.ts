@@ -38,19 +38,32 @@ export interface ChunkJudgment {
 export interface RetrieveRequest {
   query: string
   top_k?: number
+  // None starts a brand-new conversation (and its first turn); given, must
+  // name an existing conversation (docs/ROADMAP.md, Sprint 10 turn-
+  // lifecycle fix).
+  conversation_id?: number | null
 }
 
+// turn_id/conversation_id (docs/ROADMAP.md, Sprint 10 turn-lifecycle fix):
+// submitting a query creates its turn — and persists the retrieved chunk
+// set against it — immediately, before any generation happens. /generate
+// attaches to this turn_id rather than creating a new one.
 export interface RetrieveResponse {
+  turn_id: number
+  conversation_id: number
   chunks: ChunkResult[]
 }
 
+// turn_id is required (docs/ROADMAP.md, Sprint 10 turn-lifecycle fix):
+// /retrieve always creates the turn first, so /generate — whether this is
+// the turn's first, manually-triggered generation or a later regeneration —
+// only ever attaches to an existing turn. `query` is not resent here
+// either: the server reads it back from the persisted turn instead.
 export interface GenerateRequest {
-  query: string
+  turn_id: number
   chunks: ChunkInput[]
   model?: string
   chunk_judgments?: Record<string, ChunkJudgment> | null
-  conversation_id?: number | null
-  turn_id?: number | null
 }
 
 export interface GenerateResponse {

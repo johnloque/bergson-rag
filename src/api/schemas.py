@@ -90,9 +90,22 @@ class ChunkResult(BaseModel):
 class RetrieveRequest(BaseModel):
     query: str = Field(min_length=1)
     top_k: int = Field(default=DEFAULT_TOP_K, gt=0)
+    # None starts a brand-new conversation (and its first turn); given, must
+    # name an existing conversation (404 if unknown) — docs/ROADMAP.md,
+    # Sprint 10 turn-lifecycle fix.
+    conversation_id: int | None = None
 
 
 class RetrieveResponse(BaseModel):
+    """`turn_id`/`conversation_id` (docs/ROADMAP.md, Sprint 10 turn-lifecycle
+    fix): submitting a query creates its turn — and persists the retrieved
+    chunk set against it — immediately, before any generation happens.
+    `/generate` (now a separate, manually-triggered call, see
+    `GenerateRequest`) attaches to this `turn_id` rather than creating a new
+    one."""
+
+    turn_id: int
+    conversation_id: int
     chunks: list[ChunkResult]
 
 
@@ -117,17 +130,25 @@ class ConfidencePreviewResponse(BaseModel):
 
 
 class GenerateRequest(BaseModel):
-    query: str = Field(min_length=1)
+    """`turn_id` is required (docs/ROADMAP.md, Sprint 10 turn-lifecycle fix):
+    `/retrieve` always creates the turn first (`RetrieveResponse.turn_id`),
+    so `/generate` — whether this is the turn's first, manually-triggered
+    generation or a later regeneration — only ever attaches to an existing
+    turn (404 if unknown); it never creates one itself. `query` is not
+    resent here either: it is read back from the persisted turn
+    (`turn.query`) instead, the same "server-side value, not a
+    client-resubmitted one" trust boundary already applied to `/evaluate`'s
+    `(query, chunks, answer)`."""
+
+    turn_id: int
     chunks: list[ChunkInput] = Field(min_length=1)
     model: str = DEFAULT_MODEL
-    # `None` (omitted, or explicit `null`) AND `turn_id` present -> the
-    # server auto-loads that turn's persisted chunk_judgments as the
-    # default (a plain "regenerate" click works without resending every
-    # judgment already made). Any explicit dict, including `{}`, is used
-    # as-is and overrides the persisted default (docs/ROADMAP.md).
+    # `None` (omitted, or explicit `null`) -> the server auto-loads this
+    # turn's persisted chunk_judgments as the default (a plain "regenerate"
+    # click works without resending every judgment already made). Any
+    # explicit dict, including `{}`, is used as-is and overrides the
+    # persisted default (docs/ROADMAP.md).
     chunk_judgments: dict[str, ChunkJudgment] | None = None
-    conversation_id: int | None = None
-    turn_id: int | None = None
 
 
 class GenerateResponse(BaseModel):

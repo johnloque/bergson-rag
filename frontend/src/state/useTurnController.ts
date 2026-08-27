@@ -9,10 +9,10 @@ import { useTurnUi } from './turnUi'
 export type StepState = 'pending' | 'active' | 'done'
 export type EvaluationStatus = 'idle' | 'pending' | 'done' | 'error'
 
-// One row in the turn's generation history: the initial /generate plus one
-// entry per subsequent Régénérer click, each keeping its own answer,
-// evaluation and reveal state so earlier generations stay visible instead
-// of being replaced in place.
+// One row in the turn's generation history: the first, manually-triggered
+// /generate plus one entry per subsequent Régénérer click, each keeping its
+// own answer, evaluation and reveal state so earlier generations stay
+// visible instead of being replaced in place.
 export interface GenerationEntry {
   generationId: number | null
   chunkIds: string[]
@@ -49,7 +49,7 @@ export function useTurnController(options: TurnControllerOptions) {
   const [chunks, setChunks] = useState<ChunkResult[]>([])
   const [retrieveState, setRetrieveState] = useState<StepState>('pending')
   const [generations, setGenerations] = useState<GenerationEntry[]>([])
-  const [isRegenerating, setIsRegenerating] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const hasStarted = useRef(false)
 
@@ -67,63 +67,43 @@ export function useTurnController(options: TurnControllerOptions) {
     }
   }, [])
 
+  // /retrieve alone (docs/ROADMAP.md, Sprint 10 turn-lifecycle fix):
+  // submitting a query creates its turn — and persists the retrieved chunk
+  // set against it — immediately. Generation no longer follows
+  // automatically; it only starts once the user clicks "Générer" (see
+  // `generate` below). turn_id/conversation_id are known as soon as this
+  // resolves, so `onCreated` (the /new -> /c/{id} redirect) fires here too,
+  // well before any generation/evaluation network call ever starts —
+  // removing the race that used to arise from a route change landing right
+  // as the answer/evaluation state was still resolving.
   const runNewTurn = useCallback(
     async (submittedQuery: string) => {
       setQuery(submittedQuery)
       setError(null)
       setRetrieveState('active')
-      let retrieved: ChunkResult[]
       try {
-        const response = await api.retrieve({ query: submittedQuery })
-        retrieved = response.chunks
-        cacheChunks(retrieved)
-        setChunks(retrieved)
-        setRetrieveState('done')
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e))
-        setRetrieveState('pending')
-        return
-      }
-
-      const chunkIds = retrieved.map((c) => c.chunk_id)
-      setGenerations([
-        {
-          generationId: null,
-          chunkIds,
-          state: 'active',
-          answer: '',
-          model: '',
-          evaluation: null,
-          evaluationStatus: 'idle',
-          revealed: false,
-        },
-      ])
-      try {
-        const result = await api.generate({
+        const response = await api.retrieve({
           query: submittedQuery,
-          chunks: retrieved.map(toChunkInput),
           conversation_id: options.conversationId,
         })
-        setTurnId(result.turn_id)
-        setConversationId(result.conversation_id)
-        setGenerations((prev) =>
-          patchAt(prev, 0, {
-            generationId: result.generation_id,
-            answer: result.answer,
-            model: result.model_used,
-            state: 'done',
-          }),
+        cacheChunks(response.chunks)
+        setChunks(response.chunks)
+        setRetrieveState('done')
+        setTurnId(response.turn_id)
+        setConversationId(response.conversation_id)
+        turnUi.initTurn(
+          response.turn_id,
+          response.chunks.map((c) => c.chunk_id),
         )
-        turnUi.initTurn(result.turn_id, chunkIds)
         // The sidebar's conversation list (Sidebar.tsx) doesn't remount on
         // client-side navigation within AppShell, so a freshly created
         // conversation would otherwise never appear there without this.
         void queryClient.invalidateQueries({ queryKey: ['conversations'] })
-        void queryClient.invalidateQueries({ queryKey: ['conversation', result.conversation_id] })
-        options.onCreated?.(result.turn_id, result.conversation_id)
+        void queryClient.invalidateQueries({ queryKey: ['conversation', response.conversation_id] })
+        options.onCreated?.(response.turn_id, response.conversation_id)
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e))
-        setGenerations([])
+        setRetrieveState('pending')
       }
     },
     [options, queryClient, turnUi],
@@ -200,12 +180,18 @@ export function useTurnController(options: TurnControllerOptions) {
     [generations, runEvaluationAt],
   )
 
-  const regenerate = useCallback(async () => {
-    if (turnId === null || conversationId === null || generations.length === 0) return
+  // The one manual generation trigger (docs/ROADMAP.md, Sprint 10): fires
+  // "Générer" for a turn's first generation exactly the same way it fires
+  // "Régénérer" for every one after — same request shape, same in-flight
+  // guard, same append-a-new-entry behavior. `turn_id` always already
+  // exists by the time this can be called (retrieval creates it), so this
+  // never creates a turn itself.
+  const generate = useCallback(async () => {
+    if (turnId === null) return
     const lastEntry = generations.at(-1)
-    if (!lastEntry || lastEntry.state !== 'done') return
+    if (lastEntry && lastEntry.state !== 'done') return
     const newIndex = generations.length
-    setIsRegenerating(true)
+    setIsGenerating(true)
     setError(null)
     try {
       const includedChunks = chunks.filter((c) => turnUi.getIncluded(turnId, c.chunk_id))
@@ -225,10 +211,8 @@ export function useTurnController(options: TurnControllerOptions) {
         },
       ])
       const result = await api.generate({
-        query,
-        chunks: includedChunks.map(toChunkInput),
         turn_id: turnId,
-        conversation_id: conversationId,
+        chunks: includedChunks.map(toChunkInput),
         chunk_judgments: judgments,
       })
       setGenerations((prev) =>
@@ -243,9 +227,9 @@ export function useTurnController(options: TurnControllerOptions) {
       setError(e instanceof Error ? e.message : String(e))
       setGenerations((prev) => prev.slice(0, newIndex))
     } finally {
-      setIsRegenerating(false)
+      setIsGenerating(false)
     }
-  }, [chunks, conversationId, generations, query, turnId, turnUi])
+  }, [chunks, generations, turnId, turnUi])
 
   const lastGeneration = generations.at(-1)
 
@@ -258,9 +242,12 @@ export function useTurnController(options: TurnControllerOptions) {
     generations,
     reveal,
     evaluate,
-    isRegenerating,
-    regenerate,
-    canRegenerate: lastGeneration?.state === 'done',
+    isGenerating,
+    generate,
+    // Available once chunks are in and no generation is currently running —
+    // covers both the turn's first "Générer" (generations is empty) and
+    // every later "Régénérer" (the last generation must have finished).
+    canGenerate: retrieveState === 'done' && (!lastGeneration || lastGeneration.state === 'done'),
     error,
   }
 }

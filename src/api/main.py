@@ -51,13 +51,28 @@ than solved (docs/ROADMAP.md):
 
 ## `/generate`'s chunk_judgments auto-load rule
 
-`chunk_judgments` omitted (or explicit `null`) AND `turn_id` given -> the
-server auto-loads that turn's persisted judgments as the default, so a
-plain "regenerate" click works without the client resending every judgment
-it already made. Any explicit dict, including `{}`, is used as-is and
-overrides the persisted default — this is what lets a client deliberately
-regenerate with *no* judgments applied, distinct from "I have none to send
-you, load what you have" (`src/api/schemas.py`'s `GenerateRequest` docstring).
+`chunk_judgments` omitted (or explicit `null`) -> the server auto-loads that
+turn's persisted judgments as the default, so a plain "regenerate" click
+works without the client resending every judgment it already made. Any
+explicit dict, including `{}`, is used as-is and overrides the persisted
+default — this is what lets a client deliberately regenerate with *no*
+judgments applied, distinct from "I have none to send you, load what you
+have" (`src/api/schemas.py`'s `GenerateRequest` docstring).
+
+## Turn lifecycle: creation moved to `/retrieve`, generation is manual (Sprint 10)
+
+`fix/turn-lifecycle-and-manual-generation` (docs/ROADMAP.md, Sprint 10):
+`/retrieve` now creates the turn (and a new conversation, if
+`conversation_id` is absent) and persists the retrieved chunk set against
+it immediately — before any generation happens, not as a side effect of the
+first `/generate` call. `/generate` therefore requires an existing
+`turn_id` (404 if unknown) and never creates one itself, whether this is
+the turn's first, manually-triggered generation or a later regeneration —
+see `GenerateRequest`'s docstring. Automatic generation (Sprint 5/6's
+default: generation always followed retrieval) is removed; the frontend
+now gates every generation, first or not, behind an explicit "Générer" /
+"Régénérer" action. Full rationale, and the two bugs this also
+resolves/explains, in [`docs/turn_lifecycle.md`](../../docs/turn_lifecycle.md).
 
 ## Error handling
 
@@ -175,9 +190,19 @@ async def llm_provider_error_handler(request: Request, exc: OpenAIError) -> JSON
 
 
 @app.post("/retrieve", response_model=RetrieveResponse)
-def retrieve(body: RetrieveRequest) -> RetrieveResponse:
+def retrieve(body: RetrieveRequest, session: Session = Depends(get_session)) -> RetrieveResponse:
     """Hybrid retrieval + reranking, as-is (src/retrieval/hybrid.py,
-    src/retrieval/reranking.py) — no new retrieval logic."""
+    src/retrieval/reranking.py) — no new retrieval logic — plus turn
+    creation (docs/ROADMAP.md, Sprint 10 turn-lifecycle fix): submitting a
+    query creates its turn immediately, with the retrieved chunk set
+    persisted against it, before any generation happens. `conversation_id`
+    absent also creates a new conversation; given, it must already exist
+    (404 if unknown, `persistence.create_turn`) — checked first, before
+    paying for retrieval, so a bad `conversation_id` fails fast. `/generate`,
+    called later and only on an explicit user action, attaches to this
+    `turn_id` rather than creating a new one — see its own docstring below."""
+    turn = persistence.create_turn(session, body.conversation_id, body.query)
+
     client = get_qdrant_client()
     candidate_limit = max(body.top_k, DEFAULT_RERANK_CANDIDATES)
     candidates = hybrid_search(
@@ -188,7 +213,13 @@ def retrieve(body: RetrieveRequest) -> RetrieveResponse:
         limit=candidate_limit,
     )
     reranked = rerank(body.query, candidates, get_reranker())[: body.top_k]
-    return RetrieveResponse(chunks=[generation_chunk_to_result(c) for c in reranked])
+    chunk_results = [generation_chunk_to_result(c) for c in reranked]
+
+    persistence.save_retrieved_chunks(session, turn.id, chunk_results)
+
+    return RetrieveResponse(
+        turn_id=turn.id, conversation_id=turn.conversation_id, chunks=chunk_results
+    )
 
 
 @app.post("/confidence-preview", response_model=ConfidencePreviewResponse)
@@ -206,24 +237,25 @@ def confidence_preview(body: ConfidencePreviewRequest) -> ConfidencePreviewRespo
 @app.post("/generate", response_model=GenerateResponse)
 def generate(body: GenerateRequest, session: Session = Depends(get_session)) -> GenerateResponse:
     """Wraps `generate_from_chunks` directly — no evaluation here (that's
-    the separate `/evaluate` call, see module docstring) — plus turn/
-    generation persistence (src/api/persistence.py). `turn_id` absent
-    creates a new turn (and conversation, if `conversation_id` is also
-    absent); `turn_id` present is a regeneration within that existing turn
-    (404 if unknown)."""
+    the separate `/evaluate` call, see module docstring). `turn_id` must
+    already exist (404 if unknown) — `/retrieve` is what creates turns now
+    (docs/ROADMAP.md, Sprint 10 turn-lifecycle fix); this endpoint only ever
+    attaches a generation to an existing one, whether this is the turn's
+    first, manually-triggered generation or a later regeneration. `query`
+    is read back from the persisted turn rather than resent by the client
+    (`GenerateRequest`'s docstring)."""
     client = get_qdrant_client()
-    turn = persistence.resolve_turn(session, body.conversation_id, body.turn_id, body.query)
+    turn = persistence.get_turn_or_404(session, body.turn_id)
 
-    if body.chunk_judgments is not None:
-        chunk_judgments = body.chunk_judgments
-    elif body.turn_id is not None:
-        chunk_judgments = persistence.load_chunk_judgments(session, turn.id) or None
-    else:
-        chunk_judgments = None
+    chunk_judgments = (
+        body.chunk_judgments
+        if body.chunk_judgments is not None
+        else persistence.load_chunk_judgments(session, turn.id) or None
+    )
 
     chunks = [chunk_input_to_generation_chunk(c) for c in body.chunks]
     result = generate_from_chunks(
-        body.query,
+        turn.query,
         chunks,
         client,
         model=body.model,
@@ -234,16 +266,6 @@ def generate(body: GenerateRequest, session: Session = Depends(get_session)) -> 
     # docstring). Computed over the same `chunks` generation actually used.
     confidence_tier = retrieval_confidence_tier(chunks)
 
-    if body.turn_id is None:
-        # Only the turn's initial /generate call establishes its retrieved-
-        # chunk set — a regeneration's body.chunks is the client's included
-        # subset (excluded chunks filtered out for the LLM call, useTurnController.ts's
-        # regenerate()), and persisting that here would overwrite the turn's
-        # full candidate set with just what survived exclusion, permanently
-        # losing the excluded chunks from GET /turns/{id} on the next reload
-        # (they'd vanish from the rail with no way back, contradicting the
-        # rail's "excluded stays visible to re-include" contract).
-        persistence.save_retrieved_chunks(session, turn.id, body.chunks)
     generation = persistence.save_generation(
         session,
         turn_id=turn.id,

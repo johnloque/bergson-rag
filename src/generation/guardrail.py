@@ -97,12 +97,15 @@ dependency on `chunks` — the corpus is a fixed, closed set of 8 works
 than read from `data/processed/works/*.json` at import time (a gitignored
 build artifact that may not exist yet in a fresh checkout or CI). Anchoring
 on the "intitulé(e)" cue specifically (rather than any quoted span) is a
-deliberate precision choice: the model is never given real work titles in
-the prompt (`src/generation/prompt.py` only ever shows it `work_id`, e.g.
-`1907_EC`), so any title it names is drawn from its own background
-knowledge, not from the retrieved evidence — but a quoted span *without*
-that cue is often a genuine verbatim quotation from a chunk, which must not
-be flagged.
+deliberate precision choice: at the time this check was built, the model
+was never given real work titles in the prompt (`src/generation/prompt.py`
+only ever showed it `work_id`, e.g. `1907_EC`), so any title it named was
+drawn from its own background knowledge, not from the retrieved evidence —
+but a quoted span *without* that cue is often a genuine verbatim quotation
+from a chunk, which must not be flagged. `fix/title-year-grounding`
+(below) has since added the real title/year to the prompt too, but the cue
+anchor is kept as-is on that branch rather than revisited (see that
+section for why).
 
 Scope boundary, stated plainly: this only verifies that the *title itself*
 exists in the corpus, not that the surrounding attribution (year, author)
@@ -126,6 +129,47 @@ not an omission, and the cue-anchored extraction above was designed
 specifically to avoid flagging genuine quotations, so it carries a low
 false-positive risk consistent with the rest of Layer 1's deterministic
 design.
+
+## Title+year pairing (`fix/title-year-grounding`)
+
+The scope boundary named above — a real title attached to the wrong year
+isn't flagged — is exactly the gap `check_title_year_mismatch` closes, now
+that `src.works.WORKS` (a work_id -> {title, year} table, also this
+project's Sprint 11 date-range-filtering table, docs/ROADMAP.md) exists to
+validate against. `KNOWN_WORK_TITLES` below is now derived from that same
+table instead of an independently hardcoded copy, so the two checks can't
+drift apart on what a "real" title is.
+
+This is the safety-net half of a two-part fix; the primary mitigation is
+prompt-level: `src/generation/prompt.py` now shows the real title and year
+for every chunk's source work directly in the prompt (alongside `work_id`,
+not replacing it), removing the model's need to recall either from its own
+background knowledge in the first place — the actual root cause of both
+fabrication shapes seen in calibration (an invented title entirely, and a
+real title attached to the wrong year). `check_title_year_mismatch` is what
+still runs after generation regardless, the same defense-in-depth
+discipline every other guardrail layer here follows (Layer 1 + Layer 2 +
+confidence tier, none trusted alone).
+
+`check_title_year_mismatch` reuses the existing "intitulé(e)" cue-anchored
+extraction as-is (`_extract_cited_titles` below) rather than a broader
+title-detection rewrite: the prompt grounding above is expected to make the
+cue-word fragility concern lower priority (a model given the correct title
+directly is far less likely to introduce it via an unanticipated phrasing),
+and this branch has no new evidence yet that a broader rewrite is still
+needed — revisit only if it turns out to be. For each cue-matched title
+that *does* match a known work (an unmatched one is `check_title_fabrication`'s
+job, not this check's), a fixed character window around the cue match is
+searched for a 4-digit year; if a year is found there and it isn't that
+work's real year, the pairing is flagged. The window is a documented
+placeholder (`_YEAR_CONTEXT_WINDOW` below), sized from the two real
+fabrication cases this project has on record (both put the wrong year
+within about 15 characters of the cue), not fit against a larger sample —
+same discipline as this project's other unfit thresholds
+(`CONVERGENCE_THRESHOLD`, `_TIER_THRESHOLDS` in `src/generation/signals.py`).
+
+Like `fabricated_titles`, `title_year_mismatches` gates `should_auto_expand`
+directly: it is a positive, specific attribution claim, not an omission.
 """
 
 from __future__ import annotations
@@ -145,22 +189,18 @@ from src.generation.faithfulness import (
 )
 from src.generation.prompt import CITATION_PATTERN
 from src.generation.signals import CONFIDENT_TIERS, GenerationChunk, RetrievalConfidenceTier
+from src.works import WORKS
 
 # The corpus's fixed, closed set of 8 works (docs/ROADMAP.md scope
 # decision) — canonical title plus any alternate/subtitle actually present
-# in the source XML (`data/processed/works/*.json`'s `title`/`alt_titles`,
-# confirmed against the real ingested corpus). Hardcoded rather than read
-# from that gitignored build artifact at import time — this module must
-# work before any ingestion has run (a fresh checkout, CI).
+# in the source XML. Derived from `src.works.WORKS` (`fix/title-year-grounding`)
+# rather than an independently hardcoded copy, so this and
+# `check_title_year_mismatch` below can't drift apart on what a "real" title
+# is; `WORKS` itself is still hardcoded, not read from
+# `data/processed/works/*.json` (a gitignored build artifact) — this module
+# must work before any ingestion has run (a fresh checkout, CI).
 KNOWN_WORK_TITLES: dict[str, tuple[str, ...]] = {
-    "1888_EDIC": ("Essai sur les données immédiates de la conscience",),
-    "1896_MM": ("Matière et mémoire",),
-    "1900_R": ("Le rire", "Essai sur la signification du comique"),
-    "1907_EC": ("L'Évolution créatrice",),
-    "1919_ES": ("L'énergie spirituelle",),
-    "1922_DS": ("Durée et simultanéité", "A propos de la théorie d'Einstein"),
-    "1932_2S": ("Les deux sources de la morale et de la religion",),
-    "1934_PM": ("La Pensée et le Mouvant",),
+    work_id: (metadata.title, *metadata.alt_titles) for work_id, metadata in WORKS.items()
 }
 
 
@@ -207,6 +247,70 @@ def check_title_fabrication(answer: str) -> tuple[str, ...]:
     )
 
 
+_WORK_ID_BY_NORMALIZED_TITLE: dict[str, str] = {
+    _normalize_title(title): work_id
+    for work_id, metadata in WORKS.items()
+    for title in (metadata.title, *metadata.alt_titles)
+}
+
+# A 4-digit year, anchored so it doesn't match inside a work_id/chunk_id
+# token like "1907_EC" or "1907_EC_c5" (the trailing "_" is a word
+# character, same class as the preceding digit, so \b doesn't fall between
+# them — deliberate, not an oversight: a chunk_id mentioned near a title is
+# not the model's own year claim about that title).
+_YEAR_PATTERN = re.compile(r"(?<!\d)(1[89]\d{2})(?!\d)(?!_)")
+
+# Characters searched before/after each "intitulé(e)" cue match for a year
+# claim — see the module docstring ("Title+year pairing") for why this is a
+# documented placeholder, not a fit threshold.
+_YEAR_CONTEXT_WINDOW = 60
+
+
+@dataclass(frozen=True)
+class TitleYearMismatch:
+    """A known, real title (`title`, matching `work_id`) that `answer`
+    pairs with a year other than that work's real `correct_year` —
+    `claimed_years` holds whichever wrong year(s) appeared near the title's
+    "intitulé(e)" mention."""
+
+    title: str
+    work_id: str
+    correct_year: int
+    claimed_years: tuple[int, ...]
+
+
+def check_title_year_mismatch(answer: str) -> tuple[TitleYearMismatch, ...]:
+    """For each "intitulé(e)"-cued title in `answer` that matches a real
+    known work (an unmatched one is `check_title_fabrication`'s job, not
+    this check's), flags it if a year mentioned within
+    `_YEAR_CONTEXT_WINDOW` characters of the cue doesn't match that work's
+    real publication year. Purely deterministic, no LLM call, no dependency
+    on `chunks` — same discipline as `check_title_fabrication`."""
+    mismatches = []
+    for match in _TITLE_CUE_PATTERN.finditer(answer):
+        title = match.group(1).strip()
+        work_id = _WORK_ID_BY_NORMALIZED_TITLE.get(_normalize_title(title))
+        if work_id is None:
+            continue
+        start = max(0, match.start() - _YEAR_CONTEXT_WINDOW)
+        end = min(len(answer), match.end() + _YEAR_CONTEXT_WINDOW)
+        context = answer[start:end]
+        correct_year = WORKS[work_id].year
+        claimed_years = tuple(
+            sorted({int(year) for year in _YEAR_PATTERN.findall(context)} - {correct_year})
+        )
+        if claimed_years:
+            mismatches.append(
+                TitleYearMismatch(
+                    title=title,
+                    work_id=work_id,
+                    correct_year=correct_year,
+                    claimed_years=claimed_years,
+                )
+            )
+    return tuple(mismatches)
+
+
 def _extract_citations(answer: str) -> tuple[str, ...]:
     """chunk_ids cited in `answer`, in the `[chunk_id]` bracket form
     `CITATION_INSTRUCTION` (src/generation/prompt.py) asks the model to
@@ -234,6 +338,9 @@ class StructuralCheck:
     # Quoted work titles the answer names that don't match any of the
     # corpus's 8 real works (`check_title_fabrication`, Sprint 10).
     fabricated_titles: tuple[str, ...] = ()
+    # Real, known titles the answer pairs with the wrong publication year
+    # (`check_title_year_mismatch`, `fix/title-year-grounding`).
+    title_year_mismatches: tuple[TitleYearMismatch, ...] = ()
 
     @property
     def has_citation(self) -> bool:
@@ -241,7 +348,12 @@ class StructuralCheck:
 
     @property
     def passed(self) -> bool:
-        return self.has_citation and not self.unknown_citations and not self.fabricated_titles
+        return (
+            self.has_citation
+            and not self.unknown_citations
+            and not self.fabricated_titles
+            and not self.title_year_mismatches
+        )
 
 
 def check_structure(answer: str, chunks: Sequence[GenerationChunk]) -> StructuralCheck:
@@ -249,14 +361,20 @@ def check_structure(answer: str, chunks: Sequence[GenerationChunk]) -> Structura
     `chunks`, and at least one citation must be present — purely structural,
     no LLM call, independent of `check_faithfulness` (Layer 2). Also runs
     `check_title_fabrication` (Sprint 10) to catch prose-embedded fabricated
-    work titles, a failure mode the citation-resolution check above was
-    never designed to catch (see module docstring)."""
+    work titles, and `check_title_year_mismatch` (`fix/title-year-grounding`)
+    to catch a real title paired with the wrong year — two failure modes the
+    citation-resolution check above was never designed to catch (see module
+    docstring)."""
     known_ids = {chunk.chunk_id for chunk in chunks}
     citations = _extract_citations(answer)
     unknown = tuple(citation for citation in citations if citation not in known_ids)
     fabricated_titles = check_title_fabrication(answer)
+    title_year_mismatches = check_title_year_mismatch(answer)
     return StructuralCheck(
-        citations=citations, unknown_citations=unknown, fabricated_titles=fabricated_titles
+        citations=citations,
+        unknown_citations=unknown,
+        fabricated_titles=fabricated_titles,
+        title_year_mismatches=title_year_mismatches,
     )
 
 
@@ -317,12 +435,19 @@ def generate_evaluation(
 def should_auto_expand(evaluation: EvaluationResult) -> bool:
     """True only if retrieval confidence is at least "moyenne", no claim was
     flagged unsupported by Layer 2, AND Layer 1 found no fabricated work
-    title — see the module docstring for why Layer 1's citation-resolution
-    half (`unknown_citations`/`has_citation`) isn't part of this gate while
-    `fabricated_titles` is. The first generated answer is always rendered
-    collapsed by default regardless of this result (Sprint 7,
-    docs/ROADMAP.md) — this only decides whether it may then auto-expand;
-    the user can always expand it manually either way."""
+    title or title/year mismatch — see the module docstring for why Layer
+    1's citation-resolution half (`unknown_citations`/`has_citation`) isn't
+    part of this gate while `fabricated_titles`/`title_year_mismatches` are.
+    The first generated answer is always rendered collapsed by default
+    regardless of this result (Sprint 7, docs/ROADMAP.md) — this only
+    decides whether it may then auto-expand; the user can always expand it
+    manually either way."""
     confidence_ok = evaluation.retrieval_confidence in CONFIDENT_TIERS
     no_fabricated_titles = not evaluation.structural.fabricated_titles
-    return confidence_ok and not evaluation.has_unsupported_claims and no_fabricated_titles
+    no_year_mismatches = not evaluation.structural.title_year_mismatches
+    return (
+        confidence_ok
+        and not evaluation.has_unsupported_claims
+        and no_fabricated_titles
+        and no_year_mismatches
+    )

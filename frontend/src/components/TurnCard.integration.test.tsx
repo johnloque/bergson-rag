@@ -65,7 +65,14 @@ describe('TurnCard integration', () => {
         if (url.endsWith('/evaluate')) {
           return evaluatePromise.then(() =>
             jsonResponse({
-              structural: { citations: ['W_c1'], unknown_citations: [], has_citation: true, fabricated_titles: [], passed: true },
+              structural: {
+              citations: ['W_c1'],
+              unknown_citations: [],
+              has_citation: true,
+              fabricated_titles: [],
+              title_year_mismatches: [],
+              passed: true,
+            },
               faithfulness: { score: 1, model: 'judge', claims: [] },
               should_auto_expand: false,
             }),
@@ -194,7 +201,14 @@ describe('TurnCard full cycle survives a simulated navigate-away-and-back', () =
         }
         if (url.endsWith('/evaluate')) {
           return jsonResponse({
-            structural: { citations: ['W_c1'], unknown_citations: [], has_citation: true, fabricated_titles: [], passed: true },
+            structural: {
+              citations: ['W_c1'],
+              unknown_citations: [],
+              has_citation: true,
+              fabricated_titles: [],
+              title_year_mismatches: [],
+              passed: true,
+            },
             faithfulness: { score: 1, model: 'judge', claims: [] },
             should_auto_expand: true,
           })
@@ -224,6 +238,7 @@ describe('TurnCard full cycle survives a simulated navigate-away-and-back', () =
                     unknown_citations: [],
                     has_citation: true,
                     fabricated_titles: [],
+                    title_year_mismatches: [],
                     passed: true,
                   },
                   faithfulness: { score: 1, model: 'judge', claims: [] },

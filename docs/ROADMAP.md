@@ -358,13 +358,34 @@ both address the trust/reliability surface of the shipped v0.
   findings, the exact real fabrication cases, and the scope boundary
   (title existence only, not year/work-id attribution accuracy):
   [`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md).
+  The year/work-id attribution scope boundary named here is closed by
+  `fix/title-year-grounding`, below.
+
+- **`fix/title-year-grounding`** — **Implemented.** Closes the year/work-id
+  attribution scope gap `fix/faithfulness-citation-detection` named above,
+  via two independent, complementary changes: the real title and
+  publication year are now shown alongside `work_id` in the generation
+  prompt (`src/generation/prompt.py`), removing the model's need to recall
+  either from its own background knowledge (the root cause of both
+  fabrication shapes seen in calibration); and `check_structure` gained
+  `check_title_year_mismatch` (`src/generation/guardrail.py`), which flags
+  a real, known title paired with the wrong year. Both read from a new
+  `src/works.py` module — the work_id -> {title, year} table Sprint 11
+  (below) also needs for date-range filtering, built here rather than
+  duplicated later. Full design rationale, the empirical Q004 regeneration
+  check, and test coverage:
+  [`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md),
+  [`docs/generation_strategy.md`](generation_strategy.md).
 
 ### Sprint 11 — Backend: filtering + chunk mapping
 
 - Chunk retrieval filtering by work and by chronological bounds — a
   Qdrant payload filter on the existing `work_id` field; a static
   work_id → year table derives date-range filtering, so no new indexed
-  field or reindex is needed.
+  field or reindex is needed. **This table already exists**: `src/works.py`
+  (`WORKS: dict[str, WorkMetadata]`), built by `fix/title-year-grounding`
+  for prompt grounding and Layer 1's title+year pairing check (above) —
+  import and extend it here rather than building a second one.
 - Paragraph-to-chunk_id mapping script, keyed on `paragraph_ids` (stable
   across re-chunking, per the Sprint 1 ingestion design) — resolves the
   gold-dataset-remapping cost that has blocked chunk-size experiments

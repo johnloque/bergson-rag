@@ -177,6 +177,12 @@ class StructuralCheckOut(BaseModel):
     citations: list[str]
     unknown_citations: list[str]
     has_citation: bool
+    # Quoted work titles the answer names that don't match any of the
+    # corpus's 8 real works (src/generation/guardrail.py, Sprint 10).
+    # Defaulted, not required: evaluations persisted before this field
+    # existed (`evaluations.structural_flags`, src/api/models.py) still
+    # deserialize via `_evaluation_row_to_response` without it.
+    fabricated_titles: list[str] = []
     passed: bool
 
 

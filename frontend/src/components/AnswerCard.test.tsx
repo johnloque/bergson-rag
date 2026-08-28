@@ -5,7 +5,7 @@ import type { EvaluateResponse } from '../api/types'
 
 function makeEvaluation(shouldAutoExpand: boolean): EvaluateResponse {
   return {
-    structural: { citations: [], unknown_citations: [], has_citation: true, passed: true },
+    structural: { citations: [], unknown_citations: [], has_citation: true, fabricated_titles: [], passed: true },
     faithfulness: { score: 1, model: 'judge', claims: [] },
     should_auto_expand: shouldAutoExpand,
   }
@@ -96,7 +96,7 @@ describe('AnswerCard reveal behavior', () => {
 describe('AnswerCard full-endorsement statement', () => {
   function evaluationWithClaims(claims: EvaluateResponse['faithfulness']['claims']): EvaluateResponse {
     return {
-      structural: { citations: [], unknown_citations: [], has_citation: true, passed: true },
+      structural: { citations: [], unknown_citations: [], has_citation: true, fabricated_titles: [], passed: true },
       faithfulness: { score: claims.every((c) => c.supported) ? 1 : 0.5, model: 'judge', claims },
       should_auto_expand: claims.every((c) => c.supported),
     }

@@ -44,14 +44,20 @@ import pytest
 from qdrant_client import QdrantClient
 
 from src.generation.chunk_judgment import ChunkJudgment
-from src.generation.faithfulness import DEFAULT_JUDGE_MODEL, build_judge_llm
+from src.generation.faithfulness import DEFAULT_JUDGE_MODEL, FaithfulnessResult, build_judge_llm
 from src.generation.generate import (
     DEFAULT_FALLBACK_MODEL,
     DEFAULT_MODEL,
     FALLBACK_MODEL_ENV_VAR,
     generate_from_chunks,
 )
-from src.generation.guardrail import check_structure, generate_evaluation, should_auto_expand
+from src.generation.guardrail import (
+    EvaluationResult,
+    check_structure,
+    check_title_fabrication,
+    generate_evaluation,
+    should_auto_expand,
+)
 from src.generation.prompt import CHUNK_JUDGMENT_INSTRUCTION
 from src.generation.signals import retrieval_confidence_tier
 from src.indexing.embeddings import DenseEmbedder, SparseEmbedder
@@ -112,6 +118,40 @@ Q002_CHUNK_ID = "1907_EC_c9"
 # Not a real corpus chunk_id — used only to exercise Layer 1's
 # citation-resolution check.
 UNKNOWN_CHUNK_ID = "9999_XX_c1"
+
+# Real `generate_from_chunks` end_to_end output (eval/results/ragas_checkpoint.jsonl,
+# item_id="Q004", mode="end_to_end", generated at commit 7c9d99f — see
+# docs/anti_hallucination_guardrails.md's Sprint 10 calibration section) —
+# not a hand-crafted fixture. Fabricates two work titles in prose ("Le
+# comique de caractère" for the real 1900 work "Le rire"; the real title
+# "L'évolution créatrice" misattributed to 1934 instead of 1907). RAGAS
+# scored this answer faithfulness=0.0 (Layer 2 did catch it), but it never
+# emits a `[chunk_id]` bracket citation at all, so Layer 1's
+# citation-resolution half had nothing to flag before this branch.
+Q004_E2E_FABRICATED_TITLE_ANSWER = (
+    'Dans l\'œuvre de 1900 intitulée "Le comique de caractère", Bergson établit un '
+    "rapport entre l'imagination poétique et la réalité en affirmant que la vision du "
+    "poète poétique est une vision plus complète de la réalité. Selon lui, les "
+    "personnages que crée le poète ne sont pas des compositions faites à partir de "
+    "morceaux empruntés à droite et à gauche autour d'eux, mais des visions plus "
+    "complètes de la réalité.\n\n"
+    "Dans l'œuvre de 1934 intitulée \"L'évolution créatrice\", Bergson établit un "
+    "rapport entre l'imagination et la réalité en affirmant que le possible est le "
+    "mirage du présent dans le passé."
+)
+
+# Real `generate_from_chunks` end_to_end output (same checkpoint, item_id="Q002",
+# mode="end_to_end") — fabricates "De l'évolution de la vie. Mécanisme et
+# finalité" as the title of 1907_EC (the real title is "L'Évolution
+# créatrice"). RAGAS scored this answer faithfulness=1.0 — Layer 2 missed
+# this fabrication outright, the concrete case motivating this branch's
+# Layer 1 extension (docs/anti_hallucination_guardrails.md, Sprint 10).
+Q002_E2E_FABRICATED_TITLE_ANSWER = (
+    "Dans l'œuvre de Henri Bergson intitulée \"De l'évolution de la vie. Mécanisme et "
+    "finalité\" (1907_EC), Bergson utilise l'image de la fonte d'un morceau de sucre "
+    "dans un verre d'eau pour expliquer sa thèse selon laquelle le temps est une durée "
+    "créatrice et non pas un simple déroulement de moments successifs."
+)
 
 # Q009's 5 real chunks overflow the default JUDGE_NUM_CTX=8192 (confirmed
 # empirically — see test_q009_persistent_retrieval_miss_gets_very_low_confidence_tier).
@@ -247,6 +287,11 @@ def test_q008_answer_generated_and_returned_regardless_of_evaluation(client, rer
     # should_auto_expand may legitimately be False here (known judge noise
     # floor, docs/ROADMAP.md) — only that it runs without crashing matters.
     assert should_auto_expand(evaluation) in (True, False)
+    # Q008's confirmed-faithful answer is unaffected by the Sprint 10 Layer 1
+    # title-fabrication check (docs/ROADMAP.md): it never names a work title
+    # in prose, so this branch adds no new gate against it — explicit
+    # regression check, not just an absence of failure.
+    assert evaluation.structural.fabricated_titles == ()
 
 
 # --- Q009: persistent retrieval miss -------------------------------------
@@ -334,6 +379,82 @@ def test_layer1_missing_citation_flagged_without_llm_call(client):
     structural = check_structure("Une réponse sans aucune citation.", [chunk])
     assert not structural.has_citation
     assert not structural.passed
+
+
+# --- Layer 1 (Sprint 10 addition): prose-embedded title fabrication -------
+#
+# `docs/ROADMAP.md`'s Sprint 10 investigation confirmed check_structure's
+# citation-resolution check was never designed to catch a fabricated work
+# title embedded in prose (as opposed to a `[chunk_id]` bracket) — see
+# `docs/anti_hallucination_guardrails.md`. These tests use real
+# `generate_from_chunks` end_to_end output (the constants above), not
+# hand-crafted answers, matching this module's own stated discipline for
+# hallucination fixtures.
+
+
+def test_check_title_fabrication_flags_real_fabricated_titles():
+    """No LLM, no `chunks` argument needed — purely deterministic, exercised
+    directly against the two real fabrications this check was built from."""
+    assert check_title_fabrication(Q004_E2E_FABRICATED_TITLE_ANSWER) == ("Le comique de caractère",)
+    assert check_title_fabrication(Q002_E2E_FABRICATED_TITLE_ANSWER) == (
+        "De l'évolution de la vie. Mécanisme et finalité",
+    )
+
+
+def test_check_title_fabrication_does_not_flag_genuine_titles():
+    """A genuine work-title reference — canonical title, alternate title, and
+    an accent/case-insensitive spelling variant — must not be flagged: this
+    branch must not introduce a new false-positive source while fixing the
+    fabricated-title gap (docs/ROADMAP.md)."""
+    answer = (
+        "Dans l'œuvre intitulée \"L'Évolution créatrice\", Bergson développe sa thèse. "
+        'Dans l\'ouvrage intitulé "Le rire", il analyse le mécanisme du comique, aussi '
+        "connu sous son sous-titre, l'ouvrage intitulé \"essai sur la signification du "
+        'comique". Enfin, dans l\'œuvre intitulée "matiere et memoire" (sans accents), '
+        "il distingue perception et affection."
+    )
+    assert check_title_fabrication(answer) == ()
+
+
+def test_q004_fabricated_title_caught_by_layer1_without_llm(client):
+    """Q004's real fabricated-title case (docs/ROADMAP.md) is now caught by
+    Layer 1 alone, deterministically — no LLM call needed to catch it,
+    unlike before this branch where only Layer 2 (and, per the Q002 case
+    below, not even reliably that) could catch it."""
+    structural = check_structure(Q004_E2E_FABRICATED_TITLE_ANSWER, [])
+    assert structural.fabricated_titles == ("Le comique de caractère",)
+    assert not structural.passed
+
+    # should_auto_expand must block on the fabricated title alone, even if
+    # Layer 2 and retrieval confidence both look fine — constructing
+    # FaithfulnessResult directly (rather than calling the judge) isolates
+    # Layer 1's own contribution to the gate.
+    evaluation = EvaluationResult(
+        structural=structural,
+        faithfulness=FaithfulnessResult(score=1.0, model="test", claims=()),
+        retrieval_confidence="élevée",
+    )
+    assert not should_auto_expand(evaluation)
+
+
+def test_q002_fabricated_title_layer2_missed_now_caught_by_layer1(client):
+    """The real Q002 end_to_end answer scored faithfulness=1.0 by RAGAS
+    (`eval/results/ragas_checkpoint.jsonl`) — Layer 2 missed this
+    fabrication outright, the concrete finding motivating this branch
+    (docs/anti_hallucination_guardrails.md, Sprint 10). Layer 1 now catches
+    it independently of Layer 2's verdict."""
+    structural = check_structure(Q002_E2E_FABRICATED_TITLE_ANSWER, [])
+    assert structural.fabricated_titles == ("De l'évolution de la vie. Mécanisme et finalité",)
+
+    # Reproduces the real historical judge output (faithfulness=1.0, no
+    # claims flagged) to show should_auto_expand now blocks a case that,
+    # before this branch, would have been allowed to auto-expand.
+    evaluation = EvaluationResult(
+        structural=structural,
+        faithfulness=FaithfulnessResult(score=1.0, model="test", claims=()),
+        retrieval_confidence="élevée",
+    )
+    assert not should_auto_expand(evaluation)
 
 
 # --- chunk_judgments: fixture shape and prompt content --------------------

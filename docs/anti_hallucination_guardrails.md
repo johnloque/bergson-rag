@@ -204,4 +204,148 @@ tier, `should_auto_expand` false), Q002 (strong case, auto-expands), a
 hand-crafted Layer 1 unknown-citation case, the `chunk_judgments`
 prompt-content check, and a manual-regeneration case reusing the Q001
 fixture logic against a `chunk_judgments`-populated `generate_from_chunks`
-call.
+call. Sprint 10 (below) adds real-fabrication title-detection cases to
+this file.
+
+## Sprint 10 (`fix/faithfulness-citation-detection`): judge-noise calibration update + Layer 1 title-fabrication extension
+
+Real-usage reports after v0 shipped ("correct passages flagged as
+unsupported") could have two distinct causes: (1) the Q008-type judge
+noise already known from this sprint's own n=4 calibration (above), now
+possibly at a higher real-usage rate than that tiny sample suggested; or
+(2) a genuine scope gap in Layer 1's `check_structure`, which only ever
+verified *structured* `[chunk_id]` citations, never prose. Standing
+project discipline (docs/ROADMAP.md) required investigating both before
+writing any fix — both turned out to be real.
+
+### (1) Judge noise, re-calibrated at n=20
+
+The original n=4 calibration (above) sampled two confirmed hallucinations
+and two confirmed-faithful items. This sprint re-examined all 20 real,
+non-hand-picked `generate_from_chunks` answers already on record from this
+project's own `eval/scripts/run_ragas_eval.py` full run
+(`eval/results/eval_ragas_n10_20260816T203232Z.md` +
+`eval/results/ragas_checkpoint.jsonl`, commit `7c9d99f`, `ollama_chat/mistral`
+generation and judge, `temperature=0`) — 10 `generation_only` items (gold
+chunk_ids, retrieval bypassed) and 10 `end_to_end` items (real
+hybrid_search + rerank + generate) — reused rather than regenerated, since
+they are already real pipeline output at a fixed, reproducible commit, not
+hand-picked fixtures. Each item's RAGAS faithfulness score was checked
+by hand against the actual cited chunk text (`data/processed/chunks/*.json`
+for `generation_only`, where the exact evidence set is known; corpus
+knowledge and the gold `expected_anwser` for `end_to_end`, where the exact
+retrieved set isn't persisted) to judge whether the flagged content was
+genuinely unsupported or a judge false positive.
+
+**Result: judge noise is real and substantially more common than the n=4
+check suggested.** In `generation_only` mode alone, 5 of 10 items
+(Q003 0.500, Q004 0.750, Q005 0.286, Q006 0.500, Q010 0.000) scored below
+1.0 despite the answer being, on manual reading, a substantively accurate
+paraphrase or near-verbatim quotation of the cited chunk — Q010 in
+particular ("Bergson utilise la métaphore de la sédimentation
+géologique... conditionnés par des forces éruptives invisibles...") is
+close to a verbatim rendering of its chunk's own sentence, yet was scored
+faithfulness=**0.0**, the most severe possible false-positive outcome.
+That is a 50% item-level over-flagging rate in the mode that isolates
+generation/judge quality from retrieval noise — an order of magnitude
+above what n=4 implied. `end_to_end` mode adds at least one more clear
+case (Q008, scored 0.0 against content that closely tracks the same real
+"manteau accroché à un clou" passage `generation_only`'s Q008 scored
+1.0 on) plus three `nan` (judge parse failure, no signal at all — a
+related, already-documented reliability gap, not a false positive but not
+a working guardrail signal either).
+
+This is not a new bug — it is the same accepted Q008-type noise floor
+this sprint already documented, now quantified at a scale that makes it
+clear it is not a rare edge case in real usage. Per `docs/ROADMAP.md`'s
+gold-dataset-volume discipline (the same threshold applied to stems vs.
+lemmas, cross-encoder vs. multi-vector reranking, and query
+reformulation), actually reducing this noise floor — a judge-model swap,
+a different prompting strategy, or an ensemble — is a calibration effort
+that needs a larger, purpose-built gold set of flagged/unflagged examples
+to evaluate against, not something to attempt inside this fix branch.
+**Deferred as an open `exp/` candidate**, not closed: the next step is
+accumulating enough real flagged/unflagged examples (this n=20 pass is a
+start) to run that comparison meaningfully.
+
+### (2) Layer 1 scope gap — confirmed, and fixed
+
+Reading `check_structure`'s actual implementation (`src/generation/guardrail.py`,
+pre-Sprint-10) confirmed the gap plainly: it extracts `[chunk_id]` brackets
+(`CITATION_PATTERN`) and checks each against the `chunks` passed in — it
+has no path at all for a claim like `l'œuvre de 1900 intitulée "Le comique
+de caractère"` embedded in ordinary prose. The original Q004 calibration
+case (this sprint, above) was exactly this shape. Two real, non-hand-picked
+`end_to_end` answers from the same n=20 pass above confirm this is a live
+failure mode, not a hypothetical one:
+
+- Q004 `end_to_end` fabricated **"Le comique de caractère"** as the title
+  of the real 1900 work (actually "Le rire" / "Essai sur la signification
+  du comique"), and separately misattributed the real title "L'évolution
+  créatrice" to 1934 instead of 1907, in the same answer. RAGAS *did*
+  score this 0.0 — Layer 2 caught it — but the answer contains zero
+  `[chunk_id]` citations, so Layer 1's citation-resolution check had
+  nothing to flag.
+- Q002 `end_to_end` fabricated **"De l'évolution de la vie. Mécanisme et
+  finalité"** as the title of 1907_EC (the real title is "L'Évolution
+  créatrice"). RAGAS scored this answer faithfulness=**1.0** — Layer 2
+  missed it outright. This is the concrete proof that the Layer 1 gap has
+  independent cost, not just redundant coverage of what Layer 2 already
+  catches.
+
+**Fix**: `check_structure` now also runs `check_title_fabrication`
+(`src/generation/guardrail.py`) — deterministic, no LLM call, no
+dependency on `chunks`. It extracts any quoted title introduced by the cue
+word "intitulé(e)" (the exact pattern both real fabrications above used)
+and flags it unless it matches, after accent/case/whitespace
+normalization, one of the corpus's 8 known work titles or alternate
+titles (`KNOWN_WORK_TITLES`, hardcoded — the corpus is a fixed, closed set
+per `docs/ROADMAP.md`'s scope decision, and this must work before any
+ingestion has produced `data/processed/works/*.json`, a gitignored build
+artifact). The cue-word anchor is a deliberate precision choice: the model
+is never shown real work titles in the prompt (only `work_id`, e.g.
+`1907_EC` — `src/generation/prompt.py`), so any title it names comes from
+its own background knowledge, but a quoted span *without* that cue is
+often a genuine verbatim quotation from a chunk, which must not be
+flagged. `StructuralCheck` gained a `fabricated_titles` field, and unlike
+the citation-resolution half of Layer 1 (kept out of `should_auto_expand`'s
+gate because the local model often omits `[chunk_id]` brackets even from
+well-grounded answers), `fabricated_titles` *is* wired into the gate: a
+title fabrication is a positive, specific claim, not an omission, so the
+same false-positive risk doesn't apply.
+
+**Scope boundary, stated plainly**: this only verifies that a *named
+title exists* in the corpus, not that its surrounding attribution (year,
+work_id) is also correct. A second real case, Q007 `end_to_end` (same n=20
+pass), attributed the real title "Matière et mémoire" to chunk work_id
+`1888_EDIC` (which is actually "Essai sur les données immédiates de la
+conscience") — RAGAS scored this 1.0, and this check does not flag it
+either, since "Matière et mémoire" is a real title. Verifying
+year/work-id attribution accuracy is a fuzzier problem than closed-set
+title lookup and is left out of this deterministic check; Layer 2 remains
+the (unreliable, per above) backstop for that failure mode. This check
+needs to answer only the case it targets correctly — catching one
+fabricated title already blocks auto-expand for the whole answer, so it
+does not need to catch every error in a given answer to be useful.
+
+Wired through the API (`StructuralCheckOut.fabricated_titles`,
+`src/api/schemas.py`/`src/api/main.py`) and the frontend
+(`CitationFlag.tsx`, `StructuralCheckOut` in `frontend/src/api/types.ts`)
+— the same collapsed/flag-only presentation `unknown_citations` already
+used, extended rather than duplicated. `StructuralCheckOut.fabricated_titles`
+defaults to `[]` in the Pydantic schema specifically so evaluations
+persisted before this field existed (`evaluations.structural_flags`,
+`src/api/models.py`) still deserialize via `_evaluation_row_to_response`.
+
+Test coverage (`tests/test_guardrail.py`): `check_title_fabrication`
+exercised directly against both real fabrications above (no LLM call);
+a genuine-titles case (canonical, alternate, and an accent/case-insensitive
+spelling variant) confirming no new false-positive source was introduced;
+the Q004 case shown caught by Layer 1 alone, with `should_auto_expand`
+constructed against a stubbed fully-faithful `FaithfulnessResult` to
+isolate Layer 1's own contribution to the gate; the Q002 case reproducing
+the real historical judge output (faithfulness=1.0, no flagged claims) to
+show `should_auto_expand` now blocks a case that used to slip through
+before this branch; and an explicit regression assertion on the existing
+Q008 test that `structural.fabricated_titles == ()` for that confirmed-faithful,
+title-free answer — this branch changes nothing about Q008's behavior.

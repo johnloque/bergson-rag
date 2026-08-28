@@ -291,6 +291,7 @@ def _evaluation_result_to_response(evaluation: EvaluationResult) -> EvaluateResp
             citations=list(evaluation.structural.citations),
             unknown_citations=list(evaluation.structural.unknown_citations),
             has_citation=evaluation.structural.has_citation,
+            fabricated_titles=list(evaluation.structural.fabricated_titles),
             passed=evaluation.structural.passed,
         ),
         faithfulness=FaithfulnessOut(

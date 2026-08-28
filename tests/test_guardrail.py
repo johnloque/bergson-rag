@@ -525,6 +525,35 @@ def test_q004_e2e_fabricated_answer_also_has_a_year_mismatch():
     assert mismatches[0].claimed_years == (1934,)
 
 
+# --- Sprint 11 (`feat/backend-reference-data`): text-level titles ---------
+#
+# Before this branch, a real, correctly-attributed text-level title (e.g.
+# "L'effort intellectuel", a real 1902 article within 1919_ES) would have
+# been flagged as fabricated by check_title_fabrication (only the 8
+# work-level titles were known) — and check_title_year_mismatch had no way
+# to validate its year against anything but 1919_ES's own 1919 publication
+# date. Both are now resolved via src.works.TEXTS.
+
+
+def test_check_title_fabrication_recognizes_text_level_titles():
+    answer = 'Dans son article intitulé "L\'effort intellectuel", Bergson développe cette thèse.'
+    assert check_title_fabrication(answer) == ()
+
+
+def test_check_title_year_mismatch_validates_against_the_texts_own_year():
+    """The text's own year (1902), not the enclosing anthology's own
+    publication year (1919), is the correct year to check against."""
+    correct = 'Dans son article de 1902 intitulé "L\'effort intellectuel", Bergson écrit.'
+    assert check_title_year_mismatch(correct) == ()
+
+    wrong = 'Dans son article de 1919 intitulé "L\'effort intellectuel", Bergson écrit.'
+    mismatches = check_title_year_mismatch(wrong)
+    assert len(mismatches) == 1
+    assert mismatches[0].work_id == "1919_ES"
+    assert mismatches[0].correct_year == 1902
+    assert mismatches[0].claimed_years == (1919,)
+
+
 @_llm_skip
 def test_q004_title_year_grounding_empirical_regeneration(client):
     """Empirical check, not a guarantee (docs/anti_hallucination_guardrails.md):

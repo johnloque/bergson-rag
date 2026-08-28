@@ -398,6 +398,16 @@ Functional but has no UI in this sprint — the filter UI (work checklist,
 date slider) lands in Sprint 12. Between Sprint 11 and Sprint 12, this
 capability is real but only exercisable via direct API calls.
 
+**Paragraph-to-chunk_id mapping and text-level dates — implemented
+(`feat/backend-reference-data`).** `src.paragraph_chunk_map.resolve_chunk_ids`
+closes the gold-dataset-remapping cost named above. Separately,
+`src.works.TEXTS` extends `WORKS` with individually-dated text-level
+title/year for 1919_ES and 1934_PM's anthology structure, resolved via
+`resolve_paragraph_metadata` — now used by `src/generation/prompt.py` and
+Layer 1's title+year check (`src/generation/guardrail.py`) in place of the
+work-level-only lookup for these two works. Full design rationale and test
+coverage: [`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md).
+
 ### Sprint 12 — UI/UX overhaul
 
 - Landing page reachable only via clicking the app icon after first

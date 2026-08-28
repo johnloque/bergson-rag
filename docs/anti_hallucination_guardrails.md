@@ -485,3 +485,97 @@ signals are clean) and `AnswerCard.test.tsx` (two new cases: full
 endorsement suppressed when `fabricated_titles` is non-empty despite every
 claim being supported, and the same for `title_year_mismatches` — direct
 regression coverage for the blind spot above).
+
+## Sprint 11 (`feat/backend-reference-data`): text-level title+year resolution
+
+`fix/title-year-grounding`'s `src.works.WORKS` table resolves title/year at
+the *work* level only — fine for 6 of the corpus's 8 works, but 1919_ES
+("L'énergie spirituelle") and 1934_PM ("La Pensée et le Mouvant") are
+anthologies of individually-dated articles/conferences/etc., each with its
+own real title and first-publication year, sometimes decades apart from
+the anthology's own. Before this branch, that finer identity was invisible
+to both the prompt and Layer 1: a chunk from 1919_ES's real 1902 article
+"L'effort intellectuel" was shown to the model only as
+`1919_ES — L'énergie spirituelle (1919)`, and an answer correctly naming
+that article's real title would have been flagged by
+`check_title_fabrication` as fabricated (it wasn't among the known 8 work
+titles), while `check_title_year_mismatch` had no way to validate its real
+1902 date against anything but 1919_ES's own 1919 publication year.
+
+**`src.works.TEXTS`** (extending `works.py`, not a second table — same
+"import and extend, don't rebuild" discipline `fix/title-year-grounding`
+established for `WORKS` itself) records each qualifying text's title, year,
+and paragraph_id range for these two works, keyed by the individually-dated
+`<div>` (`@type` one of art/conf/discours/essai/notice) it comes from.
+Depends on the same load-bearing structural assumption `WORKS`'s consumers
+already lean on implicitly (max div nesting depth 1, `docs/xml_audit_report.md`)
+but verified specifically for these two files' actual XML, not just
+inferred from the corpus-wide stat — see `scripts/extract_text_metadata.py`
+and `tests/test_works.py::test_no_chunk_straddles_two_qualifying_divs`
+(chunking-level) and `test_no_qualifying_div_is_nested_in_another`
+(XML-level). All 17 qualifying divs across both works extracted cleanly (no
+year-extraction failure to log/exclude in the real corpus — the
+logged-and-excluded path is still exercised directly,
+`tests/test_works.py::test_ambiguous_year_div_is_logged_and_excluded_not_defaulted`,
+against a synthetic corpus).
+
+**`resolve_paragraph_metadata(work_id, paragraph_id) -> ParagraphMetadata`**
+(`{work_title, work_year, text_title, text_year}`, the last two `None`
+unless `paragraph_id` falls inside a `TEXTS` entry) is the single
+resolution entry point both consumers below now use instead of a
+work-level-only lookup:
+
+- **`src/generation/prompt.py`**: `_format_chunk`'s per-chunk header now
+  shows the text-level title/year alongside (not instead of) the
+  work-level one when applicable, e.g. a chunk from "L'effort intellectuel"
+  shows both `L'énergie spirituelle (1919)` and `texte « L'effort
+  intellectuel » (1902)` — the same root-cause mitigation
+  `fix/title-year-grounding` applied at the work level, now precise enough
+  that the model no longer needs to (mis)attribute a specific article's
+  ideas to its anthology's publication year either.
+- **`src/generation/guardrail.py`**: `KNOWN_WORK_TITLES`/`_KNOWN_TITLES_NORMALIZED`
+  are extended with `KNOWN_TEXT_TITLES` (derived from `TEXTS`, same
+  drift-avoidance reasoning as `KNOWN_WORK_TITLES`'s own derivation from
+  `WORKS`), so `check_title_fabrication` no longer flags a real
+  individually-dated text's title as fabricated. `_TITLE_ATTRIBUTION`
+  replaces the old, work-only `_WORK_ID_BY_NORMALIZED_TITLE`: it resolves a
+  matched title to *its own* correct year (the text's year for a
+  text-level title, the work's year for a work-level one), so
+  `check_title_year_mismatch` validates a text-level claim against the
+  text's real date rather than forcing it against the enclosing
+  anthology's.
+
+Test coverage: `tests/test_works.py` (the ES_1902_EI worked example end to
+end, dated-text vs. front-matter vs. non-anthology-work fallback,
+the nesting/no-straddling assumption verified both at the XML level and
+against the real current chunking, the logged-and-excluded year-extraction
+failure path, and a regression check tying the hand-transcribed `TEXTS`
+back to a fresh run of `scripts/extract_text_metadata.py`);
+`tests/test_prompt.py` (chunk header shows both levels when applicable,
+work-level only otherwise — hand-built chunks, no Qdrant/LLM dependency);
+`tests/test_guardrail.py` (a real text-level title is not flagged as
+fabricated; a text-level title paired with the anthology's year instead of
+its own is flagged, with the anthology's year correctly reported as the
+wrong one and the text's own year as `correct_year`).
+
+## Sprint 11 (`feat/backend-reference-data`): paragraph_id -> chunk_id mapping
+
+A separate, unrelated addition shipped in the same branch (different
+input/output shape, different consumer, kept in its own module rather than
+folded into `works.py`): `src.paragraph_chunk_map.resolve_chunk_ids`
+resolves a `(work_id, paragraph_id)` pair against whatever chunking
+`data/processed/chunks/` currently holds, by scanning `Chunk.paragraph_ids`
+— no new XML parsing, since paragraph_ids are already stable, ingestion-
+assigned identifiers and chunking is just a grouping over them. Exists to
+close the gold-dataset-remapping cost `docs/gold_dataset_protocol.md`
+names as a blocker for Sprint 14's chunk-size experiments: ground truth
+there is keyed on paragraph_ids specifically so it survives a re-chunking
+event, and this function is what turns that stable ground truth back into
+whatever chunk_ids a given chunking run actually produced. A plain
+importable function, not a guardrail component — has no interaction with
+`generate_evaluation`/`should_auto_expand` above.
+
+Test coverage: `tests/test_paragraph_chunk_map.py`, against real,
+already-verified gold_dataset.csv mappings (Q001, Q004, Q007's four
+paragraph_ids across two works) plus a round-trip check over every
+paragraph/chunk pair in 1907_EC's current chunking.

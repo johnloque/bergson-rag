@@ -56,7 +56,7 @@ describe('Conversation — draft turn stays on one controller instance', () => {
         }
         if (url.endsWith('/evaluate')) {
           return ok({
-            structural: { citations: [], unknown_citations: [], has_citation: true, passed: true },
+            structural: { citations: [], unknown_citations: [], has_citation: true, fabricated_titles: [], passed: true },
             faithfulness: { score: 1, model: 'judge', claims: [] },
             should_auto_expand: false,
           })

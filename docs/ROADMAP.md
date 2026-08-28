@@ -341,14 +341,23 @@ both address the trust/reliability surface of the shipped v0.
   fixed by keying `/new`'s route element on `location.key`. Full diagnosis
   of both bugs, the turn-lifecycle schema/endpoint changes, and test
   coverage: [`docs/turn_lifecycle.md`](turn_lifecycle.md).
-- **`fix/faithfulness-citation-detection`** (planned). Investigate before
-  fixing (standing project discipline) whether "correct passages flagged
-  as unsupported" — already known as judge noise from Q008
-  ([`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md))
-  — occurs at a higher-than-expected rate in real usage, a genuine gap in
-  Layer 1's `check_structure` (prose-embedded fabricated titles, e.g. the
-  Q004 case, may be outside Layer 1's original citation-resolution
-  scope), or both.
+- **`fix/faithfulness-citation-detection`** — **Implemented.** Investigation
+  (standing project discipline) found both suspected causes real, not
+  either/or: judge noise (Q008-type) re-calibrated at n=20 (up from the
+  original n=4) shows a 50% item-level over-flagging rate in
+  generation-only mode alone — real, but not a new bug, so left as an
+  open `exp/` candidate rather than attempted in this branch; and Layer
+  1's `check_structure` was confirmed, by reading its implementation, to
+  have no path at all for a prose-embedded fabricated work title (only
+  `[chunk_id]` brackets), confirmed live by two real `generate_from_chunks`
+  answers — one of which (Q002 `end_to_end`) scored faithfulness=1.0,
+  proving Layer 2 alone cannot be relied on to catch this. Fixed by
+  extending `check_structure` with a new deterministic, no-LLM
+  `check_title_fabrication` check against the corpus's 8 known work
+  titles, wired into `should_auto_expand`'s gate. Full investigation
+  findings, the exact real fabrication cases, and the scope boundary
+  (title existence only, not year/work-id attribution accuracy):
+  [`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md).
 
 ### Sprint 11 — Backend: filtering + chunk mapping
 

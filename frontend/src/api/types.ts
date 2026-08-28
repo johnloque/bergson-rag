@@ -92,6 +92,9 @@ export interface StructuralCheckOut {
   citations: string[]
   unknown_citations: string[]
   has_citation: boolean
+  // Quoted work titles the answer names that don't match any of the
+  // corpus's 8 real works (src/generation/guardrail.py, Sprint 10).
+  fabricated_titles: string[]
   passed: boolean
 }
 

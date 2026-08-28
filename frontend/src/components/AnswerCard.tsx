@@ -52,7 +52,10 @@ export function AnswerCard({
       data-testid="answer-card"
     >
       {expanded && evaluation && (
-        <CitationFlag unknownCitations={evaluation.structural.unknown_citations} />
+        <CitationFlag
+          unknownCitations={evaluation.structural.unknown_citations}
+          fabricatedTitles={evaluation.structural.fabricated_titles}
+        />
       )}
 
       <div

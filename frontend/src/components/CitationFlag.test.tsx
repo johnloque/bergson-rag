@@ -12,4 +12,14 @@ describe('CitationFlag', () => {
     render(<CitationFlag unknownCitations={['1907_EC_c999']} />)
     expect(screen.getByText(/1907_EC_c999/)).toBeInTheDocument()
   })
+
+  it('renders the flag naming a fabricated title when present', () => {
+    render(<CitationFlag unknownCitations={[]} fabricatedTitles={['Le comique de caractère']} />)
+    expect(screen.getByText(/Le comique de caractère/)).toBeInTheDocument()
+  })
+
+  it('renders nothing when citations and titles both check out', () => {
+    const { container } = render(<CitationFlag unknownCitations={[]} fabricatedTitles={[]} />)
+    expect(container).toBeEmptyDOMElement()
+  })
 })

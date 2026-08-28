@@ -1,4 +1,5 @@
 import { IconAlertTriangle } from '@tabler/icons-react'
+import type { TitleYearMismatchOut } from '../api/types'
 
 // Only rendered if Layer 1 (the structural check) flags something — nothing
 // at all when citations and titles check out, no success state
@@ -6,11 +7,19 @@ import { IconAlertTriangle } from '@tabler/icons-react'
 export function CitationFlag({
   unknownCitations,
   fabricatedTitles = [],
+  titleYearMismatches = [],
 }: {
   unknownCitations: string[]
   fabricatedTitles?: string[]
+  titleYearMismatches?: TitleYearMismatchOut[]
 }) {
-  if (unknownCitations.length === 0 && fabricatedTitles.length === 0) return null
+  if (
+    unknownCitations.length === 0 &&
+    fabricatedTitles.length === 0 &&
+    titleYearMismatches.length === 0
+  ) {
+    return null
+  }
 
   const citationMessage =
     unknownCitations.length === 0
@@ -26,6 +35,17 @@ export function CitationFlag({
         ? `Le titre « ${fabricatedTitles[0]} » ne correspond à aucune œuvre du corpus.`
         : `Les titres ${fabricatedTitles.map((t) => `« ${t} »`).join(', ')} ne correspondent à aucune œuvre du corpus.`
 
+  const yearMessage =
+    titleYearMismatches.length === 0
+      ? null
+      : titleYearMismatches
+          .map(
+            (m) =>
+              `Le titre « ${m.title} » est associé à ${m.claimed_years.join(', ')} ` +
+              `au lieu de sa véritable année de publication, ${m.correct_year}.`,
+          )
+          .join(' ')
+
   return (
     <div
       className="mb-3 flex items-start gap-2 rounded-md p-3 text-sm"
@@ -34,8 +54,10 @@ export function CitationFlag({
       <IconAlertTriangle size={16} className="mt-0.5 shrink-0" />
       <span>
         {citationMessage}
-        {citationMessage && titleMessage && ' '}
+        {citationMessage && (titleMessage || yearMessage) && ' '}
         {titleMessage}
+        {titleMessage && yearMessage && ' '}
+        {yearMessage}
       </span>
     </div>
   )

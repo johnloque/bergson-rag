@@ -141,6 +141,7 @@ from src.api.schemas import (
     RetrieveRequest,
     RetrieveResponse,
     StructuralCheckOut,
+    TitleYearMismatchOut,
     TurnDetailResponse,
 )
 from src.generation.chunk_judge import judge_chunk
@@ -292,6 +293,15 @@ def _evaluation_result_to_response(evaluation: EvaluationResult) -> EvaluateResp
             unknown_citations=list(evaluation.structural.unknown_citations),
             has_citation=evaluation.structural.has_citation,
             fabricated_titles=list(evaluation.structural.fabricated_titles),
+            title_year_mismatches=[
+                TitleYearMismatchOut(
+                    title=mismatch.title,
+                    work_id=mismatch.work_id,
+                    correct_year=mismatch.correct_year,
+                    claimed_years=list(mismatch.claimed_years),
+                )
+                for mismatch in evaluation.structural.title_year_mismatches
+            ],
             passed=evaluation.structural.passed,
         ),
         faithfulness=FaithfulnessOut(

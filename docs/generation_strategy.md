@@ -62,6 +62,28 @@ citations to the source chunk_id(s), and framing as an interpretive
 synthesis to verify against the cited passages — never a settled,
 definitive conclusion.
 
+## Title/year grounding (`fix/title-year-grounding`)
+
+Before this branch, each chunk's evidence header showed only `work_id`
+(e.g. `1907_EC`) — the model had to recall the actual title and
+publication year from its own background knowledge to name them in prose,
+which calibration (`docs/anti_hallucination_guardrails.md`, Sprint 6/10)
+found to be the real source of two hallucination shapes: an invented title
+entirely, and a real title attached to the wrong year (Q004: the real work
+"L'évolution créatrice" misattributed to 1934 instead of 1907). Every
+chunk header and multi-work group label now also shows
+`src.works.work_label(work_id)` (`"{title} ({year})"`, e.g.
+`1907_EC — L'Évolution créatrice (1907)`) — additive, not a replacement
+for `work_id`, which the citation format and the Layer 1 guardrail both
+still key on. `src/works.py` is the hardcoded, closed-set (8 works)
+title/year table this reads from — also the table
+`docs/ROADMAP.md`'s Sprint 11 entry anticipated for date-range retrieval
+filtering; Sprint 11 should extend this same module rather than build a
+second one. This is the primary mitigation for both hallucination shapes
+above; `check_title_year_mismatch`
+(`src/generation/guardrail.py`, `docs/anti_hallucination_guardrails.md`)
+remains the post-generation safety net for whatever still gets through.
+
 ## Deferred, not skipped
 
 - Anti-hallucination guardrails (post-generation validation, explicit "no

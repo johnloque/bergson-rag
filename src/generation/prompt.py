@@ -17,6 +17,25 @@ chunk in the input selection has a prior relevance judgment (from a future
 are rendered inline with that chunk's evidence text, plus one instruction
 telling the model this prior assessment exists. It is not a filter — chunks
 already excluded by the caller never appear here at all.
+
+## Title/year grounding (`fix/title-year-grounding`)
+
+Every chunk header and multi-work group now shows the source work's real
+title and publication year (`src.works.work_label`) alongside `work_id`,
+e.g. `1907_EC — L'Évolution créatrice (1907)` instead of just `1907_EC`.
+Before this branch the model was shown only `work_id` and had to recall the
+actual title/year from its own background knowledge to name them in
+prose — the root cause `docs/anti_hallucination_guardrails.md` identifies
+for both fabrication shapes found in calibration (an invented title, and a
+real title attached to the wrong year, e.g. Q004's "1934" for the real 1907
+work "L'évolution créatrice"). Giving the model the correct values directly
+removes the need to recall them at all; it does not replace `work_id`,
+which the citation format (`CITATION_INSTRUCTION` below) and Layer 1
+(`src/generation/guardrail.py`) both still key on. This is the primary
+mitigation for that failure mode — `check_title_year_mismatch`
+(`src/generation/guardrail.py`) remains the safety net for whatever still
+gets through, same defense-in-depth split as every other guardrail in this
+project.
 """
 
 from __future__ import annotations
@@ -26,6 +45,7 @@ from collections.abc import Mapping, Sequence
 
 from src.generation.chunk_judgment import ChunkJudgment
 from src.generation.signals import EvidenceSignals, GenerationChunk
+from src.works import work_label
 
 SYSTEM_PROMPT = (
     "Tu es un assistant qui répond à des questions sur la philosophie de Henri Bergson "
@@ -80,9 +100,17 @@ CHUNK_JUDGMENT_INSTRUCTION = (
 )
 
 
+def _work_ref(work_id: str) -> str:
+    """`"{work_id} — {title} ({year})"` — `work_id` is kept alongside the
+    title/year (not replaced by it): the citation format and Layer 1
+    (`src/generation/guardrail.py`) both still key on `work_id`."""
+    return f"{work_id} — {work_label(work_id)}"
+
+
 def _multi_work_instruction(works: tuple[str, ...]) -> str:
+    work_refs = ", ".join(_work_ref(work) for work in works)
     return (
-        f"Les extraits proviennent de {len(works)} œuvres distinctes ({', '.join(works)}) : "
+        f"Les extraits proviennent de {len(works)} œuvres distinctes ({work_refs}) : "
         "regroupe le contexte par œuvre et attribue explicitement chaque affirmation à "
         "l'œuvre dont elle provient."
     )
@@ -95,7 +123,7 @@ def _page_range(page_start: dict, page_end: dict) -> str:
 
 def _format_chunk(chunk: GenerationChunk, judgment: ChunkJudgment | None) -> str:
     pages = _page_range(chunk.page_start, chunk.page_end)
-    header = f"[{chunk.chunk_id}] ({chunk.work_id}, {chunk.section_path}, p. {pages})"
+    header = f"[{chunk.chunk_id}] ({_work_ref(chunk.work_id)}, {chunk.section_path}, p. {pages})"
     block = f"{header}\n{chunk.text}"
     if judgment is not None:
         block += f"\n(Jugement de pertinence : {judgment['label']} — {judgment['justification']})"
@@ -116,7 +144,7 @@ def _format_evidence(
     for work in works:
         work_chunks = [chunk for chunk in chunks if chunk.work_id == work]
         body = "\n\n".join(format_one(chunk) for chunk in work_chunks)
-        blocks.append(f"=== {work} ===\n{body}")
+        blocks.append(f"=== {_work_ref(work)} ===\n{body}")
     return "\n\n".join(blocks)
 
 

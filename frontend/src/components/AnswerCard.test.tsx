@@ -5,7 +5,14 @@ import type { EvaluateResponse } from '../api/types'
 
 function makeEvaluation(shouldAutoExpand: boolean): EvaluateResponse {
   return {
-    structural: { citations: [], unknown_citations: [], has_citation: true, fabricated_titles: [], passed: true },
+    structural: {
+      citations: [],
+      unknown_citations: [],
+      has_citation: true,
+      fabricated_titles: [],
+      title_year_mismatches: [],
+      passed: true,
+    },
     faithfulness: { score: 1, model: 'judge', claims: [] },
     should_auto_expand: shouldAutoExpand,
   }
@@ -96,7 +103,14 @@ describe('AnswerCard reveal behavior', () => {
 describe('AnswerCard full-endorsement statement', () => {
   function evaluationWithClaims(claims: EvaluateResponse['faithfulness']['claims']): EvaluateResponse {
     return {
-      structural: { citations: [], unknown_citations: [], has_citation: true, fabricated_titles: [], passed: true },
+      structural: {
+      citations: [],
+      unknown_citations: [],
+      has_citation: true,
+      fabricated_titles: [],
+      title_year_mismatches: [],
+      passed: true,
+    },
       faithfulness: { score: claims.every((c) => c.supported) ? 1 : 0.5, model: 'judge', claims },
       should_auto_expand: claims.every((c) => c.supported),
     }
@@ -142,6 +156,76 @@ describe('AnswerCard full-endorsement statement', () => {
       <AnswerCard
         answer="Une réponse."
         evaluation={evaluationWithClaims([])}
+        evaluationStatus="done"
+        revealed={true}
+        onReveal={() => {}}
+      />,
+    )
+    expect(
+      screen.queryByText('Réponse intégralement confirmée par les passages cités.'),
+    ).not.toBeInTheDocument()
+  })
+
+  // Layer 2 (the faithfulness judge) can score an answer fully supported
+  // while missing a Layer 1 title/year failure entirely — the real Q002
+  // case that motivated check_title_fabrication
+  // (docs/anti_hallucination_guardrails.md). "Fully confirmed" must not be
+  // claimed on Layer 2's verdict alone once Layer 1 disagrees, even though
+  // this scenario is normally hidden behind the collapsed/blurred state
+  // (should_auto_expand already accounts for both flags) — it becomes
+  // visible if the user forces a reveal via "Lire quand même".
+  it('does not claim full endorsement when Layer 1 flagged a fabricated title, even if every claim is supported', () => {
+    render(
+      <AnswerCard
+        answer="Une réponse."
+        evaluation={{
+          structural: {
+            citations: [],
+            unknown_citations: [],
+            has_citation: true,
+            fabricated_titles: ['Le comique de caractère'],
+            title_year_mismatches: [],
+            passed: false,
+          },
+          faithfulness: {
+            score: 1,
+            model: 'judge',
+            claims: [{ statement: 'A', supported: true, reason: 'ok', quote: null }],
+          },
+          should_auto_expand: false,
+        }}
+        evaluationStatus="done"
+        revealed={true}
+        onReveal={() => {}}
+      />,
+    )
+    expect(
+      screen.queryByText('Réponse intégralement confirmée par les passages cités.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('does not claim full endorsement when Layer 1 flagged a title/year mismatch, even if every claim is supported', () => {
+    render(
+      <AnswerCard
+        answer="Une réponse."
+        evaluation={{
+          structural: {
+            citations: [],
+            unknown_citations: [],
+            has_citation: true,
+            fabricated_titles: [],
+            title_year_mismatches: [
+              { title: "L'évolution créatrice", work_id: '1907_EC', correct_year: 1907, claimed_years: [1934] },
+            ],
+            passed: false,
+          },
+          faithfulness: {
+            score: 1,
+            model: 'judge',
+            claims: [{ statement: 'A', supported: true, reason: 'ok', quote: null }],
+          },
+          should_auto_expand: false,
+        }}
         evaluationStatus="done"
         revealed={true}
         onReveal={() => {}}

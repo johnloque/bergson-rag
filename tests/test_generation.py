@@ -63,6 +63,7 @@ from src.indexing.embeddings import DenseEmbedder, SparseEmbedder
 from src.indexing.qdrant_index import COLLECTION_NAME, PAYLOAD_FIELDS, point_id_for
 from src.retrieval.hybrid import RetrievedChunk, hybrid_search
 from src.retrieval.reranking import CrossEncoderReranker, rerank
+from src.works import WORKS
 
 QDRANT_URL = "http://localhost:6333"
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -217,6 +218,22 @@ def test_prompt_multi_work_has_attribution_language(client, reranker):
     assert (CAUTION_INSTRUCTION in prompt) == (not signals.is_confident)
 
 
+def test_prompt_multi_work_shows_title_and_year_per_work(client, reranker):
+    """`fix/title-year-grounding`: the model must be shown the real title and
+    publication year for each represented work, not just work_id — see
+    docs/generation_strategy.md's "Title/year grounding" note. Additive, not
+    a replacement: work_id must still be present too (Layer 1 and the
+    citation format both key on it)."""
+    chunks, signals = _prepared_chunks(client, reranker, Q007_QUERY, Q007_CHUNK_IDS)
+    prompt = build_prompt(Q007_QUERY, chunks, signals)
+    assert signals.works == ("1888_EDIC", "1934_PM")
+    for work_id in signals.works:
+        metadata = WORKS[work_id]
+        assert metadata.title in prompt, f"expected title for {work_id} in prompt"
+        assert str(metadata.year) in prompt, f"expected year for {work_id} in prompt"
+        assert work_id in prompt, f"expected work_id {work_id} still present alongside title/year"
+
+
 def test_signals_mono_work_single_chunk(client, reranker):
     _, signals = _prepared_chunks(client, reranker, Q001_QUERY, (Q001_CHUNK_ID,))
     assert signals.works == ("1907_EC",)
@@ -230,6 +247,11 @@ def test_prompt_mono_work_has_continuous_presentation_language(client, reranker)
     assert MONO_WORK_INSTRUCTION in prompt
     assert "attribue explicitement chaque affirmation à l'œuvre" not in prompt
     assert CITATION_INSTRUCTION in prompt
+    # fix/title-year-grounding: real title/year shown even in the mono-work
+    # branch, not just the multi-work attribution case.
+    metadata = WORKS["1907_EC"]
+    assert metadata.title in prompt
+    assert str(metadata.year) in prompt
 
 
 def test_signals_synthetic_divergent_case(client, reranker):

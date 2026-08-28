@@ -302,12 +302,15 @@ normalization, one of the corpus's 8 known work titles or alternate
 titles (`KNOWN_WORK_TITLES`, hardcoded — the corpus is a fixed, closed set
 per `docs/ROADMAP.md`'s scope decision, and this must work before any
 ingestion has produced `data/processed/works/*.json`, a gitignored build
-artifact). The cue-word anchor is a deliberate precision choice: the model
-is never shown real work titles in the prompt (only `work_id`, e.g.
-`1907_EC` — `src/generation/prompt.py`), so any title it names comes from
-its own background knowledge, but a quoted span *without* that cue is
-often a genuine verbatim quotation from a chunk, which must not be
-flagged. `StructuralCheck` gained a `fabricated_titles` field, and unlike
+artifact). The cue-word anchor is a deliberate precision choice: at the
+time this check was built, the model was never shown real work titles in
+the prompt (only `work_id`, e.g. `1907_EC` — `src/generation/prompt.py`),
+so any title it named came from its own background knowledge, but a
+quoted span *without* that cue is often a genuine verbatim quotation from
+a chunk, which must not be flagged. (`fix/title-year-grounding`, below,
+later added the real title/year to the prompt too — see that section for
+why the cue anchor is kept as-is rather than revisited.) `StructuralCheck`
+gained a `fabricated_titles` field, and unlike
 the citation-resolution half of Layer 1 (kept out of `should_auto_expand`'s
 gate because the local model often omits `[chunk_id]` brackets even from
 well-grounded answers), `fabricated_titles` *is* wired into the gate: a
@@ -349,3 +352,136 @@ show `should_auto_expand` now blocks a case that used to slip through
 before this branch; and an explicit regression assertion on the existing
 Q008 test that `structural.fabricated_titles == ()` for that confirmed-faithful,
 title-free answer — this branch changes nothing about Q008's behavior.
+
+## `fix/title-year-grounding`: title+year prompt grounding + Layer 1 pairing check
+
+Two independent, complementary changes closing the scope gap Sprint 10
+named explicitly above ("this only verifies that the *title itself* exists
+... not that the surrounding attribution (year, work_id) is also
+correct") — not a rewrite of Sprint 10's `check_title_fabrication`, and
+neither change is meant to substitute for the other, same defense-in-depth
+principle as everywhere else in this guardrail system (Layer 1 + Layer 2 +
+confidence tier, none trusted alone).
+
+**Shared prerequisite: `src/works.py`.** A new module holding
+`WORKS: dict[str, WorkMetadata]` — title, alternate titles, and publication
+year for the corpus's fixed, closed set of 8 works, hardcoded (same
+reasoning as Sprint 10's `KNOWN_WORK_TITLES`: must work before any
+ingestion has run). `docs/ROADMAP.md`'s Sprint 11 entry anticipated a
+static work_id -> year table for date-range retrieval filtering; that table
+didn't exist yet on this branch, so this module *is* it (extended with
+title, which Sprint 11 didn't need but this branch does) — **Sprint 11
+should import and extend `src.works.WORKS`, not build a second table.**
+`KNOWN_WORK_TITLES` (`src/generation/guardrail.py`) is now derived from
+`WORKS` instead of an independently hardcoded copy, so the fabrication
+check and the new pairing check below can't drift apart on what a "real"
+title is.
+
+**1. Root-cause mitigation: title+year now shown in the generation prompt
+(`src/generation/prompt.py`).** Before this branch, the model was shown
+only `work_id` per chunk (e.g. `1907_EC`) and had to recall the actual
+title/year from its own background knowledge to name them in prose — the
+real source of both fabrication shapes found in calibration: an invented
+title entirely (Q002/Q004's "Le comique de caractère" /
+"De l'évolution de la vie...") and a real title attached to the wrong year
+(Q004's "1934" for the real 1907 work "L'évolution créatrice"). Every
+chunk header and multi-work group label now shows `src.works.work_label`
+(`"{title} ({year})"`) alongside `work_id`, e.g.
+`1907_EC — L'Évolution créatrice (1907)` — additive, not a replacement:
+`work_id` is still shown, since the citation format and Layer 1 both key
+on it. This is the primary mitigation; it reduces how often the model
+needs to fabricate a title or year at all, but does not guarantee it never
+will (see the Q004 empirical check below).
+
+**2. Strengthened detection: `check_title_year_mismatch`
+(`src/generation/guardrail.py`).** For each "intitulé(e)"-cued title an
+answer names (the same cue-anchored extraction Sprint 10 built, kept as-is
+on this branch — see below), if the title matches a real known work but a
+year mentioned within a fixed character window of the cue
+(`_YEAR_CONTEXT_WINDOW = 60`, a documented placeholder sized from this
+project's two real fabrication cases, not a formal sweep) doesn't match
+that work's real year, the pairing is flagged
+(`StructuralCheck.title_year_mismatches`). Wired into `check_structure`
+(Layer 1) and `should_auto_expand`'s gate directly, same as
+`fabricated_titles`: a title+year pairing is a positive, specific
+attribution claim, not an omission, so the citation-omission false-positive
+concern that keeps `unknown_citations` out of the gate doesn't apply here
+either. Direct regression test for the scope gap named above: Q004's real
+"1934 intitulée 'L'évolution créatrice'" fabrication, previously invisible
+to both Layer 1 checks, is now flagged (`tests/test_guardrail.py`).
+
+**On the "intitulé(e)" cue-word limitation**: still present, and
+`check_title_year_mismatch` reuses it as-is rather than a broader
+title-detection rewrite. This branch treats the cue-word fragility concern
+as *lower priority*, not resolved: mitigation (1) above is expected to
+reduce how often the model introduces a title via an unanticipated phrasing
+in the first place (it no longer needs to reach for background knowledge
+to name one), which weakens the original motivation for a rewrite, but this
+branch has no new evidence — positive or negative — that the concern is
+actually gone. Revisit only if real usage after this branch ships shows it
+still is.
+
+**Empirical check, not assumed**: `tests/test_guardrail.py`'s
+`test_q004_title_year_grounding_empirical_regeneration` regenerates Q004
+with the new prompt grounding in place and reports (via
+`check_structure`'s output, printed for inspection) whether the original
+fabrication still occurs, rather than asserting the prompt fix eliminates
+it — LLMs can still err with the correct title/year directly in front of
+them, just less often. This is a single-item empirical spot-check, not a
+before/after calibration run against the full gold dataset; a proper
+before/after comparison needs the larger gold dataset this project is
+still short of, same standing limitation as Sprint 6/10's judge
+calibration above.
+
+Test coverage (`tests/test_guardrail.py`): `check_title_year_mismatch`
+exercised directly against a hand-constructed real-title-wrong-year case
+(Q004's actual misattribution), a correct-pairing case (no false positive),
+and a fabricated-title case (confirms this check defers to
+`check_title_fabrication` rather than trying to also validate a year
+against a title it can't resolve to a known work); the real historical
+Q004 `end_to_end` answer shown to trigger both checks at once (a
+fabricated title *and* a real-title/wrong-year pairing in the same
+answer); the empirical Q004 regeneration check above; and an explicit
+regression assertion on the existing Q008 test that
+`structural.title_year_mismatches == ()` — this branch changes nothing
+about Q008's behavior. Prompt-side coverage (`tests/test_generation.py`):
+both the multi-work (Q007) and mono-work (Q001) prompt-branch tests assert
+the real title and year for every represented work appear in the
+constructed prompt, alongside (not instead of) `work_id`.
+
+**API/frontend wiring — also done on this branch, plus a related fix found
+while doing it.** `title_year_mismatches` is wired through the API
+(`StructuralCheckOut.title_year_mismatches`, `TitleYearMismatchOut`,
+`src/api/schemas.py`/`src/api/main.py`) and frontend
+(`frontend/src/api/types.ts`, `CitationFlag.tsx`), same collapsed/flag-only
+presentation `fabricated_titles`/`unknown_citations` already used, extended
+rather than duplicated — a first draft of this branch deferred this pass,
+but reviewing the actual `AnswerCard.tsx` behavior surfaced a real,
+user-visible consequence worth fixing in the same branch rather than
+deferring further (below).
+
+**Fixed alongside it: the "fully endorsed" badge's Layer-1 blind spot.**
+`AnswerCard.tsx`'s "Réponse intégralement confirmée par les passages
+cités." statement (`fullyEndorsed`) was computed from Layer 2's claims
+only, independent of Layer 1 entirely. Concretely: `should_auto_expand`
+already collapses the answer when `fabricated_titles` or
+`title_year_mismatches` fires, but a user can still force it open via "Lire
+quand même" — and once open, if Layer 2 didn't independently flag the same
+claim (the real Q002 case above: RAGAS scored that fabrication
+faithfulness=1.0), the card would show the green "fully confirmed" badge
+with no visible warning at all, directly contradicting the reason it was
+collapsed in the first place. Fixed by gating `fullyEndorsed` on Layer 1's
+own two gating flags too (`hasStructuralFlags` in `AnswerCard.tsx`) — the
+same two flags already in `should_auto_expand`'s gate, not a new
+independent threshold. `unknown_citations` deliberately stays out of this
+new check, same reasoning as its exclusion from `should_auto_expand`
+itself (`src/generation/guardrail.py`'s module docstring): it's excluded
+for a different, already-documented reason (citation omission noise), not
+an oversight being repeated here.
+
+Test coverage: `frontend/src/components/CitationFlag.test.tsx` (renders the
+year-mismatch message; still renders nothing when all three structural
+signals are clean) and `AnswerCard.test.tsx` (two new cases: full
+endorsement suppressed when `fabricated_titles` is non-empty despite every
+claim being supported, and the same for `title_year_mismatches` — direct
+regression coverage for the blind spot above).

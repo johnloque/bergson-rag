@@ -22,4 +22,25 @@ describe('CitationFlag', () => {
     const { container } = render(<CitationFlag unknownCitations={[]} fabricatedTitles={[]} />)
     expect(container).toBeEmptyDOMElement()
   })
+
+  it('renders the flag naming a title/year mismatch when present', () => {
+    render(
+      <CitationFlag
+        unknownCitations={[]}
+        titleYearMismatches={[
+          { title: "L'évolution créatrice", work_id: '1907_EC', correct_year: 1907, claimed_years: [1934] },
+        ]}
+      />,
+    )
+    expect(screen.getByText(/L'évolution créatrice/)).toBeInTheDocument()
+    expect(screen.getByText(/1934/)).toBeInTheDocument()
+    expect(screen.getByText(/1907/)).toBeInTheDocument()
+  })
+
+  it('renders nothing when citations, titles, and year pairings all check out', () => {
+    const { container } = render(
+      <CitationFlag unknownCitations={[]} fabricatedTitles={[]} titleYearMismatches={[]} />,
+    )
+    expect(container).toBeEmptyDOMElement()
+  })
 })

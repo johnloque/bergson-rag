@@ -55,6 +55,7 @@ from src.generation.guardrail import (
     EvaluationResult,
     check_structure,
     check_title_fabrication,
+    check_title_year_mismatch,
     generate_evaluation,
     should_auto_expand,
 )
@@ -292,6 +293,9 @@ def test_q008_answer_generated_and_returned_regardless_of_evaluation(client, rer
     # in prose, so this branch adds no new gate against it — explicit
     # regression check, not just an absence of failure.
     assert evaluation.structural.fabricated_titles == ()
+    # Same regression check for fix/title-year-grounding's title+year
+    # pairing check — Q008 is unaffected by it too.
+    assert evaluation.structural.title_year_mismatches == ()
 
 
 # --- Q009: persistent retrieval miss -------------------------------------
@@ -455,6 +459,107 @@ def test_q002_fabricated_title_layer2_missed_now_caught_by_layer1(client):
         retrieval_confidence="élevée",
     )
     assert not should_auto_expand(evaluation)
+
+
+# --- Layer 1 (fix/title-year-grounding): title+year pairing ---------------
+#
+# Direct regression coverage for the scope gap
+# docs/anti_hallucination_guardrails.md's Sprint 10 section named
+# explicitly: a real, known title attached to the wrong year (e.g. Q004's
+# real "1934 intitulée 'L'évolution créatrice'" fabrication above — the
+# title is real, its year is not) was not flagged before this branch.
+
+
+def test_check_title_year_mismatch_flags_real_title_wrong_year():
+    """Hand-constructed answer reproducing Q004's actual historical
+    misattribution: the real title "L'évolution créatrice" paired with 1934
+    instead of its real publication year, 1907."""
+    answer = "Dans l'œuvre de 1934 intitulée \"L'évolution créatrice\", Bergson développe sa thèse."
+    mismatches = check_title_year_mismatch(answer)
+    assert len(mismatches) == 1
+    assert mismatches[0].work_id == "1907_EC"
+    assert mismatches[0].correct_year == 1907
+    assert mismatches[0].claimed_years == (1934,)
+
+    structural = check_structure(answer, [])
+    assert structural.title_year_mismatches == mismatches
+    assert not structural.passed
+
+    # Isolates Layer 1's own contribution to the gate, same discipline as
+    # test_q004_fabricated_title_caught_by_layer1_without_llm above.
+    evaluation = EvaluationResult(
+        structural=structural,
+        faithfulness=FaithfulnessResult(score=1.0, model="test", claims=()),
+        retrieval_confidence="élevée",
+    )
+    assert not should_auto_expand(evaluation)
+
+
+def test_check_title_year_mismatch_does_not_flag_correct_pairing():
+    """No new false-positive source: the same real title paired with its
+    actual, correct year must not be flagged."""
+    answer = "Dans l'œuvre de 1907 intitulée \"L'Évolution créatrice\", Bergson développe sa thèse."
+    assert check_title_year_mismatch(answer) == ()
+
+
+def test_check_title_year_mismatch_ignores_titles_it_does_not_recognize():
+    """A fabricated title (not a real work) is `check_title_fabrication`'s
+    job, not this check's — check_title_year_mismatch must not also try to
+    validate a year against a title it can't match to any known work."""
+    answer = 'Dans l\'œuvre de 1900 intitulée "Le comique de caractère", Bergson écrit.'
+    assert check_title_year_mismatch(answer) == ()
+
+
+def test_q004_e2e_fabricated_answer_also_has_a_year_mismatch():
+    """The real historical Q004 end_to_end answer (module constant above)
+    contains both failure modes in the same text: a fabricated title
+    ("Le comique de caractère", already covered by
+    test_check_title_fabrication_flags_real_fabricated_titles) and, in the
+    same answer, the real title "L'évolution créatrice" attached to the
+    wrong year — the exact case this branch's check was built for."""
+    mismatches = check_title_year_mismatch(Q004_E2E_FABRICATED_TITLE_ANSWER)
+    assert len(mismatches) == 1
+    assert mismatches[0].title == "L'évolution créatrice"
+    assert mismatches[0].work_id == "1907_EC"
+    assert mismatches[0].correct_year == 1907
+    assert mismatches[0].claimed_years == (1934,)
+
+
+@_llm_skip
+def test_q004_title_year_grounding_empirical_regeneration(client):
+    """Empirical check, not a guarantee (docs/anti_hallucination_guardrails.md):
+    with the real title/year now shown directly in the prompt
+    (fix/title-year-grounding, src/generation/prompt.py), regenerate Q004
+    and report whether the original fabrication (an invented title and/or
+    the real title "L'Évolution créatrice" attached to the wrong year)
+    still occurs. LLMs can still err with correct context in front of them,
+    just less often — this test documents the actual outcome via Layer 1
+    rather than asserting the prompt fix eliminates the fabrication
+    entirely; the guardrail machinery must simply keep running cleanly
+    regardless of the outcome."""
+    chunk = _load_chunk(client, Q004_CHUNK_ID)
+    result = generate_from_chunks(Q004_QUERY, [chunk], client, temperature=0.0)
+    assert result.answer.strip()
+    # The real title/year the model actually saw for Q004_CHUNK_ID's real
+    # work ("1900_R" / "Le rire") — not the fabricated "L'évolution
+    # créatrice (1934)" the original hallucination invented, which belongs
+    # to a different work (1907_EC) not even part of this chunk selection.
+    assert "Le rire" in result.prompt
+    assert "1900" in result.prompt
+
+    structural = check_structure(result.answer, [chunk])
+    print(
+        f"\n[Q004 title/year grounding, empirical] "
+        f"fabricated_titles={structural.fabricated_titles!r} "
+        f"title_year_mismatches={structural.title_year_mismatches!r}\n"
+        f"answer={result.answer!r}"
+    )
+    evaluation = EvaluationResult(
+        structural=structural,
+        faithfulness=FaithfulnessResult(score=1.0, model="test", claims=()),
+        retrieval_confidence=retrieval_confidence_tier([chunk]),
+    )
+    assert should_auto_expand(evaluation) in (True, False)
 
 
 # --- chunk_judgments: fixture shape and prompt content --------------------

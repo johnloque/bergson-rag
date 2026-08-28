@@ -173,6 +173,15 @@ class ClaimVerdictOut(BaseModel):
     quote: str | None = None
 
 
+class TitleYearMismatchOut(BaseModel):
+    """Mirrors src.generation.guardrail.TitleYearMismatch."""
+
+    title: str
+    work_id: str
+    correct_year: int
+    claimed_years: list[int]
+
+
 class StructuralCheckOut(BaseModel):
     citations: list[str]
     unknown_citations: list[str]
@@ -183,6 +192,11 @@ class StructuralCheckOut(BaseModel):
     # existed (`evaluations.structural_flags`, src/api/models.py) still
     # deserialize via `_evaluation_row_to_response` without it.
     fabricated_titles: list[str] = []
+    # A real, known title paired with the wrong publication year
+    # (src/generation/guardrail.py's check_title_year_mismatch,
+    # fix/title-year-grounding). Defaulted for the same reason as
+    # fabricated_titles above.
+    title_year_mismatches: list[TitleYearMismatchOut] = []
     passed: bool
 
 

@@ -88,6 +88,13 @@ export interface ClaimVerdictOut {
   quote: string | null
 }
 
+export interface TitleYearMismatchOut {
+  title: string
+  work_id: string
+  correct_year: number
+  claimed_years: number[]
+}
+
 export interface StructuralCheckOut {
   citations: string[]
   unknown_citations: string[]
@@ -95,6 +102,10 @@ export interface StructuralCheckOut {
   // Quoted work titles the answer names that don't match any of the
   // corpus's 8 real works (src/generation/guardrail.py, Sprint 10).
   fabricated_titles: string[]
+  // A real, known title paired with the wrong publication year
+  // (src/generation/guardrail.py's check_title_year_mismatch,
+  // fix/title-year-grounding).
+  title_year_mismatches: TitleYearMismatchOut[]
   passed: boolean
 }
 

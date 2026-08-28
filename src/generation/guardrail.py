@@ -170,6 +170,24 @@ same discipline as this project's other unfit thresholds
 
 Like `fabricated_titles`, `title_year_mismatches` gates `should_auto_expand`
 directly: it is a positive, specific attribution claim, not an omission.
+
+## Text-level titles (Sprint 11, `feat/backend-reference-data`)
+
+1919_ES and 1934_PM are anthologies of individually-dated texts, each with
+its own real title distinct from the anthology's (`src.works.TEXTS`) — e.g.
+"L'effort intellectuel" (1902) is a real article title within 1919_ES
+("L'énergie spirituelle", 1919), not a fabrication. Before this branch,
+`check_title_fabrication` had no notion of these: an answer correctly
+naming "L'effort intellectuel" as an "intitulé(e)"-cued title would have
+been flagged as fabricated, since only the 8 work-level titles were known.
+`KNOWN_WORK_TITLES`/`_KNOWN_TITLES_NORMALIZED` are now extended with
+`KNOWN_TEXT_TITLES` (all texts across both anthology works), and
+`_TITLE_ATTRIBUTION` (replacing the old, work-only
+`_WORK_ID_BY_NORMALIZED_TITLE`) resolves a matched title to *its own*
+correct year — the text's year for a text-level title, the work's year for
+a work-level one — so `check_title_year_mismatch` no longer forces a text
+mentioned by its real 1902 date to be flagged against 1919_ES's 1919
+publication year.
 """
 
 from __future__ import annotations
@@ -189,7 +207,7 @@ from src.generation.faithfulness import (
 )
 from src.generation.prompt import CITATION_PATTERN
 from src.generation.signals import CONFIDENT_TIERS, GenerationChunk, RetrievalConfidenceTier
-from src.works import WORKS
+from src.works import TEXTS, WORKS
 
 # The corpus's fixed, closed set of 8 works (docs/ROADMAP.md scope
 # decision) — canonical title plus any alternate/subtitle actually present
@@ -201,6 +219,14 @@ from src.works import WORKS
 # must work before any ingestion has run (a fresh checkout, CI).
 KNOWN_WORK_TITLES: dict[str, tuple[str, ...]] = {
     work_id: (metadata.title, *metadata.alt_titles) for work_id, metadata in WORKS.items()
+}
+
+# The individually-dated texts within 1919_ES/1934_PM (Sprint 11,
+# `feat/backend-reference-data`) — see "Text-level titles" above. Derived
+# from `src.works.TEXTS`, same drift-avoidance reasoning as
+# `KNOWN_WORK_TITLES`.
+KNOWN_TEXT_TITLES: dict[str, tuple[str, ...]] = {
+    work_id: tuple(text.title for text in texts) for work_id, texts in TEXTS.items()
 }
 
 
@@ -216,7 +242,9 @@ def _normalize_title(title: str) -> str:
 
 
 _KNOWN_TITLES_NORMALIZED = frozenset(
-    _normalize_title(title) for titles in KNOWN_WORK_TITLES.values() for title in titles
+    _normalize_title(title)
+    for titles in (*KNOWN_WORK_TITLES.values(), *KNOWN_TEXT_TITLES.values())
+    for title in titles
 )
 
 # Anchored on the "intitulé(e)" cue specifically, not any quoted span — see
@@ -247,11 +275,23 @@ def check_title_fabrication(answer: str) -> tuple[str, ...]:
     )
 
 
-_WORK_ID_BY_NORMALIZED_TITLE: dict[str, str] = {
-    _normalize_title(title): work_id
+# normalized title -> (work_id, correct_year) — the year is the *text's*
+# own year for a text-level title, the *work's* for a work-level one (see
+# "Text-level titles" above). Text-level entries are added after work-level
+# ones so a (real, not observed) collision would resolve to the more
+# specific text-level year rather than the coarser work-level one.
+_TITLE_ATTRIBUTION: dict[str, tuple[str, int]] = {
+    _normalize_title(title): (work_id, metadata.year)
     for work_id, metadata in WORKS.items()
     for title in (metadata.title, *metadata.alt_titles)
 }
+_TITLE_ATTRIBUTION.update(
+    {
+        _normalize_title(text.title): (work_id, text.year)
+        for work_id, texts in TEXTS.items()
+        for text in texts
+    }
+)
 
 # A 4-digit year, anchored so it doesn't match inside a work_id/chunk_id
 # token like "1907_EC" or "1907_EC_c5" (the trailing "_" is a word
@@ -289,13 +329,13 @@ def check_title_year_mismatch(answer: str) -> tuple[TitleYearMismatch, ...]:
     mismatches = []
     for match in _TITLE_CUE_PATTERN.finditer(answer):
         title = match.group(1).strip()
-        work_id = _WORK_ID_BY_NORMALIZED_TITLE.get(_normalize_title(title))
-        if work_id is None:
+        attribution = _TITLE_ATTRIBUTION.get(_normalize_title(title))
+        if attribution is None:
             continue
+        work_id, correct_year = attribution
         start = max(0, match.start() - _YEAR_CONTEXT_WINDOW)
         end = min(len(answer), match.end() + _YEAR_CONTEXT_WINDOW)
         context = answer[start:end]
-        correct_year = WORKS[work_id].year
         claimed_years = tuple(
             sorted({int(year) for year in _YEAR_PATTERN.findall(context)} - {correct_year})
         )

@@ -36,6 +36,22 @@ mitigation for that failure mode — `check_title_year_mismatch`
 (`src/generation/guardrail.py`) remains the safety net for whatever still
 gets through, same defense-in-depth split as every other guardrail in this
 project.
+
+## Text-level grounding (Sprint 11, `feat/backend-reference-data`)
+
+For a chunk whose paragraphs fall inside one of 1919_ES's or 1934_PM's
+individually-dated texts (`src.works.TEXTS`), `_format_chunk`'s header also
+shows that text's own real title and year, alongside (not instead of) the
+work-level title/year above — e.g. a chunk from 1919_ES's "L'effort
+intellectuel" article shows both `L'énergie spirituelle (1919)` (the
+anthology) and `L'effort intellectuel (1902)` (the actual text), since the
+anthology's own 1919 publication date is not the year the model should
+attribute a specific article's ideas to. Resolved via
+`src.works.resolve_paragraph_metadata(chunk.work_id, chunk.paragraph_ids[0])`
+— the first paragraph_id is representative of the whole chunk because
+chunking never crosses a section/div boundary
+(`tests/test_works.py::test_no_chunk_straddles_two_qualifying_divs`), so
+every paragraph in a chunk always resolves to the same text-level metadata.
 """
 
 from __future__ import annotations
@@ -45,7 +61,7 @@ from collections.abc import Mapping, Sequence
 
 from src.generation.chunk_judgment import ChunkJudgment
 from src.generation.signals import EvidenceSignals, GenerationChunk
-from src.works import work_label
+from src.works import resolve_paragraph_metadata, work_label
 
 SYSTEM_PROMPT = (
     "Tu es un assistant qui répond à des questions sur la philosophie de Henri Bergson "
@@ -121,9 +137,23 @@ def _page_range(page_start: dict, page_end: dict) -> str:
     return start if start == end else f"{start}-{end}"
 
 
+def _chunk_text_note(chunk: GenerationChunk) -> str:
+    """`", texte « {title} » ({year})"` when `chunk` falls inside an
+    individually-dated text (Sprint 11, `feat/backend-reference-data`) —
+    `""` otherwise. See this module's docstring ("Text-level grounding")
+    for why `chunk.paragraph_ids[0]` is representative of the whole chunk."""
+    metadata = resolve_paragraph_metadata(chunk.work_id, chunk.paragraph_ids[0])
+    if metadata.text_title is None:
+        return ""
+    return f", texte « {metadata.text_title} » ({metadata.text_year})"
+
+
 def _format_chunk(chunk: GenerationChunk, judgment: ChunkJudgment | None) -> str:
     pages = _page_range(chunk.page_start, chunk.page_end)
-    header = f"[{chunk.chunk_id}] ({_work_ref(chunk.work_id)}, {chunk.section_path}, p. {pages})"
+    header = (
+        f"[{chunk.chunk_id}] ({_work_ref(chunk.work_id)}{_chunk_text_note(chunk)}, "
+        f"{chunk.section_path}, p. {pages})"
+    )
     block = f"{header}\n{chunk.text}"
     if judgment is not None:
         block += f"\n(Jugement de pertinence : {judgment['label']} — {judgment['justification']})"

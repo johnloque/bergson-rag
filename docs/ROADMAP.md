@@ -413,6 +413,16 @@ coverage: [`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrail
 `paragraph_ids`, resolved to `chunk_id`(s) at evaluation time in
 `eval/scripts/run_eval.py` — see `docs/gold_dataset_protocol.md`.
 
+**Chunk retrieval filtering — implemented (`feat/retrieval-filtering`).**
+`POST /retrieve` gains `work_ids` and `date_range` (with a `"publication"`
+vs `"text"` mode, the latter meaningful only for 1919_ES/1934_PM's
+individually-dated anthology texts) — `src/retrieval/filtering.py`. Still no
+new Qdrant payload field: `"text"` mode resolves per-chunk via
+`resolve_paragraph_metadata` as a post-retrieval, pre-rerank filter over an
+over-fetched candidate set (recall-preservation mechanism documented in
+[`docs/backend_api.md`](backend_api.md)), everything else via a native
+`work_id` Qdrant filter. Still no filter UI — unchanged from the note above.
+
 ### Sprint 12 — UI/UX overhaul
 
 - Landing page reachable only via clicking the app icon after first

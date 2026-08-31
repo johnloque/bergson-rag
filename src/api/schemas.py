@@ -24,8 +24,9 @@ correction).
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from src.generation.chunk_judgment import ChunkJudgment
 from src.generation.faithfulness import DEFAULT_JUDGE_MODEL
@@ -87,6 +88,32 @@ class ChunkResult(BaseModel):
     score: float
 
 
+class DateRange(BaseModel):
+    """docs/ROADMAP.md, Sprint 11 retrieval filtering. `mode` defaults to
+    `"publication"` (the parent work's own publication year,
+    `src.works.WORKS` — identical for all 8 works, including 1919_ES/
+    1934_PM's own anthology year, not any individual text's) so an existing
+    caller that never sets `date_range` at all sees unaffected behavior, and
+    one that sets it without an explicit `mode` gets the cheap, exact,
+    native-Qdrant-filter path. `"text"` mode is meaningful only for
+    1919_ES and 1934_PM's individually-dated anthology texts
+    (`src.works.TEXTS`, `resolve_paragraph_metadata`) — for the other 6
+    works it behaves identically to `"publication"` mode, since they have no
+    individual-text date to differ on. See `src/retrieval/filtering.py` for
+    the full semantics and how "text" mode's post-retrieval filtering avoids
+    losing recall."""
+
+    start: int
+    end: int
+    mode: Literal["publication", "text"] = "publication"
+
+    @model_validator(mode="after")
+    def _validate_range(self) -> DateRange:
+        if self.start > self.end:
+            raise ValueError("date_range.start must be <= date_range.end")
+        return self
+
+
 class RetrieveRequest(BaseModel):
     query: str = Field(min_length=1)
     top_k: int = Field(default=DEFAULT_TOP_K, gt=0)
@@ -94,6 +121,12 @@ class RetrieveRequest(BaseModel):
     # name an existing conversation (404 if unknown) — docs/ROADMAP.md,
     # Sprint 10 turn-lifecycle fix.
     conversation_id: int | None = None
+    # docs/ROADMAP.md, Sprint 11: both filters combine as an intersection —
+    # a chunk must match an allowed work_id (if given) *and* an allowed date
+    # range (if given). Both default to None/absent, matching pre-Sprint-11
+    # unfiltered behavior exactly.
+    work_ids: list[str] | None = None
+    date_range: DateRange | None = None
 
 
 class RetrieveResponse(BaseModel):

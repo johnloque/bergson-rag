@@ -73,6 +73,98 @@ back from the persisted turn instead. The rules below otherwise stand:
   already made.
 - Response gains `generation_id`, `turn_id`, `conversation_id`.
 
+## Retrieval filtering: `work_ids` + `date_range` (Sprint 11, `feat/retrieval-filtering`)
+
+`POST /retrieve` takes two independent, combinable filters, both applied
+*before* reranking (the same candidate-selection stage a plain,
+unfiltered call runs at — filtering never costs recall relative to an
+unfiltered call, and never shrinks the final `top_k` result below what an
+unfiltered call would return, aside from genuinely running out of
+in-range candidates):
+
+- `work_ids: [str]` — a plain allowlist, applied as a native Qdrant
+  payload filter on the already-indexed `work_id` field.
+- `date_range: {start: int, end: int, mode: "publication" | "text"}` —
+  `mode` defaults to `"publication"`, so a caller that never sets
+  `date_range` at all, or sets it without an explicit `mode`, sees
+  unaffected/pre-Sprint-11 behavior.
+
+Combination semantics: when both are given, a chunk must match an allowed
+`work_id` **and** an allowed date (intersection, not union). An empty
+`work_ids: []` is a valid, deliberately-empty allowlist (matches nothing),
+distinct from omitting `work_ids` entirely (no restriction).
+
+Neither mode adds a year field to the Qdrant payload — this project has
+deliberately kept title/year as a separate lookup (`src/works.py`), never
+duplicated into the vector store, to avoid a second source of truth
+needing resync on every correction; date filtering stays a query-time
+lookup into `src/works.py` in both modes.
+
+### `"publication"` mode (default)
+
+Translates `date_range` into the set of work_ids whose *work-level*
+publication year (`src.works.WORKS` — identical for all 8 works, including
+1919_ES/1934_PM: their parent anthology's own publication year, never an
+individual text's) falls in range, then applies that set as the same kind
+of native `work_id` Qdrant filter `work_ids` itself uses. Cheap, exact, no
+recall loss — Qdrant decides the eligible candidate set before dense/sparse
+search even runs.
+
+### `"text"` mode (opt-in)
+
+For 1919_ES and 1934_PM specifically, filters at the *individual text*
+level instead: `src.works.resolve_paragraph_metadata`'s `text_year` when a
+chunk's paragraph falls inside one of those works' individually-dated texts
+(`src.works.TEXTS`), falling back to `work_year` for any paragraph not
+covered by a dated text (e.g. 1934_PM's front matter, paragraphs 1-3). For
+the other 6 works, `"text"` mode is identical to `"publication"` mode —
+`resolve_paragraph_metadata` always returns `text_year=None` for them, so
+their effective year is always the work-level year either way.
+
+This can't be expressed as a single native Qdrant filter without
+duplicating year data into the payload (ruled out above), so it's
+implemented as a genuine post-retrieval filter (`src/retrieval/filtering.py:
+matches_date_range`) — applied to the candidate set *before* reranking, not
+after, so a match doesn't get silently dropped by the reranker's own
+candidate-pool cutoff.
+
+**Recall-preservation mechanism.** Filtering after Qdrant's own top-N
+prefetch cutoff can drop otherwise-well-ranked candidates and shrink the
+final result below the requested `top_k`. To avoid this, `date_range` in
+`"text"` mode first partitions 1919_ES/1934_PM into three buckets
+(`src.retrieval.filtering.partition_anthology_works`), computed from each
+work's set of individually-dated-text years plus its own publication year:
+
+- **Fully included** — every chunk's effective year is already known to be
+  in range (e.g. a range spanning 1901-1919 covers all of 1919_ES's dated
+  texts, 1901-1913, and its own 1919 publication year). Folded into the
+  same cheap native `work_id` filter as any other eligible work — no
+  post-filtering needed.
+- **Fully excluded** — no chunk's effective year can be in range. The work
+  is simply left out of the Qdrant query entirely.
+- **Needs post-filtering** — the range excludes some but not all of the
+  work's individually-dated texts (the only case that actually risks
+  recall loss). For exactly this bucket, the work is *not* restricted at
+  the Qdrant query level at all: instead it's queried with an
+  over-fetched candidate limit — `min(candidate_limit * 5, 200)`
+  (`ANTHOLOGY_OVERFETCH_FACTOR` / `ANTHOLOGY_OVERFETCH_CAP`,
+  `src/retrieval/filtering.py`) — generous enough that even if every one
+  of 1934_PM's 10 individually-dated texts ranked in the pipeline's native
+  top candidates, the in-range subset after post-filtering would still
+  very likely exceed the requested `candidate_limit`. Each returned
+  candidate's paragraph_ids are then resolved to an effective year,
+  out-of-range ones dropped, and the merged result (settled buckets +
+  post-filtered partial bucket) is truncated back down to `candidate_limit`
+  before reranking proceeds as normal.
+
+Full implementation, including the exact partitioning logic and the native
+`hybrid_search(..., query_filter=...)` plumbing this reuses:
+`src/retrieval/filtering.py`. Test coverage (pure-logic unit tests plus
+live-corpus integration tests, including the recall-preservation
+regression check and the 1902 "L'effort intellectuel" example that
+distinguishes `"text"` from `"publication"` mode for the identical query
+and range): `tests/test_filtering.py`.
+
 ## Two risks this branch resolves
 
 Sprint 7a shipped the four compute endpoints with no persistence, and
@@ -135,3 +227,17 @@ generate -> evaluate -> judge-chunk sequence, and 404s on every id-keyed
 lookup. Each test gets its own isolated in-memory SQLite DB via
 `app.dependency_overrides[get_session]`, so persisted rows never leak
 between tests or touch the real dev database.
+
+`tests/test_filtering.py` (Sprint 11 `work_ids`/`date_range` filtering):
+pure-logic unit tests for the eligibility/partitioning/effective-year
+functions (no Qdrant needed) plus live-corpus integration tests for
+`filtered_hybrid_search` itself — `"publication"` mode's unchanged
+behavior, `"text"` mode's distinguishing case (a range covering 1919_ES's
+publication year but not "L'effort intellectuel"'s actual 1902 correctly
+excludes it under `"text"` mode and includes it under `"publication"`
+mode, for the identical query and range), the non-anthology-work
+regression check, and the recall-preservation regression test (the
+over-fetch/truncate mechanism actually returning the full requested
+`top_k`, not fewer). `tests/test_api.py` adds thin endpoint-level plumbing
+checks (malformed `date_range` -> 422, filters threaded through to a real
+`/retrieve` call) on top of that.

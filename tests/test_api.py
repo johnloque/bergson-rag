@@ -336,6 +336,44 @@ def test_retrieve_malformed_body_returns_422(client):
     assert client.post("/retrieve", json={"query": 123}).status_code == 422
 
 
+def test_retrieve_malformed_date_range_returns_422(client):
+    """docs/ROADMAP.md, Sprint 11: `date_range.start > end` and an unknown
+    `mode` are both rejected at the request-validation layer — full filtering
+    semantics coverage lives in tests/test_filtering.py, this is just the
+    endpoint-level plumbing check."""
+    response = client.post(
+        "/retrieve", json={"query": Q002_QUERY, "date_range": {"start": 2000, "end": 1000}}
+    )
+    assert response.status_code == 422
+    response = client.post(
+        "/retrieve",
+        json={"query": Q002_QUERY, "date_range": {"start": 1900, "end": 2000, "mode": "bogus"}},
+    )
+    assert response.status_code == 422
+
+
+@_qdrant_skip
+def test_retrieve_applies_work_ids_and_date_range_filters(client):
+    """docs/ROADMAP.md, Sprint 11: `/retrieve` threads `work_ids`/
+    `date_range` through to `filtered_hybrid_search` — the endpoint-level
+    plumbing check for the filtering logic tests/test_filtering.py covers in
+    depth. 1907_EC (1907) is Q002's other gold work; the range [1900, 1910]
+    includes it but excludes 1934_PM (1934), Q002's third gold work."""
+    response = client.post(
+        "/retrieve",
+        json={
+            "query": Q002_QUERY,
+            "top_k": 5,
+            "work_ids": ["1907_EC"],
+            "date_range": {"start": 1900, "end": 1910, "mode": "publication"},
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["chunks"]
+    assert {c["work_id"] for c in body["chunks"]} == {"1907_EC"}
+
+
 # --- /generate ---------------------------------------------------------------
 
 

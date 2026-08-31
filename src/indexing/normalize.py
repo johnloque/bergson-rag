@@ -91,3 +91,17 @@ def stem(text: str) -> list[StemToken]:
 
 def normalize_text(text: str) -> Normalization:
     return Normalization(lemmas=lemmatize(text), stems=stem(text))
+
+
+def query_bm25_text(text: str) -> str:
+    """Stems-only BM25 text for the retrieval query path
+    (src/retrieval/hybrid.py). Skips `lemmatize()` (and therefore the
+    lazy spaCy model load in `_get_nlp()`) entirely: `hybrid_search`/
+    `sparse_search`/`dense_search` only ever consume the stem side of
+    `Normalization.bm25_text`, never `.lemmas` — computing lemmas on
+    every query paid for a full spaCy forward pass (and, on the first
+    call in a process, a multi-second model load) for a value nothing
+    downstream reads. Indexing still calls `normalize_text()` directly,
+    since it persists lemmas too (`src/indexing/indexer.py`'s
+    `save_lemmas`)."""
+    return " ".join(t.stem for t in stem(text))

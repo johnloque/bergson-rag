@@ -421,6 +421,73 @@ disproportionate secondary number surfaced along the way and is not yet
 investigated: sparse query embedding alone took 5.676s for one query,
 worth a separate look.
 
+### Sparse query embedding, root-caused (`fix/sparse-embedding-latency`)
+
+The 5.676s noted above, followed up once reranking (the larger
+contributor) was fixed. Same protocol as above: confirm device
+placement first, measure rather than assume.
+
+**Device placement doesn't apply to this model at all.** FastEmbed's
+`Bm25` (`src/indexing/embeddings.py`'s `SparseEmbedder`, wrapping
+`fastembed.sparse.bm25.Bm25`) isn't a neural model — read directly from
+`fastembed/sparse/bm25.py`: tokenization is a regex split, term weights
+are a closed-form BM25 formula, term IDs are `mmh3.hash()`. No torch, no
+ONNX, no `device` argument anywhere in the class. There is nothing for
+MPS to accelerate, so unlike the reranker, a CPU-vs-MPS comparison isn't
+applicable — confirmed by direct measurement: `SparseEmbedder().embed_query(...)`
+on a real query took **0.000s**, both warm and immediately after
+construction. Not 5.676s, not even close.
+
+**The actual cost was one call earlier in the stack**, in
+`src/indexing/normalize.py`, invoked from `hybrid_search`/`sparse_search`/
+`dense_search` (`src/retrieval/hybrid.py`) as `normalize_text(query).bm25_text`
+*before* the sparse embedder ever runs. Two compounding problems, both in
+`normalize_text()`, neither in the sparse embedder:
+
+- It unconditionally computes both `lemmas` (spaCy) and `stems`
+  (Snowball) — but `.bm25_text` only ever reads `stems`. Nothing on the
+  retrieval path consumes `lemmas`; that computation is pure waste there.
+- `lemmatize()` calls `_get_nlp()`, which lazily does
+  `spacy.load("fr_core_news_lg", ...)` on the first call anywhere in the
+  process — the same "model loading confused with inference" category
+  already checked (and ruled out) for the reranker, except here it's
+  actually the cause. Measured directly, reproducing the exact call
+  sequence `hybrid_search` makes on a fresh process: cold `spacy.load` =
+  **3.442s**; every call after that, warm = **0.003s**. That accounts
+  for the reported 5.676s as a one-time spaCy load cost picked up by a
+  single-request measurement (the ~2.2s gap plausibly disk/cache
+  variance loading the ~500MB model inside the container the original
+  number came from, a different disk/cache state than this native
+  re-measurement).
+
+Unlike reranking, this was never a steady-state per-query cost — once a
+process is warm, sparse query embedding is effectively free regardless
+of device. It also happens in `api`'s own process, not `ml_service`'s:
+`ml_service`'s `/embed/sparse` (`src/ml_service/main.py`) only ever
+calls `SparseEmbedder.embed_query` on text already normalized by the
+caller — `normalize_text` runs in `hybrid_search`, on the `api` side,
+before the request (local or remote) ever reaches the sparse embedder.
+
+**The fix:** `src/indexing/normalize.py` gained `query_bm25_text(text)`,
+a stems-only path that calls `stem()` directly and skips `lemmatize()`/
+`_get_nlp()`/spaCy entirely. `src/retrieval/hybrid.py`'s three search
+functions now call this instead of `normalize_text(query).bm25_text`.
+Indexing (`src/indexing/indexer.py`) is unaffected — it still calls
+`normalize_text()` directly, since it persists `lemmas` too
+(`save_lemmas`, for the MCP exact-lemma lookup and the companion
+lexicon-graph project) and isn't on any request-latency path.
+
+One consequence worth naming: this closes the loop rather than needing a
+separate "warm spaCy at startup" fix. `normalize_text`/`lemmatize` had
+exactly one caller inside `api`/`ml_service` — `hybrid_search`'s (and
+`sparse_search`'s/`dense_search`'s) query-side call, now removed. Neither
+process has any remaining spaCy consumer, so there's nothing left to
+warm there; a startup warmup would load an unused model into every `api`
+process for nothing. `spacy.load` still runs, once per corpus, inside
+`scripts/build_index.py`'s indexing loop (via `indexer.normalize_chunks`)
+— unaffected by this fix, already amortized over however many chunks a
+given work has.
+
 ## Tests
 
 `scripts/test_frontend_arg.sh` (the build-ARG regression test, above) and

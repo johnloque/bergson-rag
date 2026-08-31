@@ -1,3 +1,5 @@
+import { computeConsideredSources } from '../lib/retrievalScope'
+import type { RetrieveFilterParams } from '../state/retrievalFilter'
 import { useTurnController } from '../state/useTurnController'
 import { ChunkRail } from './ChunkRail'
 import { GenerationBlock } from './GenerationBlock'
@@ -9,6 +11,7 @@ interface TurnCardProps {
   pendingQuery?: string
   conversationId?: number
   draftId?: string
+  filterParams?: RetrieveFilterParams
   onCreated?: (turnId: number, conversationId: number) => void
   onUnknownDraft?: () => void
 }
@@ -18,10 +21,20 @@ export function TurnCard({
   pendingQuery,
   conversationId,
   draftId,
+  filterParams,
   onCreated,
   onUnknownDraft,
 }: TurnCardProps) {
-  const turn = useTurnController({ turnId, pendingQuery, conversationId, draftId, onCreated, onUnknownDraft })
+  const turn = useTurnController({
+    turnId,
+    pendingQuery,
+    conversationId,
+    draftId,
+    filterParams,
+    onCreated,
+    onUnknownDraft,
+  })
+  const consideredSources = computeConsideredSources(turn.filterParams)
   const hasGenerated = turn.generations.length > 0
   const generateLabel = hasGenerated
     ? turn.isGenerating
@@ -49,7 +62,27 @@ export function TurnCard({
       {turn.query && <QueryBubble query={turn.query} />}
 
       {turn.retrieveState !== 'pending' && (
-        <StepLine label="Recherche des passages pertinents" done={turn.retrieveState === 'done'} />
+        <StepLine label="Recherche des passages pertinents" done={turn.retrieveState === 'done'}>
+          {consideredSources && (
+            <ul className="flex flex-col gap-1 text-xs" style={{ color: 'var(--ink-3)' }} data-testid="considered-sources">
+              {consideredSources.length === 0 && <li>Aucune œuvre ne correspond au filtre.</li>}
+              {consideredSources.map((entry) => (
+                <li key={entry.workId}>
+                  {entry.title} ({entry.year})
+                  {entry.texts && (
+                    <ul className="flex flex-col gap-0.5 pl-4">
+                      {entry.texts.map((text) => (
+                        <li key={text.title}>
+                          {text.title} ({text.year})
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </StepLine>
       )}
 
       {turn.error && (

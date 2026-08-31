@@ -88,6 +88,127 @@ Sprint 7 itself): `GET /conversations`, `PATCH /conversations/{id}`,
 and the landing page's "last conversation" redirect. Full detail:
 [`docs/backend_api.md`](backend_api.md).
 
+## Addendum — retrieval filter UI (Sprint 12, `feat/retrieval-filter-ui`)
+
+Frontend for the `work_ids`/`date_range` `/retrieve` filters shipped
+backend-only in Sprint 11 (`feat/retrieval-filtering`,
+[`docs/backend_api.md`](backend_api.md)). Lives in the chat bar as an
+icon-triggered popover (`components/FilterControl.tsx`, rendered inside
+`components/Composer.tsx`) rather than an always-open panel — the common
+case is no filtering at all, so the control stays a single unobtrusive
+icon (`IconFilter`) until clicked, with a small red dot appearing on it
+whenever the current filter state deviates from default
+(`state/retrievalFilter.ts:isFilterActive`).
+
+The popover holds three controls:
+
+- **Work checklist** — 8 checkboxes, one per work
+  (`src/lib/works.ts:WORKS`, a hand-maintained mirror of `src/works.py`'s
+  `WORKS` table — same manual-mirror convention `api/types.ts` already uses
+  for `src/api/schemas.py`), all checked by default.
+- **Chronological slider** — two range-input handles (start/end year) over
+  the corpus's real year span, `src/lib/works.ts:WORK_YEAR_RANGE`, derived
+  from `WORKS` rather than hardcoded.
+- **Mode toggle** ("Publication"/"Texte") with an inline hint noting it
+  only changes results for *L'énergie spirituelle* (1919) and *La Pensée
+  et le Mouvant* (1934) — the two anthology works `date_range`'s `"text"`
+  mode is meaningful for (`src/lib/works.ts:ANTHOLOGY_WORK_IDS`,
+  `docs/backend_api.md`'s Sprint 11 write-up); toggling it has no effect
+  on a request for any other work or with no date range set at all.
+
+**Per-turn, not a persisted session filter** (`state/retrievalFilter.ts`):
+consistent with the no-cross-turn-context design below, there is nothing
+server-side threading a filter across turns — the current filter state is
+snapshotted into a plain `{work_ids?, date_range?}` object at the moment a
+query is submitted (`routes/Conversation.tsx:handleSubmit`) and carried on
+that one `Draft`/turn from then on. The control itself *is* deliberately
+sticky in the browser across turns within a conversation (ordinary React
+state in `Conversation.tsx`, not reset after each submit) — the
+active-filter dot exists specifically so a filter set while composing an
+earlier turn is never silently forgotten going into the next one, rather
+than to indicate some new backend-persisted concept.
+
+**Default = omit the parameter, not an explicit full-corpus filter**: with
+nothing unchecked and the slider never touched, `/retrieve` is called with
+neither `work_ids` nor `date_range` present at all — never an explicit
+`work_ids` listing all 8 works or a `date_range` spanning the full corpus
+— matching `/retrieve`'s own documented "omitted = unfiltered" contract
+(`docs/backend_api.md`) exactly, including its one deliberate edge case:
+unchecking every work sends an explicit empty `work_ids: []` (a
+deliberately-empty allowlist, matches nothing), distinct from never having
+touched the checklist at all.
+
+Test coverage: `state/retrievalFilter.test.ts` (pure request-building
+logic — default omits both fields, unchecking narrows `work_ids`, the
+empty-list edge case, `date_range` with its selected mode once touched),
+`components/FilterControl.test.tsx` (checklist/slider/mode-toggle
+interactions, the active-filter indicator appearing and disappearing),
+and `routes/Conversation.filters.test.tsx` (end-to-end through the real
+submission path — the actual `/retrieve` request body for the default,
+unchecked-work, and moved-slider cases). The backend's own filtering
+behavior is not re-tested here — see `tests/test_filtering.py` for that.
+
+### Expandable "sources considered" detail on the retrieval step
+
+The "Recherche des passages pertinents" `StepLine` (`components/StepLine.tsx`,
+now accepts an optional `children` slot behind a collapsed-by-default
+chevron) can expand into a bullet list of exactly which works — or, in
+`"text"` mode, which individually-dated texts within 1919_ES/1934_PM —
+that turn's filter actually left in scope for retrieval: all 8 works when
+no filter was applied, the narrowed set when `work_ids` was set, and (in
+`"text"` mode) a nested list of the qualifying individual texts under each
+affected anthology work. Pure client-side derivation from the turn's own
+`filterParams` plus the static `lib/works.ts` mirror
+(`lib/retrievalScope.ts:computeConsideredSources`) — no extra API call
+needed to compute the list itself.
+
+**Available as soon as the request was sent, not gated on retrieval
+completing**: a turn's `work_ids`/`date_range` is known and persisted at
+turn creation (`persistence.create_turn`, `src/api/main.py`'s `/retrieve`),
+*before* `filtered_hybrid_search` + reranking even run — so `StepLine`
+offers the chevron the moment the step starts (spinner still showing), not
+only once it's marked done.
+
+**Persisted server-side** (`Turn.work_ids`/`Turn.date_range`,
+`src/api/models.py`, both nullable JSON columns, additive-column-migrated
+onto an existing dev DB via `src/api/db.py`'s `_sync_additive_columns`) —
+survives a reload. `RetrieveResponse` and `TurnDetailResponse` both echo it
+back (`docs/backend_api.md`); a reloaded page's `GET /turns/{id})` hydrate
+call (`state/useTurnController.ts`) reads it into the same `filterParams`
+state a live submission would have set, so the chevron and its list are
+identical whether the turn was just submitted this session or the page was
+just reloaded. `null` for both fields means "no filter was applied" — the
+same contract as an omitted `RetrieveRequest` field, never an explicit
+all-8/full-span default — and is what a hydrated *unfiltered* turn shows
+(all 8 works), not a "filter unknown" state; that gap (an earlier version
+of this feature that only worked for the live session, going silent on
+reload) is what this persistence closes. The one residual edge case: a
+turn's row created before this persistence existed has no recorded
+`work_ids`/`date_range` at all and reads back as `null`/`null` — displayed
+as "no filter", which may be wrong for a handful of pre-migration dev-only
+rows that actually had one applied via a direct API call before Sprint 12
+shipped; accepted, not fixed, since it only affects rows that already
+existed before this change landed.
+
+`"text"` mode's individual-text listing is itself a simplification: it
+omits the backend's undated-front-matter fallback to the work's own
+publication year (`src.works.resolve_paragraph_metadata`, a handful of
+paragraphs per anthology at most) — an accepted display-only
+approximation (`lib/retrievalScope.ts`), not a second implementation of
+`matches_date_range`'s exact paragraph-level logic.
+
+Test coverage: `lib/retrievalScope.test.ts` (pure logic — the unknown-
+filter/null case, the all-8-works default, `work_ids` narrowing, the
+`"publication"` vs `"text"` mode distinction for the same range, including
+the fixture case from `docs/backend_api.md`'s own Sprint 11 write-up),
+`components/TurnCard.consideredSources.test.tsx` (the chevron
+appearing/toggling and the rendered list content for the default/
+restricted/text-mode cases, both for a live submission and for a
+reloaded/hydrated turn), and, backend-side, `tests/test_api.py`'s
+`test_retrieve_echoes_and_persists_applied_filter` (the applied filter
+round-tripping through `RetrieveResponse` and a subsequent
+`GET /turns/{id}`).
+
 ## Known gap, not a finished feature: dark mode and full responsive layout
 
 The design tokens are CSS custom properties (`frontend/src/index.css`), not

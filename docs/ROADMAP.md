@@ -425,6 +425,34 @@ over-fetched candidate set (recall-preservation mechanism documented in
 
 ### Sprint 12 — UI/UX overhaul
 
+- Retrieval filter UI (work checklist, chronological slider, publication/
+  text mode toggle) for Sprint 11's `work_ids`/`date_range` `/retrieve`
+  filters, dropped from this list in the original write-up despite being
+  called out for Sprint 12 in that sprint's own v0 retrospective note above
+  ("the filter UI ... lands in Sprint 12") — corrected here.
+  **Implemented (`feat/retrieval-filter-ui`).** Icon-triggered popover in
+  the chat bar (`components/FilterControl.tsx`), wired into the existing
+  query-submission path, not a new one — filters are snapshotted per turn
+  at submit time (`state/retrievalFilter.ts`), never a persisted
+  cross-turn session filter, consistent with Sprint 8's no-cross-turn-
+  context design. Default (nothing touched) omits `work_ids`/`date_range`
+  entirely rather than sending an explicit all-8/full-span default,
+  matching `/retrieve`'s documented contract (`docs/backend_api.md`). Full
+  design and behavior: [`docs/frontend.md`](frontend.md).
+
+  **Follow-up: expandable "sources considered" detail, and server-side
+  filter persistence.** The "Recherche des passages pertinents" step can
+  expand into exactly which works (or, in `"text"` mode, individual
+  1919_ES/1934_PM texts) a turn's filter left in scope
+  (`lib/retrievalScope.ts`, `components/StepLine.tsx`). Doing this
+  surfaced a real gap in the first cut above: a turn's applied filter only
+  lived in the live session's memory, so it silently vanished on reload —
+  closed by persisting `work_ids`/`date_range` against the `Turn` row
+  itself (`Turn.work_ids`/`Turn.date_range`, `src/api/models.py`) and
+  echoing it back from both `RetrieveResponse` and `GET /turns/{id}`
+  (`docs/backend_api.md`), so the detail is available the moment a request
+  is sent — before retrieval even completes — and survives a reload
+  identically either way.
 - Landing page reachable only via clicking the app icon after first
   visit — no longer shown once per session automatically (revises
   Sprint 8's behavior).

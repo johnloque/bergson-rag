@@ -6,6 +6,7 @@ import { toChunkInput } from '../lib/chunkInput'
 import { cacheChunks, getCachedChunk } from './chunkCache'
 import { getPendingConversation, startOrAttachPendingConversation } from './pendingConversations'
 import { pendingGenerations } from './pendingGenerations'
+import type { RetrieveFilterParams } from './retrievalFilter'
 import { useTurnUi } from './turnUi'
 
 export type StepState = 'pending' | 'active' | 'done'
@@ -47,6 +48,13 @@ export interface TurnControllerOptions {
    * revisiting the same `/new/:draftId` (sidebar click, browser back)
    * reattaches to it instead of firing a second one. */
   draftId?: string
+  /** work_ids/date_range for this turn's /retrieve call, snapshotted from
+   * the filter control at submit time (routes/Conversation.tsx) — omitted
+   * fields mean "no filter", per /retrieve's documented default behavior.
+   * Not read on the draftId path: that /retrieve call already ran (or is
+   * running) via state/pendingConversations.ts by the time this mounts, so
+   * whatever filterParams it started with there is what's used. */
+  filterParams?: RetrieveFilterParams
   onCreated?: (turnId: number, conversationId: number) => void
   /** Called when `draftId` doesn't resolve to anything startable — no
    * pending/errored entry for it and no query to start fresh with either
@@ -72,6 +80,13 @@ export function useTurnController(options: TurnControllerOptions) {
   const [generations, setGenerations] = useState<GenerationEntry[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Undefined stays undefined for a hydrated turn (options.turnId only,
+  // see the hydrate effect below) — this branch doesn't persist a turn's
+  // applied filter server-side, so "unknown" must stay distinguishable
+  // from "no filter was applied" (lib/retrievalScope.ts).
+  const [filterParams, setFilterParams] = useState<RetrieveFilterParams | undefined>(
+    options.filterParams,
+  )
   const hasStarted = useRef(false)
 
   const runEvaluationAt = useCallback(async (index: number, generationId: number) => {
@@ -108,6 +123,7 @@ export function useTurnController(options: TurnControllerOptions) {
         const response = await api.retrieve({
           query: submittedQuery,
           conversation_id: options.conversationId,
+          ...options.filterParams,
         })
         cacheChunks(response.chunks)
         setChunks(response.chunks)
@@ -174,6 +190,12 @@ export function useTurnController(options: TurnControllerOptions) {
         options.onUnknownDraft?.()
         return
       }
+      // The draftId path's /retrieve call is owned by
+      // state/pendingConversations.ts, started from routes/Conversation.tsx
+      // before this ever mounts — filterParams was captured there, not
+      // passed as a prop to this instance, so it has to be read back off
+      // the pending entry rather than off `options`.
+      setFilterParams(existing?.filterParams)
       void runDraftTurn(draftId, initialQuery)
     } else if (options.pendingQuery) {
       hasStarted.current = true
@@ -191,6 +213,17 @@ export function useTurnController(options: TurnControllerOptions) {
       try {
         const detail = await api.getTurn(id)
         if (cancelled) return
+
+        // Persisted at turn creation (src/api/persistence.py's create_turn),
+        // before /retrieve's own filtered_hybrid_search + rerank ever run —
+        // so it's already known and set here even while the poll below is
+        // still waiting on retrieved_chunks, letting the "sources
+        // considered" detail (lib/retrievalScope.ts) show up as soon as the
+        // request was actually sent, not just once retrieval completes.
+        setFilterParams({
+          work_ids: detail.work_ids ?? undefined,
+          date_range: detail.date_range ?? undefined,
+        })
 
         // persistence.create_turn (src/api/persistence.py) commits the turn
         // well before /retrieve finishes hybrid search + reranking and
@@ -375,6 +408,7 @@ export function useTurnController(options: TurnControllerOptions) {
     conversationId,
     query,
     chunks,
+    filterParams,
     retrieveState,
     generations,
     reveal,

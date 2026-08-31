@@ -374,6 +374,50 @@ def test_retrieve_applies_work_ids_and_date_range_filters(client):
     assert {c["work_id"] for c in body["chunks"]} == {"1907_EC"}
 
 
+@_qdrant_skip
+def test_retrieve_echoes_and_persists_applied_filter(client):
+    """docs/ROADMAP.md, Sprint 12 filter UI: `RetrieveResponse` and a later
+    `GET /turns/{id}` both echo back exactly the work_ids/date_range that
+    was applied to a turn — None for a call that set neither, matching
+    `RetrieveRequest`'s own omitted-parameter contract exactly rather than
+    an explicit "all works"/"full span" default, and the given values
+    otherwise. This is what lets a reloaded page reconstruct which filter
+    (if any) produced a turn's results, since retrieval itself has no
+    other record of it (src/api/models.py's `Turn.work_ids`/`date_range`)."""
+    unfiltered = client.post("/retrieve", json={"query": Q002_QUERY, "top_k": 3})
+    assert unfiltered.status_code == 200
+    unfiltered_body = unfiltered.json()
+    assert unfiltered_body["work_ids"] is None
+    assert unfiltered_body["date_range"] is None
+
+    filtered = client.post(
+        "/retrieve",
+        json={
+            "query": Q002_QUERY,
+            "top_k": 3,
+            "work_ids": ["1907_EC"],
+            "date_range": {"start": 1900, "end": 1910, "mode": "publication"},
+        },
+    )
+    assert filtered.status_code == 200
+    filtered_body = filtered.json()
+    assert filtered_body["work_ids"] == ["1907_EC"]
+    assert filtered_body["date_range"] == {"start": 1900, "end": 1910, "mode": "publication"}
+
+    # Persisted at turn creation (before retrieval itself runs) -- readable
+    # back via GET /turns/{id}, independent of the live /retrieve response.
+    turn_response = client.get(f"/turns/{filtered_body['turn_id']}")
+    assert turn_response.status_code == 200
+    turn_body = turn_response.json()
+    assert turn_body["work_ids"] == ["1907_EC"]
+    assert turn_body["date_range"] == {"start": 1900, "end": 1910, "mode": "publication"}
+
+    unfiltered_turn = client.get(f"/turns/{unfiltered_body['turn_id']}")
+    assert unfiltered_turn.status_code == 200
+    assert unfiltered_turn.json()["work_ids"] is None
+    assert unfiltered_turn.json()["date_range"] is None
+
+
 # --- /generate ---------------------------------------------------------------
 
 

@@ -4,11 +4,21 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { Composer } from '../components/Composer'
 import { TurnCard } from '../components/TurnCard'
+import { WORK_YEAR_RANGE } from '../lib/works'
 import { startOrAttachPendingConversation } from '../state/pendingConversations'
+import {
+  defaultFilterState,
+  toRetrieveFilterParams,
+  type RetrieveFilterParams,
+} from '../state/retrievalFilter'
 
 interface Draft {
   key: string
   query: string
+  /** Snapshotted from the filter control at submit time — each turn keeps
+   * its own filter state independent of whatever the control shows later
+   * (state/retrievalFilter.ts). */
+  filterParams: RetrieveFilterParams
   /** Set once /generate resolves — lets us skip this turn in the persisted
    * list below once it catches up, instead of rendering the same turn
    * twice. */
@@ -30,6 +40,12 @@ export function Conversation() {
   const queryClient = useQueryClient()
   const [drafts, setDrafts] = useState<Draft[]>([])
   const [pendingCount, setPendingCount] = useState(0)
+  // Sticky across turns in this conversation, not reset on submit — see
+  // state/retrievalFilter.ts for why, and FilterControl's active-filter
+  // indicator for how that stays visible instead of surprising.
+  const [filterState, setFilterState] = useState(() =>
+    defaultFilterState(WORK_YEAR_RANGE.min, WORK_YEAR_RANGE.max),
+  )
 
   const { data } = useQuery({
     queryKey: ['conversation', conversationId],
@@ -48,6 +64,9 @@ export function Conversation() {
   // is exactly what broke chunk exclusion surviving into Régénérer. So the
   // persisted list instead skips any turn a draft already covers.
   function handleSubmit(query: string) {
+    // Snapshotted once, here, at submit time — this turn keeps this filter
+    // regardless of any later change to the (sticky) filter control.
+    const filterParams = toRetrieveFilterParams(filterState)
     if (conversationId === undefined && !draftId) {
       // Brand-new conversation: register (and start) it under a stable id
       // *before* navigating, so the sidebar's pending placeholder
@@ -56,12 +75,12 @@ export function Conversation() {
       // /new/:draftId page below always finds it already registered
       // rather than needing anything passed through the navigation itself.
       const newDraftId = crypto.randomUUID()
-      startOrAttachPendingConversation(queryClient, newDraftId, query)
+      startOrAttachPendingConversation(queryClient, newDraftId, query, filterParams)
       navigate(`/new/${newDraftId}`, { replace: true })
       return
     }
     setPendingCount((c) => c + 1)
-    setDrafts((d) => [...d, { key: crypto.randomUUID(), query }])
+    setDrafts((d) => [...d, { key: crypto.randomUUID(), query, filterParams }])
   }
 
   const draftTurnIds = new Set(drafts.map((d) => d.turnId).filter((id) => id !== undefined))
@@ -98,6 +117,7 @@ export function Conversation() {
             key={draft.key}
             pendingQuery={draft.query}
             conversationId={conversationId}
+            filterParams={draft.filterParams}
             onCreated={(turnId, newConversationId) => {
               setPendingCount((c) => Math.max(0, c - 1))
               setDrafts((ds) => ds.map((d) => (d.key === draft.key ? { ...d, turnId } : d)))
@@ -115,7 +135,12 @@ export function Conversation() {
         )}
       </div>
 
-      <Composer onSubmit={handleSubmit} disabled={pendingCount > 0 || Boolean(draftId)} />
+      <Composer
+        onSubmit={handleSubmit}
+        disabled={pendingCount > 0 || Boolean(draftId)}
+        filterState={filterState}
+        onFilterStateChange={setFilterState}
+      />
 
       {hasPriorTurn && (
         <p className="-mt-4 text-xs" style={{ color: 'var(--ink-3)' }}>

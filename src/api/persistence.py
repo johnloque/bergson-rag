@@ -30,13 +30,25 @@ from src.api.schemas import ChunkInput, ChunkResult
 from src.generation.chunk_judgment import ChunkJudgment
 
 
-def create_turn(session: Session, conversation_id: int | None, query: str) -> Turn:
+def create_turn(
+    session: Session,
+    conversation_id: int | None,
+    query: str,
+    work_ids: list[str] | None = None,
+    date_range: dict | None = None,
+) -> Turn:
     """`/retrieve`'s turn-creation rule (docs/ROADMAP.md, Sprint 10
     turn-lifecycle fix): a query always starts a brand-new turn immediately,
     before any generation happens — `conversation_id` absent also creates a
     new conversation; given, it must already exist (404 if unknown).
     `/generate` never creates a turn itself any more (see `get_turn_or_404`
-    below) — it only ever attaches to one this function already created."""
+    below) — it only ever attaches to one this function already created.
+
+    `work_ids`/`date_range` (Sprint 12 filter UI) are persisted here, at
+    turn creation, before `filtered_hybrid_search` even runs — so the
+    applied filter is recoverable via `GET /turns/{id}` even for a turn
+    whose retrieval never got a chance to finish (a request that errored,
+    or a page reload racing it)."""
     if conversation_id is not None:
         conversation = session.get(Conversation, conversation_id)
         if conversation is None:
@@ -49,7 +61,9 @@ def create_turn(session: Session, conversation_id: int | None, query: str) -> Tu
         session.commit()
         session.refresh(conversation)
 
-    turn = Turn(conversation_id=conversation.id, query=query)
+    turn = Turn(
+        conversation_id=conversation.id, query=query, work_ids=work_ids, date_range=date_range
+    )
     session.add(turn)
     session.commit()
     session.refresh(turn)

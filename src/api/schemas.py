@@ -140,6 +140,14 @@ class RetrieveResponse(BaseModel):
     turn_id: int
     conversation_id: int
     chunks: list[ChunkResult]
+    # Echoes exactly what was persisted against this turn (Sprint 12 filter
+    # UI) — None means no filter was applied, mirroring RetrieveRequest's
+    # own omitted-parameter contract. The frontend already knows this
+    # synchronously from the request it just built, so this isn't needed
+    # for the live-session display; it's what GET /turns/{id} reads back
+    # for a reloaded page instead (docs/frontend.md).
+    work_ids: list[str] | None = None
+    date_range: DateRange | None = None
 
 
 class ConfidencePreviewChunk(BaseModel):
@@ -313,6 +321,11 @@ class TurnDetailResponse(BaseModel):
     retrieved_chunks: list[RetrievedChunkOut]
     generations: list[GenerationOut]
     chunk_judgments: dict[str, ChunkJudgment]
+    # Same persisted filter as RetrieveResponse's, read back here so a
+    # reloaded page can reconstruct it (Sprint 12 filter UI,
+    # docs/frontend.md) — None means no filter was applied.
+    work_ids: list[str] | None = None
+    date_range: DateRange | None = None
 
 
 class ConversationTurnOut(BaseModel):

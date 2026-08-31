@@ -17,16 +17,37 @@ produced by ingestion.
 A reusable function, not a one-off script: intended to be called
 repeatedly, for many paragraph_ids at a time, whenever the gold dataset
 needs remapping after a re-chunking event — see `resolve_chunk_ids` below.
+`parse_paragraph_id` splits the `"{work_id}_p{number}"` strings gold_dataset.csv
+stores (`fix/gold-dataset-paragraph-refs`) into the `(work_id, paragraph_id)`
+pair `resolve_chunk_id(s)` expects.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from functools import cache
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CHUNKS_DIR = REPO_ROOT / "data" / "processed" / "chunks"
+
+# work_id itself may contain underscores (e.g. "1934_PM"), so this anchors on
+# the trailing "_p<digits>" and takes everything before it as work_id, rather
+# than splitting on the first underscore.
+_PARAGRAPH_ID_PATTERN = re.compile(r"^(?P<work_id>.+)_p(?P<number>\d+)$")
+
+
+def parse_paragraph_id(paragraph_id: str) -> tuple[str, int]:
+    """ "{work_id}_p{number}" -> (work_id, paragraph_number), e.g.
+    "1934_PM_p1" -> ("1934_PM", 1). Raises ValueError rather than guessing
+    when `paragraph_id` doesn't match — callers reading gold paragraph_ids
+    (eval/scripts/run_eval.py) should flag a malformed value, not silently
+    skip or misparse it."""
+    match = _PARAGRAPH_ID_PATTERN.match(paragraph_id)
+    if match is None:
+        raise ValueError(f"not a paragraph_id (expected '{{work_id}}_p<n>'): {paragraph_id!r}")
+    return match.group("work_id"), int(match.group("number"))
 
 
 @cache

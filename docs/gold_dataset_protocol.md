@@ -9,22 +9,45 @@ questions are out of scope for this project (see docs/ROADMAP.md,
 ## Chunk-first construction
 
 Always start from a chunk you are actively reading — via the chunk
-correspondence export (see "Looking up chunk_ids" below), not from a
+correspondence export (see "Looking up paragraph_ids" below), not from a
 question you'd like to ask. Write the query backward from the chunk,
 re-reading its full text before drafting anything. Do not rely on
 general knowledge of Bergson's doctrine — the dataset checks grounding
 against specific corpus text, not against secondary scholarship.
 
-## Looking up chunk_ids
+## Looking up paragraph_ids
 
-Ground truth is expressed directly in `chunk_ids` — the same identifiers
-produced by the indexing pipeline (Sprint 2), not paragraph numbers.
-Use the chunk correspondence export (`data/processed/chunks/{work_id}.json`,
-a flat list of `{chunk_id, section_path, paragraph_ids, text}`) to find
-the exact `chunk_id` for a passage you're annotating — search/grep
-against `text`, copy the corresponding `chunk_id`. Do not guess or
-reconstruct a chunk_id by hand from section/paragraph numbers; it is
-assigned by the ingestion pipeline and not predictable by inspection.
+Ground truth is expressed in `paragraph_ids` (`fix/gold-dataset-paragraph-refs`,
+Sprint 11) rather than directly in `chunk_ids`: `chunk_id`s are reassigned
+from scratch on every re-chunking run (`src/ingestion/chunking.py`), while
+`paragraph_id`s are stable across re-chunking (assigned once at ingestion,
+Sprint 1). Annotating against `paragraph_ids` means the gold dataset
+survives future chunk-size experiments (Sprint 14) without a by-hand
+remap.
+
+Each value is a `paragraph_id` in the exact format `{work_id}_p{number}`
+(e.g. `1934_PM_p1`) — the same identifiers produced by ingestion
+(Sprint 1), not hand-numbered. Use the chunk correspondence export
+(`data/processed/chunks/{work_id}.json`, a flat list of `{chunk_id,
+section_path, paragraph_ids, text}`) to find the passage you're
+annotating — search/grep against `text`, then copy the `paragraph_id`(s)
+from that chunk's `paragraph_ids` list, not the `chunk_id` itself. Do not
+guess or reconstruct a `paragraph_id` by hand; use the value exactly as it
+appears in the correspondence export.
+
+**Resolution happens at evaluation time, not at annotation time.** The
+evaluation scripts (`eval/scripts/run_eval.py`) parse each gold
+`paragraph_id` (`src.paragraph_chunk_map.parse_paragraph_id`) and resolve
+it to whatever `chunk_id` currently contains it
+(`src.paragraph_chunk_map.resolve_chunk_id`, reading
+`data/processed/chunks/` as it exists at run time) before scoring against
+`/retrieve`'s results. A `paragraph_id` resolves to exactly one `chunk_id`
+under any given chunking (chunks are non-overlapping paragraph groups,
+Sprint 1) — resolution asserts this rather than silently handling zero or
+multiple matches. For `ground_truth_type: multi`, each listed
+`paragraph_id` is resolved independently before the "any one counts" (OR)
+check, so several `paragraph_id`s resolving to the same or to different
+`chunk_id`s both work correctly without special-casing.
 
 ## Quotas (n=50)
 
@@ -82,14 +105,16 @@ answer this exact query just as correctly?
 
 - **No** — the query is anchored by something specific to this chunk (an
   example, an image, a step in the argument). Ground truth is one
-  `chunk_id`. Prefer this whenever possible: simpler to score, more
+  `paragraph_id` (or, for a chunk spanning several paragraphs, the
+  paragraph(s) that anchor the query — any one resolves to the same
+  chunk). Prefer this whenever possible: simpler to score, more
   diagnostic when retrieval fails.
 - **Yes** — either narrow the query until only one chunk fits, or accept
-  a multi-valued ground truth: a set of `chunk_ids`, any one of which
-  counts as a correct retrieval. Set `ground_truth_type` to `multi` in
-  that case. This happens most often with definitional items, where
-  Bergson restates a notion equivalently at more than one point in the
-  corpus.
+  a multi-valued ground truth: a set of `paragraph_ids`, any one of which
+  (after resolution to a chunk_id) counts as a correct retrieval. Set
+  `ground_truth_type` to `multi` in that case. This happens most often
+  with definitional items, where Bergson restates a notion equivalently
+  at more than one point in the corpus.
 
 If a query only seems answerable by combining several chunks jointly
 (not "any one of several"), or by tracing a notion across most of the
@@ -134,15 +159,19 @@ mitigations:
 ## Schema
 
 ```
-id, category, query, query_style, ground_truth_type, chunk_ids,
+id, category, query, query_style, ground_truth_type, paragraph_ids,
 expected_answer, vocabulary_type, difficulty, footnote_related
 ```
 
 - `category`: `factual` or `definitional`
 - `query_style`: `framed` or `keyword`
 - `ground_truth_type`: `single` or `multi`
-- `chunk_ids`: one or more chunk_ids, semicolon-separated if more than
-  one
+- `paragraph_ids`: one or more `paragraph_id`s, comma-separated if more
+  than one, each in the exact format `{work_id}_p{number}` (e.g.
+  `1934_PM_p1`) — `work_id` itself may contain an underscore, so parse
+  from the end (`^(.+)_p(\d+)$`), not by splitting on the first
+  underscore. Resolved to `chunk_id`(s) at evaluation time, never stored
+  as `chunk_id`s directly — see "Looking up paragraph_ids" above.
 - `vocabulary_type`: `bergsonian`, `modern`, or `mixed`
 - `difficulty`: `easy`, `medium`, or `hard`
 - `footnote_related`: `yes` or `no`
@@ -156,7 +185,7 @@ query: Selon Bergson, pourquoi le langage nous pousse-t-il à juxtaposer
   dans l'espace des phénomènes qui n'occupent pourtant aucun espace ?
 query_style: framed
 ground_truth_type: single
-chunk_ids: essai:1.1:0
+paragraph_ids: 1888_EDIC_p1
 expected_answer: Parce que le langage exige, pour que nous puissions
   nous exprimer par des mots, que nous établissions entre nos idées les
   mêmes distinctions nettes et la même discontinuité qu'entre les objets
@@ -174,7 +203,7 @@ category: definitional
 query: image boule de neige perception changement
 query_style: keyword
 ground_truth_type: single
-chunk_ids: evolution-creatrice:2.3:1
+paragraph_ids: 1907_EC_p13
 expected_answer: [tight paraphrase of the chunk's actual content —
   written independently, not derived from Q-EXAMPLE-1's style]
 vocabulary_type: bergsonian

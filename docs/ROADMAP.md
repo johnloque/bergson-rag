@@ -408,6 +408,11 @@ Layer 1's title+year check (`src/generation/guardrail.py`) in place of the
 work-level-only lookup for these two works. Full design rationale and test
 coverage: [`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md).
 
+`eval/gold_dataset.csv` now consumes that mapping directly
+(`fix/gold-dataset-paragraph-refs`): its `chunk_ids` column is renamed to
+`paragraph_ids`, resolved to `chunk_id`(s) at evaluation time in
+`eval/scripts/run_eval.py` — see `docs/gold_dataset_protocol.md`.
+
 ### Sprint 12 — UI/UX overhaul
 
 - Landing page reachable only via clicking the app icon after first

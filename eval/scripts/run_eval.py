@@ -7,6 +7,12 @@ dataset loading — no CLI, no printing beyond gold-dataset completeness
 warnings, no file output. `retrieve()` returns results for callers to score
 and report themselves.
 
+`eval/gold_dataset.csv` expresses ground truth as `paragraph_ids`
+(`fix/gold-dataset-paragraph-refs`), stable across re-chunking; `GoldItem`
+still carries `chunk_ids`, resolved at load time via
+`src.paragraph_chunk_map` against whatever chunking `CHUNKS_DIR` currently
+holds, since that's what `/retrieve` results are scored against.
+
 Consumers:
 - eval/scripts/run_hyperparam_sweep.py — dense/sparse/hybrid_k sweep report
 - eval/scripts/run_reranking_comparison.py — hybrid-only vs +rerank report
@@ -24,6 +30,7 @@ from qdrant_client import QdrantClient
 
 from eval.scripts.metrics import RECALL_KS, GoldItem
 from src.indexing.embeddings import DenseEmbedder, SparseEmbedder
+from src.paragraph_chunk_map import parse_paragraph_id, resolve_chunk_id
 from src.retrieval.hybrid import hybrid_search
 from src.retrieval.reranking import DEFAULT_RERANK_CANDIDATES, CrossEncoderReranker
 from src.retrieval.reranking import rerank as apply_reranking
@@ -41,7 +48,22 @@ PROTOCOL_MIN_KEYWORD_STYLE = 8
 PROTOCOL_MIN_FOOTNOTE_RELATED = 3
 
 
-def load_gold_dataset(path: Path) -> list[GoldItem]:
+def _resolve_gold_paragraph_id(row_id: str, paragraph_id: str, chunks_dir: Path) -> str:
+    """Current chunk_id for one gold `paragraph_id`, via
+    `src.paragraph_chunk_map` (`feat/backend-reference-data`) — the only
+    place gold paragraph_ids get parsed or resolved, so every eval script
+    stays behind the same lookup. A paragraph_id resolves to exactly one
+    chunk_id under any given chunking (non-overlapping paragraph groups,
+    Sprint 1) — `resolve_chunk_id` asserts that rather than silently
+    handling zero or multiple matches."""
+    try:
+        work_id, _ = parse_paragraph_id(paragraph_id)
+    except ValueError as exc:
+        raise ValueError(f"gold item {row_id}: {exc}") from exc
+    return resolve_chunk_id(work_id, paragraph_id, chunks_dir)
+
+
+def load_gold_dataset(path: Path, chunks_dir: Path = CHUNKS_DIR) -> list[GoldItem]:
     with path.open(newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f, delimiter=";")
         return [
@@ -51,7 +73,11 @@ def load_gold_dataset(path: Path) -> list[GoldItem]:
                 query=row["query"],
                 query_style=row["query_style"],
                 ground_truth_type=row["ground_truth_type"],
-                chunk_ids=tuple(c.strip() for c in row["chunk_ids"].split(",") if c.strip()),
+                chunk_ids=tuple(
+                    _resolve_gold_paragraph_id(row["id"], p.strip(), chunks_dir)
+                    for p in row["paragraph_ids"].split(",")
+                    if p.strip()
+                ),
                 expected_anwser=row["expected_anwser"],
                 vocabulary_type=row["vocabulary_type"],
                 difficulty=row["difficulty"],

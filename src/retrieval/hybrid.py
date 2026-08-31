@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from qdrant_client import QdrantClient, models
 
 from src.indexing.embeddings import DenseEmbedder, SparseEmbedder
-from src.indexing.normalize import normalize_text
+from src.indexing.normalize import query_bm25_text
 from src.indexing.qdrant_index import (
     COLLECTION_NAME,
     DENSE_VECTOR_NAME,
@@ -89,7 +89,7 @@ def sparse_search(
 ) -> list[RetrievedChunk]:
     """Sparse-only (BM25) search, no fusion — isolates the sparse channel
     for hyperparameter comparisons (eval/scripts/run_hyperparam_sweep.py)."""
-    bm25_text = normalize_text(query).bm25_text
+    bm25_text = query_bm25_text(query)
     sparse_indices, sparse_values = sparse_embedder.embed_query([bm25_text])[0]
     response = client.query_points(
         collection_name=collection_name,
@@ -117,7 +117,7 @@ def hybrid_search(
     embedders and the fusion itself are non-random.
     """
     dense_vector = dense_embedder.embed([query])[0]
-    bm25_text = normalize_text(query).bm25_text
+    bm25_text = query_bm25_text(query)
     sparse_indices, sparse_values = sparse_embedder.embed_query([bm25_text])[0]
 
     # Qdrant's RRF merge has no deterministic tie-break for exactly-equal

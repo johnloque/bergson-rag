@@ -209,7 +209,13 @@ def retrieve(body: RetrieveRequest, session: Session = Depends(get_session)) -> 
     call runs at, so filtering here costs no recall relative to an
     unfiltered call; `rerank` and the `[: body.top_k]` slice below are
     unchanged either way."""
-    turn = persistence.create_turn(session, body.conversation_id, body.query)
+    turn = persistence.create_turn(
+        session,
+        body.conversation_id,
+        body.query,
+        work_ids=body.work_ids,
+        date_range=body.date_range.model_dump() if body.date_range is not None else None,
+    )
 
     client = get_qdrant_client()
     candidate_limit = max(body.top_k, DEFAULT_RERANK_CANDIDATES)
@@ -235,7 +241,11 @@ def retrieve(body: RetrieveRequest, session: Session = Depends(get_session)) -> 
     persistence.save_retrieved_chunks(session, turn.id, chunk_results)
 
     return RetrieveResponse(
-        turn_id=turn.id, conversation_id=turn.conversation_id, chunks=chunk_results
+        turn_id=turn.id,
+        conversation_id=turn.conversation_id,
+        chunks=chunk_results,
+        work_ids=body.work_ids,
+        date_range=body.date_range,
     )
 
 
@@ -472,6 +482,8 @@ def get_turn(turn_id: int, session: Session = Depends(get_session)) -> TurnDetai
         retrieved_chunks=retrieved_chunk_outs,
         generations=generation_outs,
         chunk_judgments=chunk_judgments,
+        work_ids=turn.work_ids,
+        date_range=turn.date_range,
     )
 
 

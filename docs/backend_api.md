@@ -23,7 +23,13 @@ this project already applies to LiteLLM and RAGAS.
 Schema (`src/api/models.py`):
 
 - `conversations(id, created_at)`
-- `turns(id, conversation_id, query, created_at)`
+- `turns(id, conversation_id, query, created_at, work_ids, date_range)` —
+  the latter two (Sprint 12 filter UI, `docs/frontend.md`) are nullable
+  JSON columns holding exactly the `work_ids`/`date_range` a `/retrieve`
+  call applied, both `null` when no filter was given; set once at turn
+  creation (`persistence.create_turn`), before retrieval itself runs, and
+  echoed back by both `RetrieveResponse` and `GET /turns/{id}` — see that
+  endpoint's own section below.
 - `retrieved_chunks(turn_id, chunk_id, rank, score)` — one row per chunk
   shown to the user for a turn. Replaced wholesale on each `/generate` call
   against that turn, not accumulated, since a regeneration may curate a
@@ -164,6 +170,19 @@ live-corpus integration tests, including the recall-preservation
 regression check and the 1902 "L'effort intellectuel" example that
 distinguishes `"text"` from `"publication"` mode for the identical query
 and range): `tests/test_filtering.py`.
+
+### Persistence and echo (Sprint 12 filter UI, `feat/retrieval-filter-ui`)
+
+`work_ids`/`date_range` are persisted against the `Turn` row that creates
+them (`Turn.work_ids`/`Turn.date_range`, both nullable JSON columns) and
+echoed back by both `RetrieveResponse` (immediately) and
+`GET /turns/{id}` (on any later fetch, including after a reload) — `null`
+for either field means no filter was applied, the same contract as an
+omitted request field. This closes a gap in the first cut of the frontend
+filter UI, which only knew a turn's applied filter for the live session
+that submitted it and went silent about it on reload; full frontend
+rationale: [`docs/frontend.md`](frontend.md). Test coverage:
+`tests/test_api.py::test_retrieve_echoes_and_persists_applied_filter`.
 
 ## Two risks this branch resolves
 

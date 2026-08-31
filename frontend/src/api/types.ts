@@ -35,6 +35,18 @@ export interface ChunkJudgment {
   justification: string
 }
 
+// docs/ROADMAP.md, Sprint 11 retrieval filtering: `mode` defaults to
+// "publication" server-side, but the filter UI (Sprint 12) always sends it
+// explicitly whenever date_range is sent at all — see
+// state/retrievalFilter.ts.
+export type DateRangeMode = 'publication' | 'text'
+
+export interface DateRange {
+  start: number
+  end: number
+  mode: DateRangeMode
+}
+
 export interface RetrieveRequest {
   query: string
   top_k?: number
@@ -42,6 +54,12 @@ export interface RetrieveRequest {
   // name an existing conversation (docs/ROADMAP.md, Sprint 10 turn-
   // lifecycle fix).
   conversation_id?: number | null
+  // Sprint 12 filter UI: both omitted by default, matching /retrieve's
+  // unfiltered behavior exactly — never sent as an explicit "all 8 works" /
+  // full-span list when the user hasn't deliberately narrowed anything
+  // (state/retrievalFilter.ts, docs/frontend.md).
+  work_ids?: string[]
+  date_range?: DateRange
 }
 
 // turn_id/conversation_id (docs/ROADMAP.md, Sprint 10 turn-lifecycle fix):
@@ -52,6 +70,13 @@ export interface RetrieveResponse {
   turn_id: number
   conversation_id: number
   chunks: ChunkResult[]
+  // Echoes exactly what was persisted against this turn (Sprint 12 filter
+  // UI, src/api/models.py's Turn.work_ids/date_range) — null means no
+  // filter was applied. Not needed to drive the live-session display (the
+  // client already knows what it just sent); this is what a reloaded
+  // page's GET /turns/{id} call reads back instead (docs/frontend.md).
+  work_ids: string[] | null
+  date_range: DateRange | null
 }
 
 // turn_id is required (docs/ROADMAP.md, Sprint 10 turn-lifecycle fix):
@@ -182,6 +207,11 @@ export interface TurnDetailResponse {
   retrieved_chunks: RetrievedChunkOut[]
   generations: GenerationOut[]
   chunk_judgments: Record<string, ChunkJudgment>
+  // Same persisted filter as RetrieveResponse's (Sprint 12 filter UI) —
+  // null means no filter was applied to this turn. Read back here so a
+  // reloaded page can reconstruct and display it (state/useTurnController.ts).
+  work_ids: string[] | null
+  date_range: DateRange | null
 }
 
 export interface ConversationTurnOut {

@@ -1,12 +1,16 @@
 import { useState } from 'react'
 import { IconSend } from '@tabler/icons-react'
+import { FilterControl } from './FilterControl'
+import type { RetrievalFilterState } from '../state/retrievalFilter'
 
 interface ComposerProps {
   onSubmit: (query: string) => void
   disabled?: boolean
+  filterState: RetrievalFilterState
+  onFilterStateChange: (updater: (prev: RetrievalFilterState) => RetrievalFilterState) => void
 }
 
-export function Composer({ onSubmit, disabled }: ComposerProps) {
+export function Composer({ onSubmit, disabled, filterState, onFilterStateChange }: ComposerProps) {
   const [value, setValue] = useState('')
 
   function submit() {
@@ -21,6 +25,7 @@ export function Composer({ onSubmit, disabled }: ComposerProps) {
       className="flex items-end gap-2 rounded-xl p-2"
       style={{ background: 'var(--paper-2)', border: '0.5px solid var(--hairline)' }}
     >
+      <FilterControl state={filterState} onChange={onFilterStateChange} disabled={disabled} />
       <textarea
         value={value}
         onChange={(e) => setValue(e.target.value)}

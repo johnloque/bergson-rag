@@ -58,6 +58,20 @@ class Turn(SQLModel, table=True):
     conversation_id: int = Field(foreign_key="conversations.id", index=True)
     query: str
     created_at: datetime = Field(default_factory=_utcnow)
+    # docs/ROADMAP.md, Sprint 12 filter UI: the work_ids/date_range filter
+    # actually applied to this turn's /retrieve call, persisted at turn
+    # creation (`persistence.create_turn`, before retrieval itself even
+    # runs) so a reloaded page (`GET /turns/{id}`) can reconstruct and
+    # display it instead of losing it the moment the live session that
+    # submitted it is gone. Both nullable, and both default to None —
+    # matching /retrieve's own "omitted parameter = no filter" contract
+    # exactly, never an explicit "all 8 works"/"full span" default.
+    # `date_range` is stored as a plain JSON dict ({start, end, mode}) since
+    # SQLModel/SQLAlchemy's JSON column type needs a JSON-serializable
+    # value, not a nested Pydantic model — `src/api/schemas.py`'s
+    # `DateRange` re-validates it on the way back out.
+    work_ids: list[str] | None = Field(default=None, sa_column=Column(JSON))
+    date_range: dict | None = Field(default=None, sa_column=Column(JSON))
 
 
 class RetrievedChunkRow(SQLModel, table=True):

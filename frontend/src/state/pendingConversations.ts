@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import type { QueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { ChunkResult } from '../api/types'
+import type { RetrieveFilterParams } from './retrievalFilter'
 
 // A brand-new conversation's first /retrieve call, keyed by the id in the
 // `/new/:draftId` URL (App.tsx) rather than by conversation_id, which
@@ -19,6 +20,7 @@ export interface PendingConversationResult {
 
 interface Entry {
   query: string
+  filterParams: RetrieveFilterParams
   status: 'retrieving' | 'error'
   error?: string
   promise: Promise<PendingConversationResult>
@@ -64,17 +66,21 @@ export function getPendingConversation(draftId: string): Entry | undefined {
 
 /** Starts the /retrieve call for `draftId`'s first submission, or — if one
  * is already running or already failed under that id — returns its
- * existing promise instead of calling /retrieve again. */
+ * existing promise instead of calling /retrieve again. `filterParams` is
+ * only consulted on that first call (routes/Conversation.tsx captures it at
+ * submit time); a later attach to an already-running/failed entry ignores
+ * whatever is passed here and uses what the entry started with. */
 export function startOrAttachPendingConversation(
   queryClient: QueryClient,
   draftId: string,
   query: string,
+  filterParams: RetrieveFilterParams = {},
 ): Promise<PendingConversationResult> {
   const existing = entries.get(draftId)
   if (existing) return existing.promise
 
   const promise: Promise<PendingConversationResult> = api
-    .retrieve({ query, conversation_id: undefined })
+    .retrieve({ query, conversation_id: undefined, ...filterParams })
     .then(async (response) => {
       const result: PendingConversationResult = {
         turnId: response.turn_id,
@@ -92,6 +98,7 @@ export function startOrAttachPendingConversation(
     .catch((e: unknown) => {
       entries.set(draftId, {
         query,
+        filterParams,
         status: 'error',
         error: e instanceof Error ? e.message : String(e),
         promise,
@@ -100,7 +107,7 @@ export function startOrAttachPendingConversation(
       throw e
     })
 
-  entries.set(draftId, { query, status: 'retrieving', promise })
+  entries.set(draftId, { query, filterParams, status: 'retrieving', promise })
   emit()
   return promise
 }

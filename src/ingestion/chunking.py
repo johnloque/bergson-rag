@@ -1,10 +1,7 @@
 """Chunk parsed works into retrieval units.
 
-Paragraph is the atomic unit: whole, consecutive paragraphs within a
-single section are accumulated toward a ~500-word target. A section
-boundary is always a hard chunk boundary. Word counts here are plain
-`str.split()` counts — the BGE-M3 tokenizer-based budget is deferred to
-Sprint 2 indexing.
+One chunk = one paragraph. Paragraph and chunk boundaries are identical;
+a chunk's `paragraph_ids` always has exactly one element.
 """
 
 from __future__ import annotations
@@ -14,10 +11,6 @@ from dataclasses import asdict
 from pathlib import Path
 
 from src.ingestion.models import Chunk, Section, Work
-
-TARGET_WORDS = 500
-MAX_STANDALONE_WORDS = 750
-MIN_TRAILING_WORDS = 80
 
 
 def _make_chunk(work_id: str, section: Section, paragraphs: list, index: int) -> Chunk:
@@ -36,53 +29,13 @@ def _make_chunk(work_id: str, section: Section, paragraphs: list, index: int) ->
     )
 
 
-def _merge_chunks(work_id: str, section: Section, a: Chunk, b: Chunk, index: int) -> Chunk:
-    return Chunk(
-        chunk_id=f"{work_id}_c{index}",
-        work_id=work_id,
-        section_id=section.section_id,
-        section_path=a.section_path,
-        paragraph_ids=a.paragraph_ids + b.paragraph_ids,
-        text=f"{a.text}\n\n{b.text}",
-        word_count=a.word_count + b.word_count,
-        page_start=a.page_start,
-        page_end=b.page_end,
-    )
-
-
 def chunk_section(work_id: str, section: Section, paragraphs: list) -> list[Chunk]:
     """Chunk one section's paragraphs. `paragraphs` must be that
-    section's paragraphs, in document order."""
-    chunks: list[Chunk] = []
-    bucket: list = []
-    bucket_words = 0
-
-    def flush() -> None:
-        nonlocal bucket, bucket_words
-        if bucket:
-            chunks.append(_make_chunk(work_id, section, bucket, len(chunks) + 1))
-            bucket = []
-            bucket_words = 0
-
-    for paragraph in paragraphs:
-        if paragraph.word_count > MAX_STANDALONE_WORDS:
-            flush()
-            chunks.append(_make_chunk(work_id, section, [paragraph], len(chunks) + 1))
-            continue
-
-        bucket.append(paragraph)
-        bucket_words += paragraph.word_count
-        if bucket_words >= TARGET_WORDS:
-            flush()
-
-    flush()
-
-    if len(chunks) >= 2 and chunks[-1].word_count < MIN_TRAILING_WORDS:
-        last = chunks.pop()
-        previous = chunks.pop()
-        chunks.append(_merge_chunks(work_id, section, previous, last, len(chunks) + 1))
-
-    return chunks
+    section's paragraphs, in document order. One chunk per paragraph."""
+    return [
+        _make_chunk(work_id, section, [paragraph], index)
+        for index, paragraph in enumerate(paragraphs, start=1)
+    ]
 
 
 def chunk_work(work: Work) -> list[Chunk]:

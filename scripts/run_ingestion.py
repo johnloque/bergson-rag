@@ -6,12 +6,20 @@ Usage: python3 scripts/run_ingestion.py
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
-from src.ingestion.chunking import chunk_work, save_chunks
-from src.ingestion.parser import parse_corpus, save_paragraph_correspondence, save_work
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from src.ingestion.chunking import chunk_work, save_chunks  # noqa: E402
+from src.ingestion.parser import (  # noqa: E402
+    parse_corpus,
+    save_paragraph_correspondence,
+    save_work,
+)
+
 RAW_SRC_DIR = REPO_ROOT / "data" / "raw" / "corpus" / "raw" / "src"
 PROCESSED_DIR = REPO_ROOT / "data" / "processed"
 

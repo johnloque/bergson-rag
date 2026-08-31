@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from src.ingestion.chunking import MAX_STANDALONE_WORDS, MIN_TRAILING_WORDS, chunk_work
+from src.ingestion.chunking import chunk_work
 from src.ingestion.parser import load_metadata, parse_work
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -134,33 +134,12 @@ def test_no_cross_section_chunk_merging():
         }, f"{chunk.chunk_id} mixes paragraphs across sections"
 
 
-def test_trailing_short_chunk_merged_within_section_only():
+def test_each_chunk_maps_to_exactly_one_paragraph():
     work = _load("1934_PM")
     chunks = chunk_work(work)
-    chunks_by_section: dict[str, list] = {}
-    for c in chunks:
-        chunks_by_section.setdefault(c.section_id, []).append(c)
-
-    for section_id, section_chunks in chunks_by_section.items():
-        if len(section_chunks) < 2:
-            continue
-        last = section_chunks[-1]
-        assert (
-            last.word_count >= MIN_TRAILING_WORDS
-        ), f"trailing chunk {last.chunk_id} in {section_id} should have been merged"
-
-
-def test_oversized_paragraph_becomes_its_own_chunk():
-    """1932_2S has a paragraph of ~2279 words (well over the 750-word
-    cap) — it must become its own chunk rather than being split or
-    merged with neighbours."""
-    work = _load("1932_2S")
-    long_paragraph = max(work.paragraphs, key=lambda p: p.word_count)
-    assert long_paragraph.word_count > MAX_STANDALONE_WORDS
-
-    chunks = chunk_work(work)
-    owning_chunk = next(c for c in chunks if long_paragraph.paragraph_id in c.paragraph_ids)
-    assert owning_chunk.paragraph_ids == [long_paragraph.paragraph_id]
+    assert len(chunks) == len(work.paragraphs)
+    for chunk, paragraph in zip(chunks, work.paragraphs, strict=False):
+        assert chunk.paragraph_ids == [paragraph.paragraph_id]
 
 
 def test_chunk_page_bounds_match_first_and_last_paragraph():

@@ -28,11 +28,11 @@ from dataclasses import asdict
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from src.ingestion.models import PageRef, Paragraph, Section, Work
+from src.ingestion.models import PageRef, Paragraph, Region, Section, Work
 
 TEI_NS = "http://www.tei-c.org/ns/1.0"
 
-REGIONS: tuple[str, ...] = ("front", "body", "back")
+REGIONS: tuple[Region, ...] = ("front", "body", "back")
 
 # @type -> French section-kind label, per docs/xml_audit_report.md's
 # inventory of div/@type values found across the corpus.
@@ -156,6 +156,8 @@ def parse_work(xml_path: Path, meta_row: dict) -> Work:
     page_refs = _resolve_page_refs(list(text_el.iter(qn("pb"))))
 
     header = root.find(qn("teiHeader"))
+    if header is None:
+        raise ValueError(f"{xml_path}: no <teiHeader> element")
     titles = [
         _clean_text("".join(t.itertext()))
         for t in header.findall(f".//{qn('titleStmt')}/{qn('title')}")
@@ -176,7 +178,7 @@ def parse_work(xml_path: Path, meta_row: dict) -> Work:
 
     state = {"current_page": None, "para_counter": 0, "section_counter": 0, "type_counters": {}}
 
-    def build_section(region: str, div_type: str | None, children: list[ET.Element]) -> Section:
+    def build_section(region: Region, div_type: str | None, children: list[ET.Element]) -> Section:
         state["section_counter"] += 1
         section_index = state["section_counter"]
 

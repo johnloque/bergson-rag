@@ -148,7 +148,7 @@ from src.generation.chunk_judge import judge_chunk
 from src.generation.generate import generate_from_chunks
 from src.generation.guardrail import EvaluationResult, generate_evaluation, should_auto_expand
 from src.generation.signals import retrieval_confidence_tier
-from src.retrieval.hybrid import hybrid_search
+from src.retrieval.filtering import DateRangeFilter, filtered_hybrid_search
 from src.retrieval.reranking import DEFAULT_RERANK_CANDIDATES, rerank
 
 # Sprint 8's frontend (a separate, later branch, docs/ROADMAP.md) is a Vite
@@ -201,17 +201,33 @@ def retrieve(body: RetrieveRequest, session: Session = Depends(get_session)) -> 
     (404 if unknown, `persistence.create_turn`) — checked first, before
     paying for retrieval, so a bad `conversation_id` fails fast. `/generate`,
     called later and only on an explicit user action, attaches to this
-    `turn_id` rather than creating a new one — see its own docstring below."""
+    `turn_id` rather than creating a new one — see its own docstring below.
+
+    `work_ids`/`date_range` (docs/ROADMAP.md, Sprint 11) are applied inside
+    `filtered_hybrid_search` (src/retrieval/filtering.py), *before*
+    reranking — the same candidate-selection stage a plain `hybrid_search`
+    call runs at, so filtering here costs no recall relative to an
+    unfiltered call; `rerank` and the `[: body.top_k]` slice below are
+    unchanged either way."""
     turn = persistence.create_turn(session, body.conversation_id, body.query)
 
     client = get_qdrant_client()
     candidate_limit = max(body.top_k, DEFAULT_RERANK_CANDIDATES)
-    candidates = hybrid_search(
+    date_range = (
+        DateRangeFilter(
+            start=body.date_range.start, end=body.date_range.end, mode=body.date_range.mode
+        )
+        if body.date_range is not None
+        else None
+    )
+    candidates = filtered_hybrid_search(
         client,
         body.query,
         dense_embedder=get_dense_embedder(),
         sparse_embedder=get_sparse_embedder(),
         limit=candidate_limit,
+        work_ids=body.work_ids,
+        date_range=date_range,
     )
     reranked = rerank(body.query, candidates, get_reranker())[: body.top_k]
     chunk_results = [generation_chunk_to_result(c) for c in reranked]

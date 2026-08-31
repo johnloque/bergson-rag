@@ -110,12 +110,22 @@ def hybrid_search(
     prefetch_limit: int = DEFAULT_PREFETCH_LIMIT,
     collection_name: str = COLLECTION_NAME,
     rrf_k: int = RRF_K,
+    query_filter: models.Filter | None = None,
 ) -> list[RetrievedChunk]:
     """Dense + sparse prefetch on `query`, fused via Qdrant-native RRF
     (k=`rrf_k`, defaults to the Cormack et al. 2009 standard value).
     Deterministic given a fixed query and an unchanged index — both
     embedders and the fusion itself are non-random.
-    """
+
+    `query_filter` (docs/ROADMAP.md, Sprint 11 retrieval filtering), when
+    given, is applied to *both* channels' prefetch — a native, already-
+    indexed Qdrant payload filter (e.g. on `work_id`) narrows the candidate
+    set before dense/sparse search runs, rather than after fusion, so it's
+    exact and doesn't cost recall the way a post-hoc filter over an
+    already-truncated result would (src/retrieval/filtering.py, which is
+    also where the one filter dimension that *can't* be expressed this way —
+    per-individual-text dates — is handled instead, as a genuine
+    post-retrieval filter over an over-fetched candidate set)."""
     dense_vector = dense_embedder.embed([query])[0]
     bm25_text = query_bm25_text(query)
     sparse_indices, sparse_values = sparse_embedder.embed_query([bm25_text])[0]
@@ -133,11 +143,17 @@ def hybrid_search(
     response = client.query_points(
         collection_name=collection_name,
         prefetch=[
-            models.Prefetch(query=dense_vector, using=DENSE_VECTOR_NAME, limit=prefetch_limit),
+            models.Prefetch(
+                query=dense_vector,
+                using=DENSE_VECTOR_NAME,
+                limit=prefetch_limit,
+                filter=query_filter,
+            ),
             models.Prefetch(
                 query=models.SparseVector(indices=sparse_indices, values=sparse_values),
                 using=SPARSE_VECTOR_NAME,
                 limit=prefetch_limit,
+                filter=query_filter,
             ),
         ],
         query=models.RrfQuery(rrf=models.Rrf(k=rrf_k)),

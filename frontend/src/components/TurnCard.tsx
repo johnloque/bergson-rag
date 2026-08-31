@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { IconChevronDown, IconChevronUp } from '@tabler/icons-react'
 import { computeConsideredSources } from '../lib/retrievalScope'
 import type { RetrieveFilterParams } from '../state/retrievalFilter'
 import { useTurnController } from '../state/useTurnController'
@@ -34,8 +36,22 @@ export function TurnCard({
     onCreated,
     onUnknownDraft,
   })
+  const [versionsOpen, setVersionsOpen] = useState(false)
   const consideredSources = computeConsideredSources(turn.filterParams)
   const hasGenerated = turn.generations.length > 0
+  // useTurnController keeps `generations` chronological (oldest first,
+  // matching GET /turns/{id}'s own `order_by(Generation.id)`,
+  // docs/backend_api.md) — generate()'s append-by-index logic depends on
+  // that order, so the "most recent first" display (docs/ROADMAP.md,
+  // Sprint 12) is a presentation-only reversal here, not a change to that
+  // state. Older generations stay reachable rather than disappearing
+  // (this project never discards a generation once made, Sprint 7b) behind
+  // a chevron toggle — the same collapsed-by-default disclosure
+  // interaction as StepLine's own expandable detail above, scaled to a
+  // list of whole generations instead of a bullet list.
+  const latestIndex = turn.generations.length - 1
+  const currentGeneration = latestIndex >= 0 ? turn.generations[latestIndex] : null
+  const olderIndices = Array.from({ length: latestIndex }, (_, i) => latestIndex - 1 - i)
   const generateLabel = hasGenerated
     ? turn.isGenerating
       ? 'Régénération…'
@@ -107,15 +123,55 @@ export function TurnCard({
         </div>
       )}
 
-      {turn.generations.map((entry, index) => (
+      {currentGeneration && (
         <GenerationBlock
-          key={entry.generationId ?? `pending-${index}`}
-          entry={entry}
-          isFirst={index === 0}
-          onReveal={() => turn.reveal(index)}
-          onEvaluate={() => turn.evaluate(index)}
+          key={currentGeneration.generationId ?? `pending-${latestIndex}`}
+          entry={currentGeneration}
+          isFirst={latestIndex === 0}
+          chunks={turn.chunks}
+          onReveal={() => turn.reveal(latestIndex)}
+          onEvaluate={() => turn.evaluate(latestIndex)}
         />
-      ))}
+      )}
+
+      {olderIndices.length > 0 && (
+        <div className="flex flex-col gap-4">
+          <button
+            type="button"
+            onClick={() => setVersionsOpen((v) => !v)}
+            aria-expanded={versionsOpen}
+            data-testid="generation-versions-toggle"
+            className="flex items-center gap-1.5 self-start text-xs"
+            style={{ color: 'var(--ink-3)' }}
+          >
+            {versionsOpen ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
+            <span>
+              {olderIndices.length === 1
+                ? '1 version précédente'
+                : `${olderIndices.length} versions précédentes`}
+            </span>
+          </button>
+
+          {versionsOpen && (
+            <div
+              className="flex flex-col gap-4 pl-3"
+              style={{ borderLeft: '1.5px solid var(--hairline)' }}
+              data-testid="generation-versions"
+            >
+              {olderIndices.map((index) => (
+                <GenerationBlock
+                  key={turn.generations[index].generationId ?? `pending-${index}`}
+                  entry={turn.generations[index]}
+                  isFirst={index === 0}
+                  chunks={turn.chunks}
+                  onReveal={() => turn.reveal(index)}
+                  onEvaluate={() => turn.evaluate(index)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

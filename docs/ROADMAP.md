@@ -478,6 +478,8 @@ over-fetched candidate set (recall-preservation mechanism documented in
 - Answer display: included chunks listed as bullets; most recent
   generation for a given question shown first; markdown rendering
   enabled for generated text.
+  **Implemented (`feat/answer-display-improvements`).** Full design and
+  rationale: [`docs/frontend.md`](frontend.md).
 
 ### Sprint 13 — MCP layer
 Pure search tools: `/retrieve` and `/lookup` (work + paragraph number, or

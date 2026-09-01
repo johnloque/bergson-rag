@@ -469,12 +469,22 @@ over-fetched candidate set (recall-preservation mechanism documented in
 - Chunk detail view becomes a chunk-selection expansion view: keeps the
   scrolling rail, adds inspection of a chunk's immediate previous/next
   neighbor in the source work, with the same explain/include actions
-  extended to neighbors.
+  extended to neighbors. **Not part of this list's implementation below**
+  — the neighbor-inspection expansion remains open, tracked separately;
+  `feat/chunk-rail-and-citations` only touched `routes/ChunkDetail.tsx`'s
+  citation display and its inclusion cap, not this bullet's own scope.
 - Chunk card shows the real citation (work, year, page, paragraph)
   instead of the raw `chunk_id`.
 - Single "Générer"/"Régénérer" button to the right of the chunk rail —
   the manual-generation trigger from Sprint 10, unified into one
   control.
+  **Implemented, together with the chunk rail's default-selection/cap
+  behavior and the real citation display above
+  (`feat/chunk-rail-and-citations`).** Also carries the retrofit of the
+  answer bullet list below onto the same shared citation format (what
+  would have been a separate `fix/answer-bullet-citations` branch, merged
+  in here since that branch hadn't shipped independently). Full design and
+  rationale: [`docs/frontend.md`](frontend.md).
 - Answer display: included chunks listed as bullets; most recent
   generation for a given question shown first; markdown rendering
   enabled for generated text.

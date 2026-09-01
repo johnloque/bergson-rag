@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { ChunkResult, EvaluateResponse } from '../api/types'
 import { toChunkInput } from '../lib/chunkInput'
+import { CHUNK_RAIL_TOP_K } from '../lib/retrievalConfig'
 import { cacheChunks, getCachedChunk } from './chunkCache'
 import { getPendingConversation, startOrAttachPendingConversation } from './pendingConversations'
 import { pendingGenerations } from './pendingGenerations'
@@ -122,6 +123,7 @@ export function useTurnController(options: TurnControllerOptions) {
       try {
         const response = await api.retrieve({
           query: submittedQuery,
+          top_k: CHUNK_RAIL_TOP_K,
           conversation_id: options.conversationId,
           ...options.filterParams,
         })

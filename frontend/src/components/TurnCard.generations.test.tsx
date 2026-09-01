@@ -10,13 +10,18 @@ const CHUNK_A = {
   chunk_id: '1907_EC_c1',
   work_id: '1907_EC',
   section_path: '',
-  paragraph_ids: [],
+  paragraph_ids: ['1907_EC_p5'],
   page_start: { number: null, display: '' },
   page_end: { number: null, display: '' },
   text: 'Texte du chunk A',
   score: 0.5,
 }
-const CHUNK_B = { ...CHUNK_A, chunk_id: '1907_EC_c2', text: 'Texte du chunk B' }
+const CHUNK_B = {
+  ...CHUNK_A,
+  chunk_id: '1907_EC_c2',
+  paragraph_ids: ['1907_EC_p9'],
+  text: 'Texte du chunk B',
+}
 
 function jsonResponse(body: unknown) {
   return Promise.resolve({ ok: true, status: 200, json: async () => body })
@@ -63,7 +68,7 @@ function stubFetch(answers: string[]) {
 }
 
 describe('GenerationBlock — included chunks disclosure', () => {
-  it('reuses the chevron disclosure to show/hide the included chunks, work + citation', async () => {
+  it('reuses the chevron disclosure to show/hide the included chunks, using the shared citation format', async () => {
     const user = userEvent.setup()
     stubFetch(['Réponse fondée [1907_EC_c1].'])
     renderTurnCard()
@@ -79,10 +84,14 @@ describe('GenerationBlock — included chunks disclosure', () => {
     const toggle = screen.getByRole('button', { name: 'Afficher les passages inclus dans la génération' })
     await user.click(toggle)
 
+    // The real citation format (docs/ROADMAP.md, Sprint 12,
+    // lib/citation.ts) — no `[chunk_id]` fallback left, both default-
+    // included chunks resolve to a distinct paragraph in the same work.
     const list = await screen.findByTestId('included-chunks')
-    expect(within(list).getAllByText(/L'Évolution créatrice \(1907\)/)).toHaveLength(2)
-    expect(within(list).getByText(/\[1907_EC_c1\]/)).toBeInTheDocument()
-    expect(within(list).getByText(/\[1907_EC_c2\]/)).toBeInTheDocument()
+    expect(within(list).getByText("L'Évolution créatrice (1907), paragraphe 5")).toBeInTheDocument()
+    expect(within(list).getByText("L'Évolution créatrice (1907), paragraphe 9")).toBeInTheDocument()
+    expect(within(list).queryByText(/\[1907_EC_c1\]/)).not.toBeInTheDocument()
+    expect(within(list).queryByText(/\[1907_EC_c2\]/)).not.toBeInTheDocument()
 
     await user.click(toggle)
     expect(screen.queryByTestId('included-chunks')).not.toBeInTheDocument()

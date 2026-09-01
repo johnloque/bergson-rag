@@ -231,20 +231,17 @@ aria-label and its tests are unchanged) that `components/GenerationBlock.tsx`
 overrides with "les passages inclus dans la génération".
 
 Expanding it lists exactly the chunks `entry.chunkIds` names for that
-generation, each as `{work title} ({year}) [{chunk_id}]`
-(`lib/generationChunks.ts:computeIncludedChunks`, resolving `work_id`
+generation, each rendered via `lib/citation.ts:formatCitation`
+(`lib/generationChunks.ts:computeIncludedChunks`, resolving `chunk_id`
 against the turn's own retrieved-chunk set — always a superset of any one
 generation's included chunks, since `/generate` never retrieves beyond
 what `/retrieve` already persisted for the turn, `docs/backend_api.md`).
-The `[chunk_id]` bracket is a stand-in for a real citation display (work,
-title, year, page, paragraph) — `feat/chunk-rail-and-citations`
-(`docs/ROADMAP.md`, Sprint 12: "Chunk card shows the real citation... instead
-of the raw `chunk_id`") had not landed as of this branch, so this reuses the
-same bracketed identifier the generation prompt's citation format and Layer
-1's structural check already key on
-(`docs/anti_hallucination_guardrails.md`), rather than inventing a second
-one. **Follow-up, once that branch lands**: swap `computeIncludedChunks`'s
-`[chunk_id]` for the real citation component it introduces.
+This used to render `{work title} ({year}) [{chunk_id}]` — a stand-in for a
+real citation display, since `feat/chunk-rail-and-citations` (below) hadn't
+landed as of this addendum. **Retrofitted on `feat/chunk-rail-and-citations`**:
+that bracketed-`chunk_id` fallback is gone, replaced by the same shared
+`formatCitation` the chunk rail's own cards call — see that section below
+for the exact format.
 
 Available as soon as "Générer"/"Régénérer" is clicked, not gated on the
 generation finishing — `state/useTurnController.ts`'s `generate()` sets
@@ -314,6 +311,123 @@ compose cleanly): a flagged quote entirely inside a `**bold**` run, and one
 inside a markdown list item — both assert the formatting tag and the
 `<mark>` render together, nested correctly, alongside a plain markdown
 formatting test (bold/list render as elements, not literal `**`/`-` text).
+
+## Addendum — chunk rail and citations (Sprint 12, `feat/chunk-rail-and-citations`)
+
+Closes out the remaining Sprint 12 chunk-rail items left open by
+`feat/retrieval-filter-ui` and `feat/answer-display-improvements` above:
+the real per-chunk citation, the rail's default-selection/cap behavior,
+and the unified Générer/Régénérer control. Also merges in what would have
+been a separate `fix/answer-bullet-citations` branch — that branch hadn't
+shipped independently, so its one change (the retrofit above) landed here
+instead of as a second PR.
+
+### Shared citation format — `lib/citation.ts`
+
+One function, `formatCitation(chunk: ChunkResult): string`, imported by
+both `components/ChunkRail.tsx`/`routes/ChunkDetail.tsx` (the chunk rail
+and its detail view) and `lib/generationChunks.ts` (the answer card's
+included-chunks bullet list, addendum above) — not two hand-rolled copies
+of the same format. Mirrors `src.works.resolve_paragraph_metadata`
+(`src/works.py`) at display granularity, the same manual-mirror convention
+`lib/works.ts` already uses for `WORKS`/`TEXTS` (no shared build step
+between the Python backend and this Vite frontend) — `TEXTS` gained
+`paragraphStart`/`paragraphEnd` fields (mirroring
+`src.works.TextMetadata`) specifically so this module could reproduce that
+resolution client-side.
+
+Three shapes, depending on what the mirrored resolution returns for
+`chunk.work_id` + `chunk.paragraph_ids[0]`:
+
+- Non-anthology work: `"{work_title} ({work_year}), paragraphe {n}"`.
+- Anthology work (1919_ES/1934_PM) resolving to a specific
+  individually-dated text: `"{work_title} ({work_year}) — {text_title}
+  ({text_year}), paragraphe {n}"`.
+- Anthology work chunk falling back to work-level only (front matter, no
+  covering individually-dated text): same as the non-anthology format — no
+  empty/null text-level fields leak into the string.
+
+`chunk.paragraph_ids[0]` is used directly, not a min-max range over every
+element: checked against `src/ingestion/chunking.py` rather than assumed
+— one chunk = one paragraph in this project's chunking scheme, so
+`paragraph_ids` always has exactly one element in the real corpus, the
+same "index 0 is representative of the whole chunk" convention
+`src/generation/prompt.py` already relies on for this field. No
+`"paragraphes {n}-{m}"` range formatting is implemented, since no chunk
+can currently span more than one paragraph to need it — revisit if the
+chunking scheme ever changes.
+
+Test coverage: `lib/citation.test.ts` (all three format shapes, plus the
+empty-`paragraph_ids` and unknown-`work_id` edge cases, against the shared
+function directly) and `components/citationConsistency.test.tsx` (a direct
+equality assertion between the chunk rail's rendered citation and the
+answer bullet list's rendered citation for the same chunk — not two
+independent "looks reasonable" checks).
+
+### Chunk rail: 15 chunks, top 3 included by default, 5-chunk cap
+
+Checked against the real `/retrieve` response rather than assumed: the
+rail shows the top 15 post-reranking chunks
+(`src.retrieval.reranking.DEFAULT_RERANK_CANDIDATES = 15`), but
+`RetrieveRequest.top_k` (`src/api/schemas.py`) defaults to 3 and
+`/retrieve`'s response is always exactly `top_k` chunks
+(`reranked[: body.top_k]`, `src/api/main.py`) — so the frontend, which
+previously omitted `top_k` entirely, only ever saw 3 chunks. Fixed by
+requesting `top_k: CHUNK_RAIL_TOP_K` (`lib/retrievalConfig.ts`, `= 15`)
+explicitly from both `/retrieve` call sites
+(`state/useTurnController.ts`'s `runNewTurn`,
+`state/pendingConversations.ts`'s `startOrAttachPendingConversation`).
+This doesn't reopen `DEFAULT_TOP_K`'s own context-window rationale (that
+default was lowered from 10 to 3 specifically so `/generate`/`/evaluate`
+don't overflow the judge's context window, `src/api/schemas.py`): those
+two calls only ever see the client-curated `included` subset
+(state/turnUi.tsx), itself capped at 5 below — retrieval breadth and
+generation-input size are decoupled by the rail's own selection mechanism.
+
+Default selection changed from "every retrieved chunk included" to the
+top `DEFAULT_INCLUDED_COUNT = 3` (by rank — `state/turnUi.tsx`'s `init`
+reducer case defaults the first 3 ids in the array it's given, always the
+turn's reranked order, to included and the rest to explicitly excluded),
+with `MAX_INCLUDED_CHUNKS = 5` selectable at once. **A 6th selection is
+blocked, not auto-uncheck-least-recently-checked**: the `toggle` reducer
+case is a true no-op once 5 are already included — chosen over the
+auto-uncheck alternative because a silent substitution (excluding a chunk
+the user never touched) seemed more surprising than a click that visibly
+does nothing. The reducer is the single source of truth for this, since
+two separate UI surfaces can toggle the same turn's inclusion state
+(`components/ChunkRail.tsx` and `routes/ChunkDetail.tsx`'s own
+Inclure/Exclure button) — the cap has to hold regardless of which one
+changed it. Both surfaces also disable their own "Inclure" affordance
+(with a tooltip) once the cap is reached and show a running
+`{n}/5 passages sélectionnés` count, so the block is never a silent no-op
+from the user's point of view.
+
+Test coverage: `components/ChunkRail.test.tsx` (exactly 3 of 15 included
+by default in rank order, selecting up to 5, the disabled/no-op 6th
+selection, and that excluding a chunk frees a slot back up).
+
+### Chunk cards show the real citation
+
+`components/ChunkRail.tsx`'s cards and `routes/ChunkDetail.tsx`'s header
+now render `formatCitation(chunk)` in place of the bare `work_id` they
+showed before (the rail never actually rendered the raw `chunk_id` itself,
+contrary to how `docs/ROADMAP.md`'s Sprint 12 entry phrased it — but the
+effect is the same: a real citation instead of an internal identifier).
+
+### Générer/Régénérer: one control, to the right of the rail
+
+`components/TurnCard.tsx` wraps `ChunkRail` and the existing
+Générer/Régénérer `<button>` in one flex row (`data-testid="chunk-rail-row"`)
+instead of stacking the button below the rail — the rail keeps its own
+horizontal scroll (`min-w-0` on its wrapper lets it shrink in the flex
+row rather than pushing the button off-screen) while the button sits in a
+fixed-width column beside it. Placement only: the click handler is still
+`state/useTurnController.ts`'s `generate()`, same request, same in-flight
+guard, same append-a-new-`GenerationEntry` behavior as the Sprint 10
+manual-generation trigger this unifies with the regeneration action —
+already covered by `components/TurnCard.generations.test.tsx` and
+`components/TurnCard.integration.test.tsx`'s existing Générer/Régénérer
+assertions, which needed no changes to keep passing.
 
 ## Known gap, not a finished feature: dark mode and full responsive layout
 

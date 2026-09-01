@@ -68,8 +68,9 @@ export function TurnCard({
     // (docs/ROADMAP.md, Sprint 8 addendum). Generation no longer follows
     // retrieval automatically (docs/ROADMAP.md, Sprint 10): the chunk rail
     // renders as soon as retrieval completes, and a single "Générer"/
-    // "Régénérer" trigger — minimal placement for now, Sprint 12 owns the
-    // final layout — starts generation only on explicit click.
+    // "Régénérer" trigger — its final layout, to the right of the rail,
+    // landed on Sprint 12's `feat/chunk-rail-and-citations` (see the flex
+    // row below) — starts generation only on explicit click.
     <div
       className="flex flex-col gap-4 rounded-2xl p-6"
       style={{ background: 'var(--paper)', border: '1px solid var(--hairline)' }}
@@ -107,21 +108,32 @@ export function TurnCard({
         </p>
       )}
 
-      <ChunkRail chunks={turn.chunks} turnId={turn.turnId} conversationId={turn.conversationId} />
+      {/* docs/ROADMAP.md, Sprint 12: a single Générer/Régénérer control
+          unifying the Sprint 10 manual-generation trigger with the
+          regeneration action, positioned to the right of the chunk rail —
+          same underlying api.generate() call as before
+          (state/useTurnController.ts's `generate`), placement only. The
+          rail scrolls horizontally on its own (min-w-0 lets it shrink
+          inside the flex row instead of pushing the button off-screen);
+          the button sits in a fixed-width column that never scrolls with
+          it. */}
+      <div className="flex items-start gap-4" data-testid="chunk-rail-row">
+        <div className="min-w-0 flex-1">
+          <ChunkRail chunks={turn.chunks} turnId={turn.turnId} conversationId={turn.conversationId} />
+        </div>
 
-      {turn.canGenerate && (
-        <div>
+        {turn.canGenerate && (
           <button
             type="button"
             onClick={() => void turn.generate()}
             disabled={turn.isGenerating}
-            className="rounded-lg px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+            className="shrink-0 rounded-lg px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
             style={{ background: 'var(--red)' }}
           >
             {generateLabel}
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {currentGeneration && (
         <GenerationBlock

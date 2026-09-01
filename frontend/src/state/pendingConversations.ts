@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import type { QueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { ChunkResult } from '../api/types'
+import { CHUNK_RAIL_TOP_K } from '../lib/retrievalConfig'
 import type { RetrieveFilterParams } from './retrievalFilter'
 
 // A brand-new conversation's first /retrieve call, keyed by the id in the
@@ -80,7 +81,7 @@ export function startOrAttachPendingConversation(
   if (existing) return existing.promise
 
   const promise: Promise<PendingConversationResult> = api
-    .retrieve({ query, conversation_id: undefined, ...filterParams })
+    .retrieve({ query, top_k: CHUNK_RAIL_TOP_K, conversation_id: undefined, ...filterParams })
     .then(async (response) => {
       const result: PendingConversationResult = {
         turnId: response.turn_id,

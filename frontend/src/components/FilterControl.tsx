@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { IconFilter, IconX } from '@tabler/icons-react'
 import type { DateRangeMode } from '../api/types'
 import { WORK_YEAR_RANGE, WORKS } from '../lib/works'
@@ -19,7 +19,37 @@ interface FilterControlProps {
 export function FilterControl({ state, onChange, disabled }: FilterControlProps) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const trackRef = useRef<HTMLDivElement>(null)
+  // Which handle sits on top of the other — matters only when they're at
+  // (or very near) the same value, so the thumb the pointer is hovering
+  // toward is the one that ends up grabbed on mousedown. Kept in sync by
+  // handleTrackPointerMove below rather than derived from state, since the
+  // browser resolves a mousedown's target from whatever is already on top
+  // *before* our onChange handlers ever run.
+  const [topHandle, setTopHandle] = useState<'start' | 'end'>('end')
   const active = isFilterActive(state)
+
+  // Position of each handle as a 0–1 fraction of the track, used both to
+  // paint the selected-range highlight below and to judge pointer
+  // proximity in handleTrackPointerMove.
+  const startPercent = (state.startYear - WORK_YEAR_RANGE.min) / (WORK_YEAR_RANGE.max - WORK_YEAR_RANGE.min)
+  const endPercent = (state.endYear - WORK_YEAR_RANGE.min) / (WORK_YEAR_RANGE.max - WORK_YEAR_RANGE.min)
+
+  function handleTrackPointerMove(event: ReactMouseEvent<HTMLDivElement>) {
+    const track = trackRef.current
+    if (!track) return
+    const rect = track.getBoundingClientRect()
+    const percent = (event.clientX - rect.left) / rect.width
+    const distStart = Math.abs(percent - startPercent)
+    const distEnd = Math.abs(percent - endPercent)
+    if (distStart !== distEnd) {
+      setTopHandle(distStart < distEnd ? 'start' : 'end')
+    } else {
+      // Handles coincide exactly — nothing to compare distances against,
+      // so fall back to which side of the shared thumb the pointer is on.
+      setTopHandle(percent < startPercent ? 'start' : 'end')
+    }
+  }
 
   useEffect(() => {
     if (!open) return
@@ -124,7 +154,33 @@ export function FilterControl({ state, onChange, disabled }: FilterControlProps)
             <span className="text-xs font-semibold uppercase" style={{ color: 'var(--ink-3)' }}>
               Période ({state.startYear}–{state.endYear})
             </span>
-            <div className="relative h-5">
+            <div
+              ref={trackRef}
+              data-testid="date-range-track"
+              className="relative h-5"
+              onMouseMove={handleTrackPointerMove}
+              onTouchStart={(e) =>
+                handleTrackPointerMove({ clientX: e.touches[0].clientX } as ReactMouseEvent<HTMLDivElement>)
+              }
+            >
+              {/* Native <input type="range"> paints its own accent fill from
+                  the track's start up to *its own* value — with two stacked
+                  inputs that reads as "filled up to whichever handle", not
+                  as the actual start–end selection. .dual-range strips that
+                  native fill (index.css); these two divs draw the real
+                  selection band instead. */}
+              <div
+                className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full"
+                style={{ background: 'var(--hairline)' }}
+              />
+              <div
+                className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full"
+                style={{
+                  background: 'var(--ink-2)',
+                  left: `${startPercent * 100}%`,
+                  right: `${(1 - endPercent) * 100}%`,
+                }}
+              />
               <input
                 type="range"
                 aria-label="Année de début"
@@ -132,7 +188,8 @@ export function FilterControl({ state, onChange, disabled }: FilterControlProps)
                 max={WORK_YEAR_RANGE.max}
                 value={state.startYear}
                 onChange={(e) => setStartYear(Number(e.target.value))}
-                className="absolute inset-x-0 top-1/2 w-full -translate-y-1/2"
+                className="dual-range absolute inset-x-0 top-1/2 w-full -translate-y-1/2"
+                style={{ zIndex: topHandle === 'start' ? 2 : 1 }}
               />
               <input
                 type="range"
@@ -141,7 +198,8 @@ export function FilterControl({ state, onChange, disabled }: FilterControlProps)
                 max={WORK_YEAR_RANGE.max}
                 value={state.endYear}
                 onChange={(e) => setEndYear(Number(e.target.value))}
-                className="absolute inset-x-0 top-1/2 w-full -translate-y-1/2"
+                className="dual-range absolute inset-x-0 top-1/2 w-full -translate-y-1/2"
+                style={{ zIndex: topHandle === 'end' ? 2 : 1 }}
               />
             </div>
           </div>

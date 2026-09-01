@@ -274,33 +274,14 @@ Rationale and implementation:
 - Bootstrap script/Makefile chaining fetch-data → build-index → run
 - **Deliverable**: entire application launchable locally in one command
 
-**Implemented.** Four services in `docker-compose.yml` (`qdrant`, `ollama`,
-`api`, `frontend`), a `Makefile` with a `quickstart` target chaining
-`fetch-data → build-index → setup-ollama → run`, healthchecks gating
-startup order, and three test scripts (`test_frontend_arg.sh`,
-`test_container_connectivity.sh`, `smoke_test.py`) guarding the failure
-modes specific to this sprint — most notably the browser-vs-internal-URL
-split between `VITE_API_BASE` (baked in at frontend build time) and the
-API's own internal `QDRANT_URL`/`OLLAMA_API_BASE`. An `hf_cache` volume
-avoids re-downloading model weights on every container recreation. Full
-design rationale, the exact env-var/build-arg mechanics, and test
-coverage: [`docs/dockerization.md`](dockerization.md).
-
-**Ollama: native by default, containerized opt-in — see
-[`docs/dockerization.md`](dockerization.md)** (`fix/ollama-native-default`,
-superseding this sprint's original "containerize Ollama by default").
-
-**Dense/sparse embedding + cross-encoder reranking: native by default,
-containerized opt-in — see [`docs/dockerization.md`](dockerization.md)**
-(`feat/native-ml-service`). Same rationale as Ollama above, extended to
-`src/indexing/embeddings.py` and the cross-encoder reranker: measured
-8.3s (native MPS) vs. 258s (containerized CPU) for the reranker alone.
-New `src/ml_service/` FastAPI app runs these natively; `api` reaches it
-via `ML_SERVICE_URL` (defaults to `http://host.docker.internal:8100`,
-same shape as `OLLAMA_API_BASE`), with no dockerized fallback service —
-unset/empty `ML_SERVICE_URL` falls back to `api`'s pre-existing
-in-process model loading. `make setup-ml-service` starts it, folded into
-`quickstart`.
+**Implemented**, then corrected twice after measuring Apple-Silicon
+CPU-only latency: Ollama (`fix/ollama-native-default`) and the
+dense/sparse embedding + cross-encoder reranking service
+(`feat/native-ml-service`) both ship native-by-default with a
+containerized opt-in fallback, rather than fully containerized as
+originally planned. Full design rationale, the env-var/build-arg
+mechanics, the latency measurements, and test coverage:
+[`docs/dockerization.md`](dockerization.md).
 
 ### v0 retrospective — checkpoint before Sprint 10
 
@@ -314,9 +295,7 @@ bugs and one process question drove Sprints 10–11 specifically: the
 `/new` "inactive new conversation" bug, the "vérifié status lost on
 navigation" bug, and a higher-than-expected real-usage rate of "correct
 passage flagged as unsupported" reports against the Sprint 6 guardrail.
-Neither `fix/turn-lifecycle-and-manual-generation` nor
-`fix/faithfulness-citation-detection` had landed as of this writeup —
-both are planned, tracked below under Sprint 10.
+Tracked below under Sprint 10.
 
 ### Sprint 10 — Critical fixes (post-v0)
 
@@ -324,172 +303,87 @@ Two independent branches, grouped as one product-level sprint because
 both address the trust/reliability surface of the shipped v0.
 
 - **`fix/turn-lifecycle-and-manual-generation`** — **Implemented.** Turn
-  creation moved from `/generate` to `/retrieve`, fixing the "vérifié status
-  lost on navigation" bug (root cause: the `/new -> /c/{id}` redirect used
-  to fire mid-flight of an automatic generate/evaluate call) and enabling
-  review-before-generation. Automatic generation is **removed** — a
-  deliberate reversal of the Sprint 5/6 default (generation always followed
-  retrieval), driven by direct user feedback: researchers want to manually
-  review retrieved chunks before committing to a generation call.
-  `should_auto_expand` and the collapsed-by-default answer card
-  ([`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md))
-  are unchanged — they still govern post-generation display; the generation
-  trigger became a single "Générer"/"Régénérer" control (functional
-  placement only — Sprint 12 owns the final visual design). The `/new`
-  "inactive new conversation" bug turned out to be a separate, unrelated
-  router issue (a same-path `navigate()` call is a no-op in react-router),
-  fixed by keying `/new`'s route element on `location.key`. Full diagnosis
-  of both bugs, the turn-lifecycle schema/endpoint changes, and test
-  coverage: [`docs/turn_lifecycle.md`](turn_lifecycle.md).
+  creation moved from `/generate` to `/retrieve`, fixing the "vérifié
+  status lost on navigation" bug and the `/new` "inactive new conversation"
+  bug (two independent root causes). Automatic generation is **removed** —
+  a deliberate reversal of the Sprint 5/6 default, driven by direct user
+  feedback: researchers want to manually review retrieved chunks before
+  committing to a generation call, via a single "Générer"/"Régénérer"
+  control. Full diagnosis of both bugs, the turn-lifecycle schema/endpoint
+  changes, and test coverage: [`docs/turn_lifecycle.md`](turn_lifecycle.md).
 - **`fix/faithfulness-citation-detection`** — **Implemented.** Investigation
-  (standing project discipline) found both suspected causes real, not
-  either/or: judge noise (Q008-type) re-calibrated at n=20 (up from the
-  original n=4) shows a 50% item-level over-flagging rate in
-  generation-only mode alone — real, but not a new bug, so left as an
-  open `exp/` candidate rather than attempted in this branch; and Layer
-  1's `check_structure` was confirmed, by reading its implementation, to
-  have no path at all for a prose-embedded fabricated work title (only
-  `[chunk_id]` brackets), confirmed live by two real `generate_from_chunks`
-  answers — one of which (Q002 `end_to_end`) scored faithfulness=1.0,
-  proving Layer 2 alone cannot be relied on to catch this. Fixed by
-  extending `check_structure` with a new deterministic, no-LLM
-  `check_title_fabrication` check against the corpus's 8 known work
-  titles, wired into `should_auto_expand`'s gate. Full investigation
-  findings, the exact real fabrication cases, and the scope boundary
-  (title existence only, not year/work-id attribution accuracy):
+  found both suspected causes of "correct passage flagged as unsupported"
+  reports real, not either/or: judge noise (re-calibrated at n=20, a 50%
+  item-level over-flagging rate in generation-only mode — real, but not a
+  new bug, left as an open `exp/` candidate) and a genuine Layer 1 gap
+  (`check_structure` had no path for a prose-embedded fabricated work
+  title, only `[chunk_id]` brackets). Fixed by adding a deterministic
+  `check_title_fabrication` check, wired into `should_auto_expand`'s gate.
+  Full investigation findings and the year/work-id scope boundary closed by
+  `fix/title-year-grounding` below:
   [`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md).
-  The year/work-id attribution scope boundary named here is closed by
-  `fix/title-year-grounding`, below.
-
 - **`fix/title-year-grounding`** — **Implemented.** Closes the year/work-id
-  attribution scope gap `fix/faithfulness-citation-detection` named above,
-  via two independent, complementary changes: the real title and
-  publication year are now shown alongside `work_id` in the generation
-  prompt (`src/generation/prompt.py`), removing the model's need to recall
-  either from its own background knowledge (the root cause of both
-  fabrication shapes seen in calibration); and `check_structure` gained
-  `check_title_year_mismatch` (`src/generation/guardrail.py`), which flags
-  a real, known title paired with the wrong year. Both read from a new
-  `src/works.py` module — the work_id -> {title, year} table Sprint 11
-  (below) also needs for date-range filtering, built here rather than
-  duplicated later. Full design rationale, the empirical Q004 regeneration
-  check, and test coverage:
+  attribution gap named above: chunk headers now show the real title and
+  year alongside `work_id` (`src/works.py` — also the work_id → year table
+  Sprint 11 needs for date-range filtering), and `check_structure` gained
+  `check_title_year_mismatch`. Full design rationale, the empirical Q004
+  regeneration check, and test coverage:
   [`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md),
   [`docs/generation_strategy.md`](generation_strategy.md).
 
 ### Sprint 11 — Backend: filtering + chunk mapping
 
-- Chunk retrieval filtering by work and by chronological bounds — a
-  Qdrant payload filter on the existing `work_id` field; a static
-  work_id → year table derives date-range filtering, so no new indexed
-  field or reindex is needed. **This table already exists**: `src/works.py`
-  (`WORKS: dict[str, WorkMetadata]`), built by `fix/title-year-grounding`
-  for prompt grounding and Layer 1's title+year pairing check (above) —
-  import and extend it here rather than building a second one.
-- Paragraph-to-chunk_id mapping script, keyed on `paragraph_ids` (stable
-  across re-chunking, per the Sprint 1 ingestion design) — resolves the
-  gold-dataset-remapping cost that has blocked chunk-size experiments
-  since it was first identified (see `docs/gold_dataset_protocol.md`'s
-  chunk_id lookup discipline). A plain internal script, not an MCP tool —
-  deterministic internal remapping was already ruled out as the wrong
-  problem for the MCP layer to solve.
+- Chunk retrieval filtering by work and by chronological bounds.
+- Paragraph-to-chunk_id mapping, resolving the gold-dataset-remapping
+  cost that has blocked chunk-size experiments.
+- **Deliverable**: functional but no UI this sprint — the filter UI lands
+  in Sprint 12.
 
-Functional but has no UI in this sprint — the filter UI (work checklist,
-date slider) lands in Sprint 12. Between Sprint 11 and Sprint 12, this
-capability is real but only exercisable via direct API calls.
-
-**Paragraph-to-chunk_id mapping and text-level dates — implemented
-(`feat/backend-reference-data`).** `src.paragraph_chunk_map.resolve_chunk_ids`
-closes the gold-dataset-remapping cost named above. Separately,
-`src.works.TEXTS` extends `WORKS` with individually-dated text-level
-title/year for 1919_ES and 1934_PM's anthology structure, resolved via
-`resolve_paragraph_metadata` — now used by `src/generation/prompt.py` and
-Layer 1's title+year check (`src/generation/guardrail.py`) in place of the
-work-level-only lookup for these two works. Full design rationale and test
-coverage: [`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md).
-
-`eval/gold_dataset.csv` now consumes that mapping directly
-(`fix/gold-dataset-paragraph-refs`): its `chunk_ids` column is renamed to
-`paragraph_ids`, resolved to `chunk_id`(s) at evaluation time in
-`eval/scripts/run_eval.py` — see `docs/gold_dataset_protocol.md`.
-
-**Chunk retrieval filtering — implemented (`feat/retrieval-filtering`).**
-`POST /retrieve` gains `work_ids` and `date_range` (with a `"publication"`
-vs `"text"` mode, the latter meaningful only for 1919_ES/1934_PM's
-individually-dated anthology texts) — `src/retrieval/filtering.py`. Still no
-new Qdrant payload field: `"text"` mode resolves per-chunk via
-`resolve_paragraph_metadata` as a post-retrieval, pre-rerank filter over an
-over-fetched candidate set (recall-preservation mechanism documented in
-[`docs/backend_api.md`](backend_api.md)), everything else via a native
-`work_id` Qdrant filter. Still no filter UI — unchanged from the note above.
+**Implemented (`feat/backend-reference-data`, `feat/retrieval-filtering`).**
+`POST /retrieve` gains `work_ids` and `date_range` filters
+(`src/retrieval/filtering.py`), backed by `src/works.py`'s work- and
+text-level title/year table (also used for Sprint 10's prompt grounding
+and title-fabrication checks). `src.paragraph_chunk_map.resolve_chunk_ids`
+closes the gold-dataset-remapping cost; `eval/gold_dataset.csv` now keys
+ground truth on `paragraph_ids` instead of `chunk_ids`
+(`fix/gold-dataset-paragraph-refs`). Full design rationale and test
+coverage: [`docs/backend_api.md`](backend_api.md),
+[`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md),
+[`docs/gold_dataset_protocol.md`](gold_dataset_protocol.md).
 
 ### Sprint 12 — UI/UX overhaul
 
 - Retrieval filter UI (work checklist, chronological slider, publication/
-  text mode toggle) for Sprint 11's `work_ids`/`date_range` `/retrieve`
-  filters, dropped from this list in the original write-up despite being
-  called out for Sprint 12 in that sprint's own v0 retrospective note above
-  ("the filter UI ... lands in Sprint 12") — corrected here.
-  **Implemented (`feat/retrieval-filter-ui`).** Icon-triggered popover in
-  the chat bar (`components/FilterControl.tsx`), wired into the existing
-  query-submission path, not a new one — filters are snapshotted per turn
-  at submit time (`state/retrievalFilter.ts`), never a persisted
-  cross-turn session filter, consistent with Sprint 8's no-cross-turn-
-  context design. Default (nothing touched) omits `work_ids`/`date_range`
-  entirely rather than sending an explicit all-8/full-span default,
-  matching `/retrieve`'s documented contract (`docs/backend_api.md`). Full
-  design and behavior: [`docs/frontend.md`](frontend.md).
-
-  **Follow-up: expandable "sources considered" detail, and server-side
-  filter persistence.** The "Recherche des passages pertinents" step can
-  expand into exactly which works (or, in `"text"` mode, individual
-  1919_ES/1934_PM texts) a turn's filter left in scope
-  (`lib/retrievalScope.ts`, `components/StepLine.tsx`). Doing this
-  surfaced a real gap in the first cut above: a turn's applied filter only
-  lived in the live session's memory, so it silently vanished on reload —
-  closed by persisting `work_ids`/`date_range` against the `Turn` row
-  itself (`Turn.work_ids`/`Turn.date_range`, `src/api/models.py`) and
-  echoing it back from both `RetrieveResponse` and `GET /turns/{id}`
-  (`docs/backend_api.md`), so the detail is available the moment a request
-  is sent — before retrieval even completes — and survives a reload
-  identically either way.
+  text mode toggle) for Sprint 11's `work_ids`/`date_range` filters.
 - Landing page reachable only via clicking the app icon after first
   visit — no longer shown once per session automatically (revises
   Sprint 8's behavior).
 - Sidebar: three resizable, collapsible sections (user guide + sources
   description; conversation list; settings panel).
 - Settings panel exposes `top_k_retrieval`, generation prompt,
-  explanation prompt, LLM choice. Defaults remain fixed at whatever
-  configuration the gold-dataset evaluation was run against — this panel
-  is an optional advanced mode, not a replacement for having one
-  evaluated default configuration. Document the exact evaluated default
-  values alongside this panel's implementation.
+  explanation prompt, LLM choice.
 - Chunk rail shows the top 15 post-reranking chunks, top 3 checked by
-  default (down from "all included by default"), up to 5 selectable.
-- Chunk detail view becomes a chunk-selection expansion view: keeps the
-  scrolling rail, adds inspection of a chunk's immediate previous/next
-  neighbor in the source work, with the same explain/include actions
-  extended to neighbors. **Not part of this list's implementation below**
-  — the neighbor-inspection expansion remains open, tracked separately;
-  `feat/chunk-rail-and-citations` only touched `routes/ChunkDetail.tsx`'s
-  citation display and its inclusion cap, not this bullet's own scope.
-- Chunk card shows the real citation (work, year, page, paragraph)
-  instead of the raw `chunk_id`.
-- Single "Générer"/"Régénérer" button to the right of the chunk rail —
-  the manual-generation trigger from Sprint 10, unified into one
-  control.
-  **Implemented, together with the chunk rail's default-selection/cap
-  behavior and the real citation display above
-  (`feat/chunk-rail-and-citations`).** Also carries the retrofit of the
-  answer bullet list below onto the same shared citation format (what
-  would have been a separate `fix/answer-bullet-citations` branch, merged
-  in here since that branch hadn't shipped independently). Full design and
-  rationale: [`docs/frontend.md`](frontend.md).
+  default, up to 5 selectable; chunk detail view gains inspection of a
+  chunk's immediate previous/next neighbor.
+- Chunk card shows the real citation instead of the raw `chunk_id`.
+- Single "Générer"/"Régénérer" button to the right of the chunk rail.
 - Answer display: included chunks listed as bullets; most recent
-  generation for a given question shown first; markdown rendering
-  enabled for generated text.
-  **Implemented (`feat/answer-display-improvements`).** Full design and
-  rationale: [`docs/frontend.md`](frontend.md).
+  generation shown first; markdown rendering.
+- **Deliverable**: redesigned UI against the Sprint 10/11 backend changes.
+
+**Landed**: retrieval filter UI, including the expandable "sources
+considered" detail and server-side filter persistence
+(`feat/retrieval-filter-ui`, `fix/date-range-slider-interaction`); chunk
+rail defaults, real citations, and the unified Générer/Régénérer button
+(`feat/chunk-rail-and-citations`); answer display improvements
+(`feat/answer-display-improvements`). **Still pending, verified against
+current code, not assumed done**: the landing page still follows Sprint
+8's once-per-session behavior (no app-icon re-entry point yet); the
+sidebar remains a single fixed column, not three resizable/collapsible
+sections; no settings panel exists yet; chunk-detail neighbor-inspection
+remains open, tracked separately from `feat/chunk-rail-and-citations`'s
+scope. Full design, current status per item, and test coverage:
+[`docs/frontend.md`](frontend.md).
 
 ### Sprint 13 — MCP layer
 Pure search tools: `/retrieve` and `/lookup` (work + paragraph number, or

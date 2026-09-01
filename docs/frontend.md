@@ -197,17 +197,32 @@ paragraphs per anthology at most) — an accepted display-only
 approximation (`lib/retrievalScope.ts`), not a second implementation of
 `matches_date_range`'s exact paragraph-level logic.
 
+**Follow-up (`feat/chunk-rail-and-citations`): a per-work chevron for the
+nested text list.** The qualifying-texts sub-list used to render
+unconditionally the moment the outer "sources prises en compte" list was
+expanded, with no visible cue that it was there beyond the indentation
+itself. `components/ConsideredSourceEntry.tsx` now renders each work's row
+with its own small chevron next to the title — shown only when
+`entry.texts` is set (i.e. an anthology work under `"text"`-mode filtering
+with at least one qualifying text) — collapsed by default, so a user
+scanning the outer list gets a clear, explicit affordance for "this work
+was narrowed to specific texts, click to see which" rather than a wall of
+nested bullets. Non-anthology works and anthology works shown at
+whole-work granularity (`"publication"` mode, or no date_range at all)
+render no chevron at all, same as before.
+
 Test coverage: `lib/retrievalScope.test.ts` (pure logic — the unknown-
 filter/null case, the all-8-works default, `work_ids` narrowing, the
 `"publication"` vs `"text"` mode distinction for the same range, including
 the fixture case from `docs/backend_api.md`'s own Sprint 11 write-up),
-`components/TurnCard.consideredSources.test.tsx` (the chevron
+`components/TurnCard.consideredSources.test.tsx` (the outer chevron
 appearing/toggling and the rendered list content for the default/
 restricted/text-mode cases, both for a live submission and for a
-reloaded/hydrated turn), and, backend-side, `tests/test_api.py`'s
-`test_retrieve_echoes_and_persists_applied_filter` (the applied filter
-round-tripping through `RetrieveResponse` and a subsequent
-`GET /turns/{id}`).
+reloaded/hydrated turn; the text-mode case also covers the per-work
+chevron collapsing/revealing the nested text list), and, backend-side,
+`tests/test_api.py`'s `test_retrieve_echoes_and_persists_applied_filter`
+(the applied filter round-tripping through `RetrieveResponse` and a
+subsequent `GET /turns/{id}`).
 
 ## Addendum — answer display improvements (Sprint 12, `feat/answer-display-improvements`)
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
@@ -101,7 +101,7 @@ describe('TurnCard — expandable "sources considered" detail', () => {
     expect(list).not.toHaveTextContent('La Pensée et le Mouvant')
   })
 
-  it('nests the qualifying individual texts under an anthology work in "text" mode', async () => {
+  it('nests the qualifying individual texts under an anthology work in "text" mode, behind their own chevron', async () => {
     stubRetrieveAndTurn()
     const user = userEvent.setup()
     renderWithClient(
@@ -118,7 +118,24 @@ describe('TurnCard — expandable "sources considered" detail', () => {
     await user.click(await screen.findByRole('button', { name: 'Afficher les sources prises en compte' }))
     const list = screen.getByTestId('considered-sources')
     expect(list).toHaveTextContent("L'énergie spirituelle (1919)")
+
+    // Collapsed by default — a clear chevron affordance next to the work's
+    // title signals there's a narrowed set of texts to inspect, but nothing
+    // is shown until it's clicked.
+    expect(list).not.toHaveTextContent("L'effort intellectuel (1902)")
+    const worksToggle = within(list).getByRole('button', {
+      name: "Afficher les textes datés pris en compte pour L'énergie spirituelle",
+    })
+    await user.click(worksToggle)
+
     expect(list).toHaveTextContent("L'effort intellectuel (1902)")
+
+    await user.click(
+      within(list).getByRole('button', {
+        name: "Masquer les textes datés pris en compte pour L'énergie spirituelle",
+      }),
+    )
+    expect(list).not.toHaveTextContent("L'effort intellectuel (1902)")
   })
 
   it('shows the full 8-work list for a reloaded/hydrated turn that had no filter applied', async () => {

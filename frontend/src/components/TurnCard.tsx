@@ -4,6 +4,7 @@ import { computeConsideredSources } from '../lib/retrievalScope'
 import type { RetrieveFilterParams } from '../state/retrievalFilter'
 import { useTurnController } from '../state/useTurnController'
 import { ChunkRail } from './ChunkRail'
+import { ConsideredSourceEntry } from './ConsideredSourceEntry'
 import { GenerationBlock } from './GenerationBlock'
 import { QueryBubble } from './QueryBubble'
 import { StepLine } from './StepLine'
@@ -81,21 +82,10 @@ export function TurnCard({
       {turn.retrieveState !== 'pending' && (
         <StepLine label="Recherche des passages pertinents" done={turn.retrieveState === 'done'}>
           {consideredSources && (
-            <ul className="flex flex-col gap-1 text-xs" style={{ color: 'var(--ink-3)' }} data-testid="considered-sources">
+            <ul className="flex flex-col gap-2 text-xs" style={{ color: 'var(--ink-3)' }} data-testid="considered-sources">
               {consideredSources.length === 0 && <li>Aucune œuvre ne correspond au filtre.</li>}
               {consideredSources.map((entry) => (
-                <li key={entry.workId}>
-                  {entry.title} ({entry.year})
-                  {entry.texts && (
-                    <ul className="flex flex-col gap-0.5 pl-4">
-                      {entry.texts.map((text) => (
-                        <li key={text.title}>
-                          {text.title} ({text.year})
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
+                <ConsideredSourceEntry key={entry.workId} entry={entry} />
               ))}
             </ul>
           )}

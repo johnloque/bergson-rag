@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { ChunkResult, RetrievalConfidenceTier } from '../api/types'
-import { useTurnUi } from '../state/turnUi'
+import { formatCitation } from '../lib/citation'
+import { MAX_INCLUDED_CHUNKS, useTurnUi } from '../state/turnUi'
 import { ConfidenceGauge } from './ConfidenceGauge'
 
 interface ChunkRailProps {
@@ -50,12 +51,26 @@ export function ChunkRail({ chunks, turnId, conversationId }: ChunkRailProps) {
 
   if (chunks.length === 0) return null
 
+  // docs/ROADMAP.md, Sprint 12: at most MAX_INCLUDED_CHUNKS selectable at
+  // once — the reducer (state/turnUi.tsx) is what actually blocks a 6th
+  // inclusion (a true no-op, shared with routes/ChunkDetail.tsx's own
+  // toggle), this is only the rail's own "clear indication" of the cap:
+  // a running count, and disabling "Inclure" on every currently-excluded
+  // card once it's reached.
+  const includedCount = turnId !== null ? turnUi.getIncludedCount(turnId) : includedChunks.length
+  const atCap = includedCount >= MAX_INCLUDED_CHUNKS
+
   return (
     <div className="flex flex-col gap-2">
       {confidenceTier && <ConfidenceGauge tier={confidenceTier} />}
+      <p className="text-xs" style={{ color: 'var(--ink-3)' }} data-testid="included-count">
+        {includedCount}/{MAX_INCLUDED_CHUNKS} passages sélectionnés
+        {atCap && ' (maximum atteint)'}
+      </p>
       <div className="flex gap-3 overflow-x-auto pb-1" data-testid="chunk-rail">
         {chunks.map((chunk) => {
           const included = turnId !== null ? turnUi.getIncluded(turnId, chunk.chunk_id) : true
+          const includeDisabled = turnId === null || (!included && atCap)
           return (
             <div
               key={chunk.chunk_id}
@@ -74,8 +89,18 @@ export function ChunkRail({ chunks, turnId, conversationId }: ChunkRailProps) {
               >
                 {included ? 'Inclus' : 'Exclu'}
               </span>
-              <span className="truncate text-xs font-medium" style={{ color: 'var(--ink-2)' }}>
-                {chunk.work_id || '—'}
+              <span
+                data-testid="chunk-citation"
+                className="text-xs font-medium"
+                style={{
+                  color: 'var(--ink-2)',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                }}
+              >
+                {formatCitation(chunk)}
               </span>
               <p
                 className="text-xs"
@@ -93,8 +118,9 @@ export function ChunkRail({ chunks, turnId, conversationId }: ChunkRailProps) {
                 <button
                   type="button"
                   onClick={() => turnId !== null && turnUi.toggleChunk(turnId, chunk.chunk_id)}
-                  disabled={turnId === null}
-                  className="rounded border px-2 py-1 text-[11px]"
+                  disabled={includeDisabled}
+                  title={!included && atCap ? `Maximum ${MAX_INCLUDED_CHUNKS} passages sélectionnés` : undefined}
+                  className="rounded border px-2 py-1 text-[11px] disabled:opacity-50"
                   style={{ borderColor: 'var(--hairline)', color: 'var(--ink-2)' }}
                 >
                   {included ? 'Exclure' : 'Inclure'}

@@ -8,8 +8,8 @@ interface GenerationBlockProps {
   entry: GenerationEntry
   isFirst: boolean
   /** The turn's retrieved chunks (state/useTurnController.ts) — used to
-   * resolve `entry.chunkIds` to a work label for the "Génération..." step's
-   * expandable included-chunks list below. */
+   * resolve `entry.chunkIds` to a citation (lib/citation.ts) for the
+   * "Génération..." step's expandable included-chunks list below. */
   chunks: ChunkResult[]
   onReveal: () => void
   onEvaluate: () => void
@@ -44,7 +44,7 @@ export function GenerationBlock({ entry, isFirst, chunks, onReveal, onEvaluate }
       <ul className="flex flex-col gap-1 text-xs" style={{ color: 'var(--ink-3)' }} data-testid="included-chunks">
         {includedChunks.map((c) => (
           <li key={c.chunkId}>
-            {c.workLabel} [{c.chunkId}]
+            <span data-testid="chunk-citation">{c.citation}</span>
           </li>
         ))}
       </ul>

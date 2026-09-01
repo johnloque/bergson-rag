@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -122,11 +122,14 @@ describe('Conversation — draft turn stays on one controller instance', () => {
     // No settle wait: exclude immediately, the way an impatient real user
     // would, racing the conversation-list refetch this component triggers
     // right after retrieval creates the turn.
-    const excludeButtons = await screen.findAllByText('Exclure')
-    expect(excludeButtons).toHaveLength(5)
-    for (const btn of excludeButtons.slice(1)) {
-      await user.click(btn)
-    }
+    //
+    // Only the top 3 (c1-c3) start included (docs/ROADMAP.md, Sprint 12) —
+    // c4/c5 are already excluded by default, so only c2/c3 need an explicit
+    // click to land on "only c1 included".
+    const c2Card = await screen.findByTestId('chunk-card-c2')
+    const c3Card = screen.getByTestId('chunk-card-c3')
+    await user.click(within(c2Card).getByText('Exclure'))
+    await user.click(within(c3Card).getByText('Exclure'))
 
     await user.click(screen.getByText('Générer'))
     await waitFor(() => expect(generateBodies).toHaveLength(1))

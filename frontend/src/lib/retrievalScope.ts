@@ -47,7 +47,14 @@ export function computeConsideredSources(
       // paragraphs per anthology at most: an accepted simplification for
       // this summary, not a claim that it matches matches_date_range
       // exactly paragraph-for-paragraph.
-      const texts = (TEXTS[workId] ?? []).filter((t) => t.year >= range.start && t.year <= range.end)
+      const texts = (TEXTS[workId] ?? [])
+        .filter((t) => t.year >= range.start && t.year <= range.end)
+        // Display-only: this summary only ever needs title/year (unlike
+        // lib/citation.ts's resolveParagraphMetadata, added alongside
+        // TEXTS's paragraphStart/paragraphEnd fields on
+        // feat/chunk-rail-and-citations), so strip those down rather than
+        // leak paragraph-range fields into this entry's shape.
+        .map((t) => ({ title: t.title, year: t.year }))
       if (texts.length === 0) continue
       entries.push({ workId, title: work.title, year: work.year, texts })
       continue

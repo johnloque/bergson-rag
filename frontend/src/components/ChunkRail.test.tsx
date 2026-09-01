@@ -1,10 +1,12 @@
+import { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ChunkRail } from './ChunkRail'
 import { api } from '../api/client'
-import { TurnUiProvider } from '../state/turnUi'
+import { formatCitation } from '../lib/citation'
+import { TurnUiProvider, useTurnUi } from '../state/turnUi'
 import type { ChunkResult, ConfidencePreviewChunk, RetrievalConfidenceTier } from '../api/types'
 
 const chunkA: ChunkResult = {
@@ -19,6 +21,15 @@ const chunkA: ChunkResult = {
 }
 const chunkB: ChunkResult = { ...chunkA, chunk_id: 'W_c2', text: 'Un autre passage.', score: 0.2 }
 
+// docs/ROADMAP.md, Sprint 12: the rail shows the top 15 post-reranking
+// chunks — same reranked order (rank 0 = highest, index 0) /retrieve
+// returns, which drives which 3 default to included.
+const FIFTEEN_CHUNKS: ChunkResult[] = Array.from({ length: 15 }, (_, i) => ({
+  ...chunkA,
+  chunk_id: `W_c${i + 1}`,
+  score: 1 - i * 0.01,
+}))
+
 function jsonResponse(body: unknown) {
   return Promise.resolve({ ok: true, status: 200, json: async () => body })
 }
@@ -32,6 +43,35 @@ function renderRail(chunks: ChunkResult[] = [chunkA]) {
     <TurnUiProvider>
       <MemoryRouter>
         <ChunkRail chunks={chunks} turnId={1} conversationId={1} />
+      </MemoryRouter>
+    </TurnUiProvider>,
+  )
+}
+
+// state/useTurnController.ts calls turnUi.initTurn(turnId, chunkIds) right
+// after a real /retrieve resolves — that's what actually seeds the
+// top-DEFAULT_INCLUDED_COUNT-included default (state/turnUi.tsx), before
+// ChunkRail ever reads inclusion state. The plain `renderRail` helper above
+// never calls it, so `getIncluded`'s own `?? true` fallback is what makes a
+// never-initialized chunk look included there — fine for tests only
+// exercising toggle behavior on 1-2 chunks, but not a stand-in for the real
+// default-selection logic under test below.
+function renderInitializedRail(chunks: ChunkResult[], turnId = 1) {
+  function Harness() {
+    const turnUi = useTurnUi()
+    useEffect(() => {
+      turnUi.initTurn(
+        turnId,
+        chunks.map((c) => c.chunk_id),
+      )
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+    return <ChunkRail chunks={chunks} turnId={turnId} conversationId={1} />
+  }
+  return render(
+    <TurnUiProvider>
+      <MemoryRouter>
+        <Harness />
       </MemoryRouter>
     </TurnUiProvider>,
   )
@@ -55,6 +95,91 @@ describe('ChunkRail', () => {
     expect(card).toHaveAttribute('data-included', 'false')
     expect(screen.getByText('Exclu')).toBeInTheDocument()
     expect(screen.getByText('Inclure')).toBeInTheDocument()
+  })
+
+  it('shows the shared citation format (work, year, paragraph) instead of the bare work_id', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ retrieval_confidence_tier: 'moyenne' })),
+    )
+    const citedChunk: ChunkResult = {
+      ...chunkA,
+      chunk_id: '1907_EC_c5',
+      work_id: '1907_EC',
+      paragraph_ids: ['1907_EC_p5'],
+    }
+    renderRail([citedChunk])
+
+    const card = screen.getByTestId('chunk-card-1907_EC_c5')
+    const citation = within(card).getByTestId('chunk-citation')
+    expect(citation).toHaveTextContent(formatCitation(citedChunk))
+    expect(citation).toHaveTextContent("L'Évolution créatrice (1907), paragraphe 5")
+    // The old display was just the bare work_id ("1907_EC") — the real
+    // citation replaces it, not sits alongside it.
+    expect(within(card).queryByText('1907_EC')).not.toBeInTheDocument()
+  })
+})
+
+describe('ChunkRail — default selection and the 5-chunk cap (docs/ROADMAP.md, Sprint 12)', () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ retrieval_confidence_tier: 'moyenne' })),
+    )
+  })
+
+  it('checks exactly the top 3 of 15 chunks by default, in reranked order', () => {
+    renderInitializedRail(FIFTEEN_CHUNKS)
+
+    const includedIds = FIFTEEN_CHUNKS.filter(
+      (c) => screen.getByTestId(`chunk-card-${c.chunk_id}`).getAttribute('data-included') === 'true',
+    ).map((c) => c.chunk_id)
+    expect(includedIds).toEqual(['W_c1', 'W_c2', 'W_c3'])
+    expect(screen.getByTestId('included-count')).toHaveTextContent('3/5 passages sélectionnés')
+  })
+
+  it('allows selecting up to 5 chunks total', async () => {
+    const user = userEvent.setup()
+    renderInitializedRail(FIFTEEN_CHUNKS)
+
+    await user.click(within(screen.getByTestId('chunk-card-W_c4')).getByText('Inclure'))
+    await user.click(within(screen.getByTestId('chunk-card-W_c5')).getByText('Inclure'))
+
+    expect(screen.getByTestId('chunk-card-W_c4')).toHaveAttribute('data-included', 'true')
+    expect(screen.getByTestId('chunk-card-W_c5')).toHaveAttribute('data-included', 'true')
+    expect(screen.getByTestId('included-count')).toHaveTextContent('5/5 passages sélectionnés (maximum atteint)')
+  })
+
+  it('blocks a 6th selection: the "Inclure" button on every other excluded chunk is disabled, and the click is a no-op', async () => {
+    const user = userEvent.setup()
+    renderInitializedRail(FIFTEEN_CHUNKS)
+
+    await user.click(within(screen.getByTestId('chunk-card-W_c4')).getByText('Inclure'))
+    await user.click(within(screen.getByTestId('chunk-card-W_c5')).getByText('Inclure'))
+
+    const sixthButton = within(screen.getByTestId('chunk-card-W_c6')).getByText('Inclure')
+    expect(sixthButton).toBeDisabled()
+
+    await user.click(sixthButton)
+
+    expect(screen.getByTestId('chunk-card-W_c6')).toHaveAttribute('data-included', 'false')
+    expect(screen.getByTestId('included-count')).toHaveTextContent('5/5 passages sélectionnés (maximum atteint)')
+  })
+
+  it('excluding an included chunk frees up a slot for another one', async () => {
+    const user = userEvent.setup()
+    renderInitializedRail(FIFTEEN_CHUNKS)
+
+    await user.click(within(screen.getByTestId('chunk-card-W_c4')).getByText('Inclure'))
+    await user.click(within(screen.getByTestId('chunk-card-W_c5')).getByText('Inclure'))
+    await user.click(within(screen.getByTestId('chunk-card-W_c1')).getByText('Exclure'))
+
+    expect(screen.getByTestId('chunk-card-W_c1')).toHaveAttribute('data-included', 'false')
+    const sixthButton = within(screen.getByTestId('chunk-card-W_c6')).getByText('Inclure')
+    expect(sixthButton).not.toBeDisabled()
+
+    await user.click(sixthButton)
+    expect(screen.getByTestId('chunk-card-W_c6')).toHaveAttribute('data-included', 'true')
   })
 })
 

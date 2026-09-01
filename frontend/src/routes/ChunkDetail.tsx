@@ -3,13 +3,9 @@ import { IconArrowLeft } from '@tabler/icons-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { RelevancePill } from '../components/RelevancePill'
+import { formatCitation } from '../lib/citation'
 import { getCachedChunk } from '../state/chunkCache'
-import { useTurnUi } from '../state/turnUi'
-
-function chunkNumber(chunkId: string): string {
-  const match = chunkId.match(/_c(\d+)$/)
-  return match ? match[1] : chunkId
-}
+import { MAX_INCLUDED_CHUNKS, useTurnUi } from '../state/turnUi'
 
 export function ChunkDetail() {
   const params = useParams()
@@ -22,6 +18,12 @@ export function ChunkDetail() {
   const chunk = getCachedChunk(chunkId)
   const included = turnUi.getIncluded(turnId, chunkId)
   const judgment = turnUi.getJudgment(turnId, chunkId)
+  // Same MAX_INCLUDED_CHUNKS cap as components/ChunkRail.tsx (docs/
+  // ROADMAP.md, Sprint 12) — the reducer (state/turnUi.tsx) is the actual
+  // source of truth blocking a 6th inclusion from either surface; this is
+  // just this view's own "clear indication" of the cap.
+  const includedCount = turnUi.getIncludedCount(turnId)
+  const includeDisabled = !included && includedCount >= MAX_INCLUDED_CHUNKS
 
   const { data: turnDetail } = useQuery({
     queryKey: ['turn', turnId],
@@ -61,8 +63,8 @@ export function ChunkDetail() {
           <IconArrowLeft size={16} />
           Retour
         </button>
-        <span className="text-sm" style={{ color: 'var(--ink-3)' }}>
-          {chunk?.work_id || 'Ouvrage'} · chunk {chunkNumber(chunkId)}
+        <span className="text-sm" style={{ color: 'var(--ink-3)' }} data-testid="chunk-citation">
+          {chunk ? formatCitation(chunk) : 'Ouvrage'}
         </span>
       </div>
 
@@ -94,7 +96,9 @@ export function ChunkDetail() {
             <button
               type="button"
               onClick={() => turnUi.toggleChunk(turnId, chunkId)}
-              className="flex-1 rounded-lg border py-1.5 text-sm font-medium"
+              disabled={includeDisabled}
+              title={includeDisabled ? `Maximum ${MAX_INCLUDED_CHUNKS} passages sélectionnés` : undefined}
+              className="flex-1 rounded-lg border py-1.5 text-sm font-medium disabled:opacity-50"
               style={{ borderColor: 'var(--hairline)', color: 'var(--ink)' }}
             >
               {included ? 'Exclure' : 'Inclure'}

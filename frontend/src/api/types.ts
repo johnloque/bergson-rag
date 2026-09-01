@@ -108,7 +108,7 @@ export interface ClaimVerdictOut {
   supported: boolean
   reason: string
   // Verbatim span of the answer this claim was grounded to, for highlighting
-  // (see annotateAnswer.tsx); null when the judge's quote wasn't found
+  // (see lib/highlightMatching.ts); null when the judge's quote wasn't found
   // verbatim in the answer.
   quote: string | null
 }

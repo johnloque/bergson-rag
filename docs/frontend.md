@@ -209,6 +209,112 @@ reloaded/hydrated turn), and, backend-side, `tests/test_api.py`'s
 round-tripping through `RetrieveResponse` and a subsequent
 `GET /turns/{id}`).
 
+## Addendum — answer display improvements (Sprint 12, `feat/answer-display-improvements`)
+
+Three independent refinements to the answer card and its surrounding
+processing-steps checklist, on top of the retrieval filter UI above.
+
+### Included chunks as a collapsible list under "Génération de la réponse"
+
+The "Génération de la réponse" `StepLine` now takes the same optional
+`children`/chevron the retrieval step's "sources considered" detail already
+uses (`components/StepLine.tsx`) — the exact component and interaction
+`feat/retrieval-filter-ui` built, reused as-is rather than a second
+disclosure implementation. It was already generic (a plain `children` slot
+behind a collapsed-by-default chevron), so no extraction was needed; the
+one real gap found reusing it for a second, differently-shaped disclosure
+was that its expand/collapse `aria-label` was hardcoded to the retrieval
+step's own wording ("Afficher/Masquer les sources prises en compte") —
+correct there, misleading here. Fixed with an optional `expandLabel` prop
+(defaulting to the original text, so the retrieval step's existing
+aria-label and its tests are unchanged) that `components/GenerationBlock.tsx`
+overrides with "les passages inclus dans la génération".
+
+Expanding it lists exactly the chunks `entry.chunkIds` names for that
+generation, each as `{work title} ({year}) [{chunk_id}]`
+(`lib/generationChunks.ts:computeIncludedChunks`, resolving `work_id`
+against the turn's own retrieved-chunk set — always a superset of any one
+generation's included chunks, since `/generate` never retrieves beyond
+what `/retrieve` already persisted for the turn, `docs/backend_api.md`).
+The `[chunk_id]` bracket is a stand-in for a real citation display (work,
+title, year, page, paragraph) — `feat/chunk-rail-and-citations`
+(`docs/ROADMAP.md`, Sprint 12: "Chunk card shows the real citation... instead
+of the raw `chunk_id`") had not landed as of this branch, so this reuses the
+same bracketed identifier the generation prompt's citation format and Layer
+1's structural check already key on
+(`docs/anti_hallucination_guardrails.md`), rather than inventing a second
+one. **Follow-up, once that branch lands**: swap `computeIncludedChunks`'s
+`[chunk_id]` for the real citation component it introduces.
+
+Available as soon as "Générer"/"Régénérer" is clicked, not gated on the
+generation finishing — `state/useTurnController.ts`'s `generate()` sets
+`chunkIds` on the entry before the `/generate` call even resolves, same
+"available before the step completes" rule the retrieval step's own detail
+follows.
+
+### Most recent generation shown first
+
+Checked against the real `GET /turns/{id}` response shape rather than
+assumed: `persistence.get_turn_generations` (`src/api/persistence.py`)
+returns a turn's generations `order_by(Generation.id)` — oldest first, the
+same order `state/useTurnController.ts` already stored them in and that its
+`generate()` (index-by-`length`, `.at(-1)` for the in-flight check) depends
+on. So "most recent first" is a presentation-only reversal in
+`components/TurnCard.tsx`, not a change to that state or a client-side
+re-sort of the API response.
+
+`TurnCard.tsx` renders only the latest generation as the primary
+`GenerationBlock`; older ones are never discarded from the view (this
+project has never discarded a generation once made — each is persisted per
+Sprint 7b) but sit behind a "N version(s) précédente(s)" chevron toggle,
+collapsed by default — the same disclosure convention as the two chevrons
+above, scaled to whole generations instead of a bullet list, rather than a
+third bespoke interaction. `isFirst` (which drives the
+"Génération de la réponse" vs. "Génération d'une nouvelle réponse" label)
+stays keyed to true chronological position, independent of display order.
+
+### Markdown rendering for generated answer text
+
+`AnswerCard.tsx` renders `answer` through `react-markdown` (+ `remark-gfm`)
+instead of a `whitespace-pre-wrap` plain-text div — a maintained parser, not
+hand-rolled, per this project's standing "reuse a fit-for-purpose library"
+discipline (`docs/backend_api.md`'s SQLModel rationale makes the same call).
+
+**Faithfulness highlighting had to be re-architected, not just left in
+place, to compose with it.** The previous `annotateAnswer` matched a
+claim's verbatim quote against the *whole raw answer string* and returned
+a flat array of text/`<span>` React nodes — incompatible with markdown
+rendering, since react-markdown owns the string-to-tree parsing and a
+flagged quote can legitimately fall inside a single markdown text leaf
+nested under `<strong>`/`<li>`/etc. Tested explicitly, not assumed to
+compose: a naive first attempt (passing the previous transformer function
+as if it were a unified plugin attacher) threw immediately in every
+markdown render, caught by the new test suite before it shipped.
+
+Fixed by splitting the matching logic from its rendering:
+
+- `lib/highlightMatching.ts` (renamed from `annotateAnswer.tsx`, same
+  matching rule, same test coverage translated to its new shape) exports
+  `findHighlightRanges(text, claims)` — the pure, quote-matching,
+  longest-wins-on-overlap logic, decoupled from any particular tree it's
+  applied to.
+- `lib/highlightPlugin.ts` exports `rehypeHighlightClaims(claims)`, a
+  unified/rehype plugin (`AnswerCard.tsx`'s `rehypePlugins`) that walks the
+  *parsed* markdown tree after `remark-gfm` has already structured it into
+  elements, and runs `findHighlightRanges` independently on each text leaf
+  it finds — wrapping a match in a `<mark>` HAST element nested wherever
+  that leaf already was. This is what keeps markdown structure and the
+  highlight from fighting each other: a quote inside a bold run or a list
+  item is still just text at that leaf, so `<strong>`/`<li>` stay intact
+  and `<mark>` nests inside them, rather than the parser stripping an
+  injected `<span>` or the highlight cutting across tag boundaries.
+
+`AnswerCard.test.tsx` tests this combination directly (not assumed to
+compose cleanly): a flagged quote entirely inside a `**bold**` run, and one
+inside a markdown list item — both assert the formatting tag and the
+`<mark>` render together, nested correctly, alongside a plain markdown
+formatting test (bold/list render as elements, not literal `**`/`-` text).
+
 ## Known gap, not a finished feature: dark mode and full responsive layout
 
 The design tokens are CSS custom properties (`frontend/src/index.css`), not

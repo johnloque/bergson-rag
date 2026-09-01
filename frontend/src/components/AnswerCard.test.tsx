@@ -237,6 +237,88 @@ describe('AnswerCard full-endorsement statement', () => {
   })
 })
 
+describe('AnswerCard markdown rendering', () => {
+  function evaluationWithClaims(claims: EvaluateResponse['faithfulness']['claims']): EvaluateResponse {
+    return {
+      structural: {
+        citations: [],
+        unknown_citations: [],
+        has_citation: true,
+        fabricated_titles: [],
+        title_year_mismatches: [],
+        passed: true,
+      },
+      faithfulness: { score: claims.every((c) => c.supported) ? 1 : 0.5, model: 'judge', claims },
+      should_auto_expand: true,
+    }
+  }
+
+  it('renders markdown syntax (bold, list) as formatted elements, not raw text', () => {
+    const { container } = render(
+      <AnswerCard
+        answer={'**Bergson** distingue deux notions :\n\n- la durée\n- le temps spatialisé'}
+        evaluation={null}
+        evaluationStatus="idle"
+        revealed={true}
+        onReveal={() => {}}
+      />,
+    )
+    expect(container.querySelector('strong')?.textContent).toBe('Bergson')
+    const items = container.querySelectorAll('li')
+    expect(items).toHaveLength(2)
+    expect(items[0].textContent).toBe('la durée')
+    expect(items[1].textContent).toBe('le temps spatialisé')
+    // Not shown as literal, un-rendered markdown syntax.
+    expect(screen.queryByText(/\*\*Bergson\*\*/)).not.toBeInTheDocument()
+  })
+
+  // The specific regression case named in the task: a flagged claim's
+  // verbatim quote falling entirely inside a bolded run must still render
+  // both the <strong> formatting and the <mark> highlight, nested rather
+  // than one clobbering the other.
+  it('renders the faithfulness highlight inside a bolded phrase', () => {
+    const { container } = render(
+      <AnswerCard
+        answer="**Bergson est né à Paris en 1859** selon sa biographie officielle."
+        evaluation={evaluationWithClaims([
+          { statement: 'x', supported: false, reason: 'non étayé', quote: 'né à Paris en 1859' },
+        ])}
+        evaluationStatus="done"
+        revealed={true}
+        onReveal={() => {}}
+      />,
+    )
+    const strong = container.querySelector('strong')
+    expect(strong).not.toBeNull()
+    const mark = strong!.querySelector('mark')
+    expect(mark?.textContent).toBe('né à Paris en 1859')
+    // The bold formatting survives around the highlighted span.
+    expect(strong!.textContent).toBe('Bergson est né à Paris en 1859')
+  })
+
+  // Same regression, inside a list item instead of a bold run.
+  it('renders the faithfulness highlight inside a markdown list item', () => {
+    const { container } = render(
+      <AnswerCard
+        answer={'Deux points :\n\n- Bergson est né à Paris en 1859.\n- Il meurt en 1941.'}
+        evaluation={evaluationWithClaims([
+          { statement: 'x', supported: false, reason: 'non étayé', quote: 'né à Paris en 1859' },
+        ])}
+        evaluationStatus="done"
+        revealed={true}
+        onReveal={() => {}}
+      />,
+    )
+    const items = container.querySelectorAll('li')
+    expect(items).toHaveLength(2)
+    const mark = items[0].querySelector('mark')
+    expect(mark?.textContent).toBe('né à Paris en 1859')
+    expect(items[0].textContent).toBe('Bergson est né à Paris en 1859.')
+    // The second item, with no flagged claim, has no highlight.
+    expect(items[1].querySelector('mark')).toBeNull()
+  })
+})
+
 describe('AnswerCard evaluation failure', () => {
   it('never shows "Vérifié" when /evaluate errored, and offers a retry', () => {
     const onEvaluate = vi.fn()

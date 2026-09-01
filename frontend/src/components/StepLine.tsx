@@ -14,6 +14,15 @@ interface StepLineProps {
    * still spinning. `null`/`undefined` renders no expand affordance at
    * all, same as omitting the prop. */
   children?: ReactNode
+  /** Noun phrase describing what `children` discloses, used in the
+   * chevron's aria-label ("Afficher <phrase>" / "Masquer <phrase>") — this
+   * component is reused for more than one kind of detail (the retrieval
+   * step's considered sources, components/TurnCard.tsx; the generation
+   * step's included chunks, components/GenerationBlock.tsx), so the label
+   * must describe the one actually behind it rather than a generic/wrong
+   * default. Defaults to the original retrieval-step wording for
+   * backward compatibility. */
+  expandLabel?: string
 }
 
 // A single accumulating processing-step row (docs/ROADMAP.md, Sprint 8,
@@ -22,7 +31,13 @@ interface StepLineProps {
 // green "success" next to a red "indisponible" pill elsewhere in the card.
 // Callers place it at the point in the flow where that step actually
 // happens, rather than bundling all steps into one block.
-export function StepLine({ label, done, failed, children }: StepLineProps) {
+export function StepLine({
+  label,
+  done,
+  failed,
+  children,
+  expandLabel = 'les sources prises en compte',
+}: StepLineProps) {
   const [expanded, setExpanded] = useState(false)
   const expandable = !failed && children != null
 
@@ -42,7 +57,7 @@ export function StepLine({ label, done, failed, children }: StepLineProps) {
             type="button"
             onClick={() => setExpanded((e) => !e)}
             aria-expanded={expanded}
-            aria-label={expanded ? 'Masquer les sources prises en compte' : 'Afficher les sources prises en compte'}
+            aria-label={expanded ? `Masquer ${expandLabel}` : `Afficher ${expandLabel}`}
             className="flex items-center rounded p-0.5"
             style={{ color: 'var(--ink-3)' }}
           >

@@ -69,3 +69,69 @@ body {
 .font-wordmark {
   font-family: var(--font-wordmark);
 }
+
+/* Two-thumb range slider (components/FilterControl.tsx): both
+   <input type="range"> elements are stacked absolutely on the same track.
+   Natively, the whole element — not just its thumb — is a click/drag
+   target, so whichever input sits on top shadows the other's entire
+   track and its handle becomes unreachable. Restricting pointer-events to
+   the thumb pseudo-element means each handle only captures clicks on its
+   own thumb; FilterControl.tsx then resolves which thumb sits on top for
+   the case where both land at the same value.
+
+   The native track fill (each input paints its own accent color from the
+   start of the track up to its own value) is also disabled here — with
+   two overlapping inputs it reads as filled-up-to-whichever-handle rather
+   than the actual start–end selection, so FilterControl.tsx draws the
+   selection band itself and the thumb is restyled to match. */
+.dual-range {
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  accent-color: transparent;
+  /* The default focus ring outlines this whole (invisible, appearance:none)
+     element, i.e. the full-width track rather than the small thumb —
+     visually indistinguishable from the native fill this class exists to
+     suppress. Replaced below with a ring on the thumb itself. */
+  outline: none;
+}
+.dual-range::-webkit-slider-runnable-track {
+  background: transparent;
+  height: 4px;
+}
+.dual-range::-moz-range-track {
+  background: transparent;
+  height: 4px;
+}
+.dual-range::-webkit-slider-thumb {
+  pointer-events: auto;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 9999px;
+  background: var(--ink);
+  border: 2px solid var(--paper);
+  box-shadow: 0 0 0 1px var(--hairline);
+  cursor: pointer;
+}
+.dual-range::-moz-range-thumb {
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--ink);
+  border: 2px solid var(--paper);
+  box-shadow: 0 0 0 1px var(--hairline);
+  cursor: pointer;
+}
+.dual-range:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.dual-range:focus-visible::-moz-range-thumb {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}

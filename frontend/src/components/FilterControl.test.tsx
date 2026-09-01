@@ -63,6 +63,39 @@ describe('FilterControl — chronological slider', () => {
     fireEvent.change(screen.getByLabelText('Année de début'), { target: { value: '1934' } })
     expect(screen.getByText('Période (1910–1910)')).toBeInTheDocument()
   })
+
+  // Regression for the overlap bug: the upper-bound handle used to always
+  // sit on top (fixed DOM order), so once the two handles landed on the
+  // same value the lower-bound handle became permanently unreachable.
+  // Which handle is on top now tracks pointer proximity (see
+  // handleTrackPointerMove in FilterControl.tsx) so that whichever side of
+  // the shared thumb the pointer approaches from is the one that ends up
+  // grabbable — combined with the `.dual-range` pointer-events rule in
+  // index.css, which restricts each input's hit area to its own thumb.
+  it('raises whichever handle the pointer is closer to, so a handle stuck under the other stays reachable', async () => {
+    await openPanel()
+    const startInput = screen.getByLabelText('Année de début')
+    const endInput = screen.getByLabelText('Année de fin')
+    const track = screen.getByTestId('date-range-track')
+    track.getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 0, height: 0, x: 0, y: 0, toJSON() {} }) as DOMRect
+
+    // Collapse both handles onto the same middle value, mirroring the
+    // reported repro of "both handles near each other".
+    fireEvent.change(endInput, { target: { value: '1910' } })
+    fireEvent.change(startInput, { target: { value: '1910' } })
+
+    // Hovering toward the low end of the track, over the shared thumb,
+    // should surface the start (lower-bound) handle.
+    fireEvent.mouseMove(track, { clientX: 10 })
+    expect(startInput).toHaveStyle({ zIndex: 2 })
+    expect(endInput).toHaveStyle({ zIndex: 1 })
+
+    // Hovering toward the high end should surface the end handle instead.
+    fireEvent.mouseMove(track, { clientX: 190 })
+    expect(startInput).toHaveStyle({ zIndex: 1 })
+    expect(endInput).toHaveStyle({ zIndex: 2 })
+  })
 })
 
 describe('FilterControl — mode toggle', () => {

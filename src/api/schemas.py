@@ -88,6 +88,34 @@ class ChunkResult(BaseModel):
     score: float
 
 
+class ChunkNeighborSummary(BaseModel):
+    """One resolved neighbor for GET /chunks/{chunk_id}/neighbors
+    (docs/ROADMAP.md, Sprint 12 `feat/chunk-neighbor-expansion`). Unlike
+    `ChunkResult`, this has no `score`, since a textual neighbor was never
+    retrieved/ranked — it's resolved by adjacency, not relevance."""
+
+    chunk_id: str
+    work_id: str
+    section_id: str
+    section_path: str
+    paragraph_ids: list[str]
+    page_start: PageRef
+    page_end: PageRef
+    text: str
+
+
+class ChunkNeighborsResponse(BaseModel):
+    """Response for GET /chunks/{chunk_id}/neighbors. `None` for a
+    direction means that direction has no neighbor to offer — either the
+    adjacent paragraph doesn't exist at all (start/end of the work) or it
+    exists but falls in a different section (the section-boundary rule:
+    a neighbor is only offered within the same Section.section_id,
+    Sprint 1 — explicitly decided, not inferred)."""
+
+    previous: ChunkNeighborSummary | None = None
+    next: ChunkNeighborSummary | None = None
+
+
 class DateRange(BaseModel):
     """docs/ROADMAP.md, Sprint 11 retrieval filtering. `mode` defaults to
     `"publication"` (the parent work's own publication year,

@@ -12,7 +12,13 @@ from __future__ import annotations
 
 from qdrant_client import QdrantClient
 
-from src.api.schemas import ChunkInput, ChunkResult, ConfidencePreviewChunk, PageRef
+from src.api.schemas import (
+    ChunkInput,
+    ChunkNeighborSummary,
+    ChunkResult,
+    ConfidencePreviewChunk,
+    PageRef,
+)
 from src.generation.signals import GenerationChunk
 from src.indexing.qdrant_index import COLLECTION_NAME, point_id_for
 from src.retrieval.hybrid import RetrievedChunk
@@ -125,6 +131,36 @@ def fetch_chunk_input(
         page_end=payload["page_end"],
         text=payload["text"],
         score=score,
+    )
+
+
+def fetch_chunk_summary(client: QdrantClient, chunk_id: str) -> ChunkNeighborSummary | None:
+    """Like `fetch_chunk_input` above, but keeps `section_id` (which
+    `ChunkInput` deliberately drops — see `chunk_input_to_generation_chunk`'s
+    docstring, `section_id` has no downstream consumer of a client-submitted
+    chunk) and drops `score` instead, since neither the current chunk nor a
+    resolved neighbor in GET /chunks/{chunk_id}/neighbors
+    (`src/api/main.py`) has a retrieval score to carry. Used to resolve both
+    the current chunk's and each neighbor candidate's work/section identity
+    for that endpoint's same-section boundary check.
+
+    Returns `None` if `chunk_id` is no longer indexed — same accepted
+    reindex-gap limitation as `fetch_chunk_input`."""
+    points = client.retrieve(
+        collection_name=COLLECTION_NAME, ids=[point_id_for(chunk_id)], with_payload=True
+    )
+    if not points:
+        return None
+    payload = points[0].payload or {}
+    return ChunkNeighborSummary(
+        chunk_id=payload["chunk_id"],
+        work_id=payload["work_id"],
+        section_id=payload["section_id"],
+        section_path=payload["section_path"],
+        paragraph_ids=payload["paragraph_ids"],
+        page_start=payload["page_start"],
+        page_end=payload["page_end"],
+        text=payload["text"],
     )
 
 

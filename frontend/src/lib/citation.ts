@@ -29,8 +29,18 @@
 // implemented, since no chunk in this project can ever span more than one
 // paragraph to need it.
 
-import type { ChunkResult } from '../api/types'
 import { ANTHOLOGY_WORK_IDS, TEXTS, WORKS, type TextOption } from './works'
+
+// The minimal shape formatCitation actually needs — `work_id` and
+// `paragraph_ids[0]`, nothing else. `ChunkResult` (a real retrieved chunk)
+// and `ChunkNeighborSummary` (a chunk resolved via GET
+// /chunks/{chunk_id}/neighbors, Sprint 12 `feat/chunk-neighbor-expansion` —
+// no `score`) both satisfy this structurally, so one function serves both
+// without a conversion step at every call site.
+export interface CitableChunk {
+  work_id: string
+  paragraph_ids: string[]
+}
 
 const WORKS_BY_ID = new Map(WORKS.map((w) => [w.id, w]))
 
@@ -50,7 +60,7 @@ function resolveText(workId: string, index: number): TextOption | undefined {
   return (TEXTS[workId] ?? []).find((t) => index >= t.paragraphStart && index <= t.paragraphEnd)
 }
 
-export function formatCitation(chunk: ChunkResult): string {
+export function formatCitation(chunk: CitableChunk): string {
   const work = WORKS_BY_ID.get(chunk.work_id)
   const workTitle = work ? work.title : chunk.work_id || 'Œuvre inconnue'
   const workYearPart = work ? ` (${work.year})` : ''

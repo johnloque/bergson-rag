@@ -444,6 +444,145 @@ already covered by `components/TurnCard.generations.test.tsx` and
 `components/TurnCard.integration.test.tsx`'s existing Générer/Régénérer
 assertions, which needed no changes to keep passing.
 
+## Addendum — chunk neighbor expansion (Sprint 12, `feat/chunk-neighbor-expansion`)
+
+Restructures Screen 4 (chunk inspection) into a master-detail view, and
+extends Screen 3's rail to surface chunks included via that exploration.
+Builds on `feat/chunk-rail-and-citations`'s citation format and rail
+defaults above, and on the new backend endpoint
+`GET /chunks/{chunk_id}/neighbors` — full endpoint semantics, including the
+section-boundary rule and the known 1-paragraph-per-chunk simplification, in
+[`docs/backend_api.md`](backend_api.md).
+
+### Screen 4: master-detail, not one chunk per route
+
+`routes/ChunkDetail.tsx` still lives at the same route
+(`/c/:conversationId/turn/:turnId/chunk/:chunkId`), but the `:chunkId`
+param now only ever seeds the *initial* focus, once, on mount — it no longer
+drives the page on every click. Three stacked zones, all reading/writing one
+local `focusedChunk` piece of state (`lib/focusedChunk.ts`'s `FocusedChunk`,
+one shape for both a real `ChunkResult` and a neighbor-resolved
+`ChunkNeighborSummary`, so the detail panel doesn't have to branch on which
+produced it):
+
+1. **Retrieval rail, pinned** — `components/ChunkRail.tsx`, reused exactly
+   as Screen 3 uses it (same cards, same include/exclude toggle, same x/5
+   counter). The only change needed was an optional `onInspect` prop:
+   Screen 3 leaves it unset (its "Inspecter" button keeps navigating to
+   Screen 4, unchanged); Screen 4 passes `setFocusedChunk`, so a click
+   updates local state instead of navigating — this is what removes the old
+   per-chunk-route back-button/re-inspect friction.
+2. **Position filmstrip** — `components/PositionFilmstrip.tsx`. Fetches
+   `GET /chunks/{focusedChunk.chunk_id}/neighbors` (TanStack Query, keyed on
+   the focused chunk_id — refetches and the filmstrip re-centers whenever
+   focus changes) and renders three cells (previous / current / next)
+   joined by arrow icons. Deliberately styled to read as a different
+   concept from the rail above — dashed border, `--paper-2` background, vs.
+   the rail's solid-bordered cards on plain paper — and, unlike the rail's
+   cards (which do show a 2-line text preview), a filmstrip cell shows only
+   a compact citation, never any chunk text at all: neither selector is
+   where full text renders, only the shared detail panel below is. A `null`
+   neighbor (section boundary, or simply the start/end of the work) still
+   renders its own disabled, empty cell ("Début de section"/"Fin de
+   section") rather than being omitted — so the user sees there's no further
+   neighbor in that direction instead of wondering why a cell is missing.
+   Clicking a resolved cell sets that chunk as focused directly (the
+   response already carries its full text — no second fetch needed).
+3. **Detail panel** — the one place full text, the real citation
+   (`lib/citation.ts:formatCitation`, loosened to a minimal `CitableChunk`
+   shape so it accepts both `ChunkResult` and `ChunkNeighborSummary` without
+   a conversion step), score (subdued, omitted entirely for a neighbor-origin
+   chunk — it was never retrieved/ranked, so there's nothing to show),
+   "Expliquer" (`judge_chunk`), and "Inclure"/"Exclure" render, for whichever
+   chunk is currently focused regardless of which selector set it.
+
+   **Origin tag**: "Depuis la recherche" / "Voisin — hors des résultats de
+   recherche" (`data-testid="chunk-origin-tag"`), derived from
+   `turnUi.isRetrieved(turnId, chunk_id)` — i.e. whether this chunk_id is
+   genuinely one of the turn's originally-retrieved candidates, not which
+   selector was last clicked. The two can diverge: a filmstrip neighbor can
+   turn out to already be one of the retrieved 15, in which case it's
+   tagged "Depuis la recherche" even though the filmstrip is what surfaced
+   it this time — the tag is about the chunk's real relationship to the
+   search results, matching its own wording ("hors des résultats de
+   recherche"), not a breadcrumb of the click that led here.
+
+   A direct visit/reload of this route calls `turnUi.initTurn` itself once
+   `GET /turns/{id}` resolves (mirroring `state/useTurnController.ts`'s own
+   hydrate effect) — needed since this route doesn't go through that hook,
+   and both `isRetrieved` and the inclusion cap depend on `retrievedIds`
+   having been seeded. One accepted gap: a reload landing directly on a
+   neighbor-origin `:chunkId` that was never included has nowhere to
+   recover its content from (turnUi's neighbor map is client-only,
+   Sprint 8's addendum, and there's no generic get-chunk-by-id endpoint) —
+   the panel falls back to a loading placeholder, same "accept, don't
+   fabricate" discipline as the existing chunk-text-snapshot limitation.
+
+### Screen 3: the rail represents the FULL set sent to generation
+
+`state/turnUi.tsx` gained a `neighbors: Record<turnId, Record<chunkId,
+ChunkNeighborSummary>>` map alongside its existing `included` map — the
+single shared source of truth both `components/ChunkRail.tsx` and
+`routes/ChunkDetail.tsx` read and write, so Screen 3 and Screen 4 always
+agree on what's included for a turn without either screen reimplementing
+the other's state. A chunk's presence in this map *is* its inclusion state
+(there is no "present but excluded" entry, unlike the rail-origin
+`included` map) — `toggleNeighborChunk` adds it (subject to the same
+combined `MAX_INCLUDED_CHUNKS` cap the rail-origin `toggleChunk` already
+enforced, via a shared `includedCountFor` helper) or removes it entirely, a
+true toggle. A second `retrievedIds: Record<turnId, string[]>` map (set once
+at `initTurn`) is what lets the reducer/components tell a rail-origin
+chunk_id from a neighbor-origin one — the same check the origin tag above
+uses.
+
+`components/ChunkRail.tsx` renders `turnUi.getNeighborChunks(turnId)` after
+the retrieved-candidates loop, past a thin dashed vertical divider
+(`data-testid="neighbor-divider"`). Neighbor-origin cards:
+
+- Are always shown as included (existence in the map = included) with a
+  **dashed** red border, vs. rail-origin cards' solid red border when
+  included — reusing the filmstrip's own dashed-vs-solid vocabulary rather
+  than inventing a third visual style.
+- Show the real citation (`formatCitation`, work + paragraph — never a
+  rank-based position, since a neighbor was never ranked) and a small arrow
+  icon (`IconArrowsExchange`) marking neighbor origin.
+- Their "Exclure" click calls `toggleNeighborChunk`, which **removes the
+  card from the rail entirely** — not a greyed-out permanently-excluded
+  card the way excluding a rail-origin (actually-retrieved) chunk stays
+  visible. A neighbor chunk was manually opted into inclusion; opting out
+  undoes that addition instead of leaving a ghost entry for something that
+  was never part of the retrieved set.
+
+The shared `x/5` counter (`turnUi.getIncludedCount`) and cap apply
+uniformly regardless of origin — a neighbor-included chunk counts the same
+as a rail-origin one, computed once (`includedCountFor`) and read by both
+`toggleChunk`'s and `toggleNeighborChunk`'s cap checks.
+
+`state/useTurnController.ts`'s `generate()` folds `turnUi.getNeighborChunks`
+into both the `chunk_ids` sent for the in-flight `GenerationEntry` and the
+`/generate` request body itself (`lib/chunkInput.ts:neighborSummaryToChunkInput`,
+same shape as `toChunkInput` but with `score: null`). `components/TurnCard.tsx`
+also passes the turn's neighbor chunks alongside its retrieved ones into
+`GenerationBlock`'s citation lookup (`lib/generationChunks.ts`, its `chunks`
+param loosened the same way `formatCitation`'s was) — otherwise a
+generation that included a neighbor-origin chunk would show "Œuvre
+inconnue" for it in the included-chunks disclosure.
+
+Test coverage: `state/turnUi.test.tsx` (the neighbor map's toggle-on/toggle-
+off-removes-entirely behavior, the shared cap combining rail- and
+neighbor-origin counts, `isRetrieved`, per-turn isolation);
+`components/ChunkRail.neighbors.test.tsx` (the appended card, dashed
+divider, shared counter, and exclude-removes-entirely behavior);
+`components/PositionFilmstrip.test.tsx` (cell rendering from a real
+neighbors response, the disabled/empty null-neighbor cell, click-to-select,
+refetch-on-focus-change); `routes/ChunkDetail.test.tsx` (initial URL-driven
+focus and its origin tag, a rail-card click and a filmstrip-cell click both
+updating the same detail panel with matching origin tags, and — sharing one
+`TurnUiProvider` between a `ChunkDetail` and a standalone `ChunkRail`
+instance, the same setup `App.tsx` gives the real app — including a
+neighbor chunk from the detail panel appearing in the rail with the dashed
+border and real citation).
+
 ## Known gap, not a finished feature: dark mode and full responsive layout
 
 The design tokens are CSS custom properties (`frontend/src/index.css`), not

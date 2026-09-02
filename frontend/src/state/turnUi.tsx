@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useReducer, type ReactNode } from 'react'
-import type { ChunkJudgment } from '../api/types'
+import type { ChunkJudgment, ChunkNeighborSummary } from '../api/types'
 
 // Client-side-only state (docs/ROADMAP.md, Sprint 8 "State / data flow"):
 // which chunks are currently included/excluded in a turn's rail, and the
@@ -25,12 +25,37 @@ export const MAX_INCLUDED_CHUNKS = 5
 interface TurnUiState {
   included: Record<number, Record<string, boolean>>
   judgments: Record<number, Record<string, ChunkJudgment>>
+  // Sprint 12 `feat/chunk-neighbor-expansion` additions below. A turn's
+  // originally-retrieved chunk_ids (set once, at 'init') — the only way to
+  // tell a rail-origin chunk from a neighbor-origin one later, since a
+  // neighbor navigated to via Screen 4's filmstrip can turn out to already
+  // be one of the retrieved 15 (see `neighbors` below).
+  retrievedIds: Record<number, string[]>
+  // Chunks included purely via neighbor exploration (Screen 4), keyed by
+  // chunk_id, full record (not just a boolean) since Screen 3's rail needs
+  // to render a citation for a chunk it never itself retrieved. A chunk's
+  // presence here *is* its inclusion state — unlike `included` above,
+  // there is no "present but excluded" entry: excluding a neighbor-origin
+  // chunk removes it from this map entirely (docs/frontend.md's asymmetric
+  // exclude-behavior), it never lingers as a greyed-out card.
+  neighbors: Record<number, Record<string, ChunkNeighborSummary>>
 }
 
 type Action =
   | { type: 'init'; turnId: number; chunkIds: string[]; judgments?: Record<string, ChunkJudgment> }
   | { type: 'toggle'; turnId: number; chunkId: string }
+  | { type: 'toggleNeighbor'; turnId: number; chunk: ChunkNeighborSummary }
   | { type: 'judge'; turnId: number; chunkId: string; judgment: ChunkJudgment }
+
+// Shared by the 'toggle' and 'toggleNeighbor' cap checks below — a
+// neighbor-origin inclusion counts exactly the same toward the 5-chunk cap
+// as a rail-origin one (docs/frontend.md), so both cases have to look at
+// the same combined count rather than each enforcing their own.
+function includedCountFor(state: TurnUiState, turnId: number): number {
+  const retrievedIncluded = Object.values(state.included[turnId] ?? {}).filter(Boolean).length
+  const neighborIncluded = Object.keys(state.neighbors[turnId] ?? {}).length
+  return retrievedIncluded + neighborIncluded
+}
 
 function reducer(state: TurnUiState, action: Action): TurnUiState {
   switch (action.type) {
@@ -50,8 +75,16 @@ function reducer(state: TurnUiState, action: Action): TurnUiState {
         ? { ...action.judgments, ...state.judgments[action.turnId] }
         : state.judgments[action.turnId]
       return {
+        ...state,
         included: { ...state.included, [action.turnId]: nextIncluded },
         judgments: { ...state.judgments, [action.turnId]: nextJudgments ?? {} },
+        // Set once per turnId (a turn is only ever initTurn'd once per
+        // session in practice) — this is what lets getIncluded/isRetrieved
+        // tell a rail-origin chunk_id from a neighbor-origin one.
+        retrievedIds:
+          action.turnId in state.retrievedIds
+            ? state.retrievedIds
+            : { ...state.retrievedIds, [action.turnId]: action.chunkIds },
       }
     }
     case 'toggle': {
@@ -65,14 +98,37 @@ function reducer(state: TurnUiState, action: Action): TurnUiState {
         // Callers (components/ChunkRail.tsx, routes/ChunkDetail.tsx) also
         // disable their own "Inclure" affordance at the cap so this never
         // silently no-ops on a click that looked enabled.
-        const includedCount = Object.values(existing).filter(Boolean).length
-        if (includedCount >= MAX_INCLUDED_CHUNKS) return state
+        if (includedCountFor(state, action.turnId) >= MAX_INCLUDED_CHUNKS) return state
       }
       return {
         ...state,
         included: {
           ...state.included,
           [action.turnId]: { ...existing, [action.chunkId]: !current },
+        },
+      }
+    }
+    case 'toggleNeighbor': {
+      const existingNeighbors = state.neighbors[action.turnId] ?? {}
+      const chunkId = action.chunk.chunk_id
+      if (chunkId in existingNeighbors) {
+        // Included -> exclude means REMOVE entirely (docs/frontend.md): a
+        // neighbor chunk was manually opted into inclusion, so opting out
+        // undoes that addition — unlike a rail-origin exclusion, which
+        // always leaves the card visible (it's an actual retrieved
+        // candidate), a neighbor-origin card has no reason to still exist
+        // once excluded.
+        const rest = Object.fromEntries(
+          Object.entries(existingNeighbors).filter(([id]) => id !== chunkId),
+        )
+        return { ...state, neighbors: { ...state.neighbors, [action.turnId]: rest } }
+      }
+      if (includedCountFor(state, action.turnId) >= MAX_INCLUDED_CHUNKS) return state
+      return {
+        ...state,
+        neighbors: {
+          ...state.neighbors,
+          [action.turnId]: { ...existingNeighbors, [chunkId]: action.chunk },
         },
       }
     }
@@ -93,31 +149,63 @@ function reducer(state: TurnUiState, action: Action): TurnUiState {
 
 interface TurnUiContextValue {
   getIncluded: (turnId: number, chunkId: string) => boolean
-  /** Count of currently-included chunks for a turn — what
-   * components/ChunkRail.tsx and routes/ChunkDetail.tsx disable their own
-   * "Inclure" affordance against once it reaches MAX_INCLUDED_CHUNKS, ahead
-   * of the reducer's own no-op guard on 'toggle' above (belt-and-braces:
-   * the reducer is what actually enforces the cap). */
+  /** Count of currently-included chunks for a turn, rail-origin and
+   * neighbor-origin combined — what components/ChunkRail.tsx and
+   * routes/ChunkDetail.tsx disable their own "Inclure" affordance against
+   * once it reaches MAX_INCLUDED_CHUNKS, ahead of the reducer's own no-op
+   * guard on 'toggle'/'toggleNeighbor' above (belt-and-braces: the reducer
+   * is what actually enforces the cap). */
   getIncludedCount: (turnId: number) => number
   getJudgment: (turnId: number, chunkId: string) => ChunkJudgment | undefined
   getJudgments: (turnId: number) => Record<string, ChunkJudgment>
+  /** Every currently-included neighbor-origin chunk for a turn (Sprint 12
+   * `feat/chunk-neighbor-expansion`) — what components/ChunkRail.tsx
+   * appends after the retrieved-candidates divider, and what
+   * state/useTurnController.ts's generate() folds into the /generate
+   * request alongside the rail-origin included chunks. */
+  getNeighborChunks: (turnId: number) => ChunkNeighborSummary[]
+  /** Whether chunkId is one of the turn's originally-retrieved candidates
+   * (set at initTurn) — what tells a rail-origin chunk from a
+   * neighbor-origin one, e.g. a chunk reached via Screen 4's filmstrip that
+   * turns out to already be one of the retrieved 15. Drives both the
+   * "Depuis la recherche" / "Voisin — hors des résultats de recherche"
+   * origin tag and which toggle (toggleChunk vs toggleNeighborChunk) a
+   * focused chunk's Inclure/Exclure button should call. */
+  isRetrieved: (turnId: number, chunkId: string) => boolean
   initTurn: (turnId: number, chunkIds: string[], judgments?: Record<string, ChunkJudgment>) => void
   toggleChunk: (turnId: number, chunkId: string) => void
+  toggleNeighborChunk: (turnId: number, chunk: ChunkNeighborSummary) => void
   setJudgment: (turnId: number, chunkId: string, judgment: ChunkJudgment) => void
 }
 
 const TurnUiContext = createContext<TurnUiContextValue | null>(null)
 
 export function TurnUiProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, { included: {}, judgments: {} })
+  const [state, dispatch] = useReducer(reducer, {
+    included: {},
+    judgments: {},
+    retrievedIds: {},
+    neighbors: {},
+  })
 
   const getIncluded = useCallback(
-    (turnId: number, chunkId: string) => state.included[turnId]?.[chunkId] ?? true,
-    [state.included],
+    (turnId: number, chunkId: string) => {
+      if (state.neighbors[turnId]?.[chunkId]) return true
+      const retrievedIds = state.retrievedIds[turnId]
+      // Turn not yet initialized (initTurn hasn't run for it this session)
+      // — preserve the old permissive default rather than guessing at
+      // origin from an empty set.
+      if (retrievedIds === undefined) return state.included[turnId]?.[chunkId] ?? true
+      if (retrievedIds.includes(chunkId)) return state.included[turnId]?.[chunkId] ?? true
+      // A known, non-retrieved, non-neighbor chunk (e.g. just navigated to
+      // via the filmstrip, never included) — never included by default.
+      return false
+    },
+    [state.neighbors, state.retrievedIds, state.included],
   )
   const getIncludedCount = useCallback(
-    (turnId: number) => Object.values(state.included[turnId] ?? {}).filter(Boolean).length,
-    [state.included],
+    (turnId: number) => includedCountFor(state, turnId),
+    [state],
   )
   const getJudgment = useCallback(
     (turnId: number, chunkId: string) => state.judgments[turnId]?.[chunkId],
@@ -127,6 +215,14 @@ export function TurnUiProvider({ children }: { children: ReactNode }) {
     (turnId: number) => state.judgments[turnId] ?? {},
     [state.judgments],
   )
+  const getNeighborChunks = useCallback(
+    (turnId: number) => Object.values(state.neighbors[turnId] ?? {}),
+    [state.neighbors],
+  )
+  const isRetrieved = useCallback(
+    (turnId: number, chunkId: string) => state.retrievedIds[turnId]?.includes(chunkId) ?? false,
+    [state.retrievedIds],
+  )
   const initTurn = useCallback(
     (turnId: number, chunkIds: string[], judgments?: Record<string, ChunkJudgment>) =>
       dispatch({ type: 'init', turnId, chunkIds, judgments }),
@@ -134,6 +230,11 @@ export function TurnUiProvider({ children }: { children: ReactNode }) {
   )
   const toggleChunk = useCallback(
     (turnId: number, chunkId: string) => dispatch({ type: 'toggle', turnId, chunkId }),
+    [],
+  )
+  const toggleNeighborChunk = useCallback(
+    (turnId: number, chunk: ChunkNeighborSummary) =>
+      dispatch({ type: 'toggleNeighbor', turnId, chunk }),
     [],
   )
   const setJudgment = useCallback(
@@ -149,8 +250,11 @@ export function TurnUiProvider({ children }: { children: ReactNode }) {
         getIncludedCount,
         getJudgment,
         getJudgments,
+        getNeighborChunks,
+        isRetrieved,
         initTurn,
         toggleChunk,
+        toggleNeighborChunk,
         setJudgment,
       }}
     >

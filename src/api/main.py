@@ -98,7 +98,7 @@ from __future__ import annotations
 import math
 import os
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from openai import OpenAIError
@@ -109,6 +109,7 @@ from src.api.converters import (
     chunk_input_to_generation_chunk,
     confidence_preview_chunk_to_generation_chunk,
     fetch_chunk_input,
+    fetch_chunk_summary,
     generation_chunk_to_result,
 )
 from src.api.db import get_session
@@ -120,6 +121,8 @@ from src.api.dependencies import (
 )
 from src.api.models import Evaluation
 from src.api.schemas import (
+    ChunkNeighborsResponse,
+    ChunkNeighborSummary,
     ClaimVerdictOut,
     ConfidencePreviewRequest,
     ConfidencePreviewResponse,
@@ -148,6 +151,7 @@ from src.generation.chunk_judge import judge_chunk
 from src.generation.generate import generate_from_chunks
 from src.generation.guardrail import EvaluationResult, generate_evaluation, should_auto_expand
 from src.generation.signals import retrieval_confidence_tier
+from src.paragraph_chunk_map import parse_paragraph_id, resolve_chunk_ids
 from src.retrieval.filtering import DateRangeFilter, filtered_hybrid_search
 from src.retrieval.reranking import DEFAULT_RERANK_CANDIDATES, rerank
 
@@ -422,6 +426,60 @@ def judge_chunk_endpoint(
         model=body.model,
     )
     return JudgeChunkResponse(label=judgment["label"], justification=judgment["justification"])
+
+
+@app.get("/chunks/{chunk_id}/neighbors", response_model=ChunkNeighborsResponse)
+def get_chunk_neighbors(chunk_id: str) -> ChunkNeighborsResponse:
+    """Textual-position neighbors for the Screen 4 filmstrip (docs/ROADMAP.md,
+    Sprint 12 `feat/chunk-neighbor-expansion`) — not anchored to any turn, so
+    no `turn_id`/session dependency: any real `chunk_id` can be queried.
+
+    **Known simplification**: resolves `chunk_id` -> its one `paragraph_id`
+    and looks up `paragraph_id - 1`/`+ 1` directly, relying on production's
+    current 1-paragraph-per-chunk scheme (`src/ingestion/chunking.py`) — a
+    chunk here is assumed to have exactly one `paragraph_ids` entry. If
+    chunking ever groups multiple paragraphs per chunk again, this needs
+    chunk-level paragraph *range* handling (the paragraph just past this
+    chunk's own range, not `paragraph_ids[0] +/- 1`) instead of a single-id
+    lookup — not built now, since it isn't the shipped chunking scheme.
+
+    For each direction, the resolved chunk is only returned if it exists
+    *and* shares both `work_id` and `section_id` (Sprint 1) with the current
+    chunk — the section-boundary rule: a neighbor is never offered across a
+    section edge, even when the adjacent paragraph_id exists (in a
+    different, adjacent section). `None` for a direction covers both that
+    case and simply running out of paragraphs at the start/end of the work.
+
+    Reuses `src.paragraph_chunk_map.resolve_chunk_ids` (Sprint 11) for the
+    paragraph_id -> chunk_id lookup rather than reimplementing it — see that
+    module's docstring."""
+    client = get_qdrant_client()
+    current = fetch_chunk_summary(client, chunk_id)
+    if current is None:
+        raise HTTPException(status_code=404, detail=f"chunk_id {chunk_id} not found")
+
+    if len(current.paragraph_ids) != 1:
+        # Should not happen against the current 1-paragraph-per-chunk
+        # corpus (see docstring's known simplification) — no neighbors
+        # offered rather than guessing which paragraph is "adjacent".
+        return ChunkNeighborsResponse(previous=None, next=None)
+
+    work_id, index = parse_paragraph_id(current.paragraph_ids[0])
+
+    def resolve(target_index: int) -> ChunkNeighborSummary | None:
+        if target_index < 1:
+            return None
+        matches = resolve_chunk_ids(work_id, f"{work_id}_p{target_index}")
+        if len(matches) != 1:
+            return None
+        candidate = fetch_chunk_summary(client, matches[0])
+        if candidate is None:
+            return None
+        if candidate.work_id != current.work_id or candidate.section_id != current.section_id:
+            return None
+        return candidate
+
+    return ChunkNeighborsResponse(previous=resolve(index - 1), next=resolve(index + 1))
 
 
 @app.get("/turns/{turn_id}", response_model=TurnDetailResponse)

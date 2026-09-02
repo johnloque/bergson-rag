@@ -1,4 +1,4 @@
-import type { ChunkResult } from '../api/types'
+import type { CitableChunk } from '../lib/citation'
 import type { GenerationEntry } from '../state/useTurnController'
 import { computeIncludedChunks } from '../lib/generationChunks'
 import { AnswerCard } from './AnswerCard'
@@ -7,10 +7,12 @@ import { StepLine } from './StepLine'
 interface GenerationBlockProps {
   entry: GenerationEntry
   isFirst: boolean
-  /** The turn's retrieved chunks (state/useTurnController.ts) — used to
-   * resolve `entry.chunkIds` to a citation (lib/citation.ts) for the
-   * "Génération..." step's expandable included-chunks list below. */
-  chunks: ChunkResult[]
+  /** The turn's retrieved chunks plus any neighbor-origin chunks included
+   * via Screen 4 (components/TurnCard.tsx's `citableChunks`, Sprint 12
+   * `feat/chunk-neighbor-expansion`) — used to resolve `entry.chunkIds` to
+   * a citation (lib/citation.ts) for the "Génération..." step's expandable
+   * included-chunks list below. */
+  chunks: (CitableChunk & { chunk_id: string })[]
   onReveal: () => void
   onEvaluate: () => void
 }

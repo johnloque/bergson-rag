@@ -1,4 +1,5 @@
 import type {
+  ChunkNeighborsResponse,
   ConfidencePreviewRequest,
   ConfidencePreviewResponse,
   ConversationDetailResponse,
@@ -66,6 +67,9 @@ export const api = {
     request<JudgeChunkResponse>('/judge-chunk', { method: 'POST', body: JSON.stringify(body) }),
 
   getTurn: (turnId: number) => request<TurnDetailResponse>(`/turns/${turnId}`),
+
+  getChunkNeighbors: (chunkId: string) =>
+    request<ChunkNeighborsResponse>(`/chunks/${chunkId}/neighbors`),
 
   getConversation: (conversationId: number) =>
     request<ConversationDetailResponse>(`/conversations/${conversationId}`),

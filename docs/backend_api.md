@@ -1,7 +1,8 @@
 # Backend API and persistence (Sprint 7, `feat/api-endpoints` + `feat/api-persistence`)
 
 FastAPI scaffold in `src/api/`: `POST /retrieve`, `POST /generate`, `POST
-/evaluate`, `POST /judge-chunk`, `GET /turns/{id}`, `GET /conversations/{id}`.
+/evaluate`, `POST /judge-chunk`, `GET /turns/{id}`, `GET /conversations/{id}`,
+`GET /chunks/{chunk_id}/neighbors` (Sprint 12, see below).
 Each compute endpoint is a thin wrapper around an existing, already-tested
 function — `hybrid_search` + `rerank`, `generate_from_chunks`,
 `generate_evaluation` + `should_auto_expand`, and `judge_chunk` respectively
@@ -229,6 +230,50 @@ landing page's "last conversation" redirect have no way to enumerate
 conversations without it. `Conversation` gained a nullable `title` column
 for the rename action. Full frontend context:
 [`docs/frontend.md`](frontend.md).
+
+## `GET /chunks/{chunk_id}/neighbors` (Sprint 12, `feat/chunk-neighbor-expansion`)
+
+Not turn-scoped — any real `chunk_id` can be queried, no `turn_id`/session
+dependency. Backs Screen 4's position filmstrip (`docs/frontend.md`):
+`{previous: ChunkNeighborSummary | null, next: ChunkNeighborSummary | null}`.
+
+Resolves `chunk_id` -> its one `paragraph_id`
+(`src.paragraph_chunk_map.parse_paragraph_id`), looks up `paragraph_id - 1`/
+`+ 1` via the Sprint 11 paragraph_id -> chunk_id mapping
+(`src.paragraph_chunk_map.resolve_chunk_ids`, reused directly — no second
+implementation), and, for each direction, returns the resolved chunk only if
+it exists *and* shares both `work_id` and `section_id` (Sprint 1) with the
+current chunk. **Section-boundary rule, decided explicitly, not a default to
+infer**: a neighbor is only offered within the same section — at a section
+edge, that direction comes back `null` even though the adjacent paragraph_id
+resolves to a real chunk in the next/previous section. `null` also covers
+simply running out of paragraphs at the very start/end of a work; the
+response doesn't distinguish the two cases (the frontend's filmstrip cell
+renders the same disabled/empty state for both).
+
+**Known simplification, not built for the general case**: assumes
+production's current 1-paragraph-per-chunk scheme — a chunk is expected to
+have exactly one `paragraph_ids` entry, and neighbor resolution is a single
+paragraph_id lookup, not a chunk-level paragraph *range*. If chunking ever
+groups multiple paragraphs per chunk again (Sprint 14's chunk-size
+experiments), this endpoint needs updating to resolve the paragraph just
+past this chunk's own range in each direction instead — noted in the code
+(`src/api/main.py`), not solved preemptively.
+
+`ChunkNeighborSummary` (`src/api/schemas.py`) is close to `ChunkResult` but
+carries `section_id` (which `ChunkResult` doesn't) and no `score` (a textual
+neighbor was never retrieved/ranked). `src.api.converters.fetch_chunk_summary`
+rebuilds it from Qdrant's payload, the same accepted reindex-gap limitation
+as `fetch_chunk_input` (a chunk_id no longer indexed returns a 404 here,
+rather than silently dropping — there's no larger response for it to be
+dropped from).
+
+Test coverage: `tests/test_api.py`'s neighbor tests, against real chunk_ids
+hand-verified from `data/processed/chunks/1934_PM.json` — a chunk mid-section
+(both directions resolve), a chunk at a section's last paragraph (`next`
+would resolve to a real chunk_id, but in the following section — the actual
+section-boundary regression case), a chunk at a section's first paragraph
+(same, for `previous`), and an unknown `chunk_id` (404).
 
 ## Test coverage
 

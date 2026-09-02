@@ -3,6 +3,7 @@ import { IconChevronDown, IconChevronUp } from '@tabler/icons-react'
 import { computeConsideredSources } from '../lib/retrievalScope'
 import type { RetrieveFilterParams } from '../state/retrievalFilter'
 import { useTurnController } from '../state/useTurnController'
+import { useTurnUi } from '../state/turnUi'
 import { ChunkRail } from './ChunkRail'
 import { ConsideredSourceEntry } from './ConsideredSourceEntry'
 import { GenerationBlock } from './GenerationBlock'
@@ -37,8 +38,15 @@ export function TurnCard({
     onCreated,
     onUnknownDraft,
   })
+  const turnUi = useTurnUi()
   const [versionsOpen, setVersionsOpen] = useState(false)
   const consideredSources = computeConsideredSources(turn.filterParams)
+  // Sprint 12 `feat/chunk-neighbor-expansion`: a generation's chunk_ids can
+  // include a neighbor-origin chunk (state/turnUi.tsx's `neighbors` map),
+  // which turn.chunks alone (the retrieved 15) can't resolve a citation
+  // for — GenerationBlock's included-chunks list needs both.
+  const citableChunks =
+    turn.turnId !== null ? [...turn.chunks, ...turnUi.getNeighborChunks(turn.turnId)] : turn.chunks
   const hasGenerated = turn.generations.length > 0
   // useTurnController keeps `generations` chronological (oldest first,
   // matching GET /turns/{id}'s own `order_by(Generation.id)`,
@@ -130,7 +138,7 @@ export function TurnCard({
           key={currentGeneration.generationId ?? `pending-${latestIndex}`}
           entry={currentGeneration}
           isFirst={latestIndex === 0}
-          chunks={turn.chunks}
+          chunks={citableChunks}
           onReveal={() => turn.reveal(latestIndex)}
           onEvaluate={() => turn.evaluate(latestIndex)}
         />
@@ -165,7 +173,7 @@ export function TurnCard({
                   key={turn.generations[index].generationId ?? `pending-${index}`}
                   entry={turn.generations[index]}
                   isFirst={index === 0}
-                  chunks={turn.chunks}
+                  chunks={citableChunks}
                   onReveal={() => turn.reveal(index)}
                   onEvaluate={() => turn.evaluate(index)}
                 />

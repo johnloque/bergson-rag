@@ -28,6 +28,33 @@ export interface ChunkResult {
   score: number
 }
 
+// Sprint 12 `feat/chunk-neighbor-expansion`: one resolved textual neighbor
+// from GET /chunks/{chunk_id}/neighbors — mirrors
+// src/api/schemas.py's ChunkNeighborSummary. No `score` (a textual
+// neighbor was never retrieved/ranked, resolved by adjacency instead), and
+// carries `section_id` (unlike ChunkResult) even though the frontend never
+// reads it directly — the section-boundary decision already happened
+// server-side; this is just the full record needed to append the chunk to
+// the Screen 3 rail once included.
+export interface ChunkNeighborSummary {
+  chunk_id: string
+  work_id: string
+  section_id: string
+  section_path: string
+  paragraph_ids: string[]
+  page_start: PageRef
+  page_end: PageRef
+  text: string
+}
+
+// `previous`/`next` null means that direction has no neighbor to offer —
+// either the work runs out of paragraphs there, or the section-boundary
+// rule excluded it (docs/frontend.md).
+export interface ChunkNeighborsResponse {
+  previous: ChunkNeighborSummary | null
+  next: ChunkNeighborSummary | null
+}
+
 export type ChunkJudgmentLabel = 'pertinent' | 'partiellement pertinent' | 'non pertinent'
 
 export interface ChunkJudgment {

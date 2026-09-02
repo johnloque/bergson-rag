@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { ChunkResult, EvaluateResponse } from '../api/types'
-import { toChunkInput } from '../lib/chunkInput'
+import { neighborSummaryToChunkInput, toChunkInput } from '../lib/chunkInput'
 import { CHUNK_RAIL_TOP_K } from '../lib/retrievalConfig'
 import { cacheChunks, getCachedChunk } from './chunkCache'
 import { getPendingConversation, startOrAttachPendingConversation } from './pendingConversations'
@@ -265,6 +265,8 @@ export function useTurnController(options: TurnControllerOptions) {
           id,
           detail.retrieved_chunks.map((rc) => rc.chunk_id),
           detail.chunk_judgments,
+          detail.included_chunk_ids,
+          detail.neighbor_chunks,
         )
         const persistedEntries: GenerationEntry[] = detail.generations.map((g) => ({
           generationId: g.generation_id,
@@ -360,8 +362,14 @@ export function useTurnController(options: TurnControllerOptions) {
     setError(null)
     try {
       const includedChunks = chunks.filter((c) => turnUi.getIncluded(turnId, c.chunk_id))
+      // Sprint 12 `feat/chunk-neighbor-expansion`: the rail's included set
+      // is no longer just the retrieved 15 — a chunk included via Screen
+      // 4's neighbor exploration counts toward generation exactly the same
+      // way (state/turnUi.tsx's `neighbors` map is, by construction, always
+      // fully included — see that module's docstring).
+      const neighborChunks = turnUi.getNeighborChunks(turnId)
       const judgments = turnUi.getJudgments(turnId)
-      const chunkIds = includedChunks.map((c) => c.chunk_id)
+      const chunkIds = [...includedChunks.map((c) => c.chunk_id), ...neighborChunks.map((c) => c.chunk_id)]
       setGenerations((prev) => [
         ...prev,
         {
@@ -383,7 +391,10 @@ export function useTurnController(options: TurnControllerOptions) {
       const result = await pendingGenerations.start(String(turnId), () =>
         api.generate({
           turn_id: turnId,
-          chunks: includedChunks.map(toChunkInput),
+          chunks: [
+            ...includedChunks.map(toChunkInput),
+            ...neighborChunks.map(neighborSummaryToChunkInput),
+          ],
           chunk_judgments: judgments,
         }).then((r) => ({ generationId: r.generation_id, answer: r.answer, model: r.model_used })),
       )

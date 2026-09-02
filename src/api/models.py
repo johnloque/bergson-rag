@@ -72,6 +72,16 @@ class Turn(SQLModel, table=True):
     # `DateRange` re-validates it on the way back out.
     work_ids: list[str] | None = Field(default=None, sa_column=Column(JSON))
     date_range: dict | None = Field(default=None, sa_column=Column(JSON))
+    # Chunk-neighbor-persistence fix (docs/ROADMAP.md): which of this
+    # turn's retrieved chunks are currently included, as chosen in the
+    # chunk rail (frontend/src/state/turnUi.tsx's `included` map) — `None`
+    # means never customized, in which case the client falls back to its
+    # own default (top `DEFAULT_INCLUDED_COUNT` by rank), same contract as
+    # `work_ids`/`date_range` above. Set wholesale via
+    # `POST /turns/{id}/included-chunks` (`persistence.
+    # set_included_chunk_ids`), not accumulated — the client always sends
+    # its full current included set, not a delta.
+    included_chunk_ids: list[str] | None = Field(default=None, sa_column=Column(JSON))
 
 
 class RetrievedChunkRow(SQLModel, table=True):
@@ -147,3 +157,25 @@ class ChunkJudgmentRow(SQLModel, table=True):
     justification: str
     model: str
     created_at: datetime = Field(default_factory=_utcnow)
+
+
+class IncludedNeighborChunkRow(SQLModel, table=True):
+    """One row per manually-included neighbor chunk (docs/ROADMAP.md,
+    chunk-neighbor-persistence fix) — mirrors frontend/src/state/turnUi.tsx's
+    `neighbors` map exactly: composite primary key (turn_id, chunk_id), and
+    a row's mere presence *is* its inclusion state (no separate boolean,
+    unlike `included_chunk_ids` above which lists explicit true/false over
+    the retrieved set). Only `chunk_id` is stored, not chunk content — like
+    `RetrievedChunkRow`, full text/work_id/paragraph_ids is re-fetched live
+    from Qdrant by `GET /turns/{id}` (`src/api/converters.py:
+    fetch_chunk_summary`) rather than snapshotted, same accepted
+    reindex-gap limitation `src/api/models.py`'s module docstring already
+    documents. Replaced wholesale via `POST /turns/{id}/neighbor-chunks`
+    (`persistence.set_neighbor_chunk_ids`) — mirrors
+    `save_retrieved_chunks`'s own "client always sends its full current
+    set" contract, not an incremental upsert."""
+
+    __tablename__ = "included_neighbor_chunks"
+
+    turn_id: int = Field(foreign_key="turns.id", primary_key=True)
+    chunk_id: str = Field(primary_key=True)

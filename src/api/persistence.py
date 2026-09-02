@@ -23,6 +23,7 @@ from src.api.models import (
     Conversation,
     Evaluation,
     Generation,
+    IncludedNeighborChunkRow,
     RetrievedChunkRow,
     Turn,
 )
@@ -93,6 +94,43 @@ def save_retrieved_chunks(
             RetrievedChunkRow(turn_id=turn_id, chunk_id=chunk.chunk_id, rank=rank, score=score)
         )
     session.commit()
+
+
+def set_included_chunk_ids(session: Session, turn_id: int, chunk_ids: list[str]) -> None:
+    """Replaces `Turn.included_chunk_ids` wholesale — the client always
+    sends its full current included set (`state/turnUi.tsx`'s `included`
+    map, chunk rail-origin only), not a delta to apply. 404s if `turn_id`
+    is unknown, same discipline as `upsert_chunk_judgment`."""
+    turn = session.get(Turn, turn_id)
+    if turn is None:
+        raise HTTPException(status_code=404, detail=f"turn_id {turn_id} not found")
+    turn.included_chunk_ids = chunk_ids
+    session.add(turn)
+    session.commit()
+
+
+def set_neighbor_chunk_ids(session: Session, turn_id: int, chunk_ids: list[str]) -> None:
+    """Replaces the turn's manually-included neighbor chunk set wholesale —
+    same "client sends its full current set" contract as
+    `save_retrieved_chunks` and `set_included_chunk_ids` above, not an
+    incremental upsert. 404s if `turn_id` is unknown."""
+    if session.get(Turn, turn_id) is None:
+        raise HTTPException(status_code=404, detail=f"turn_id {turn_id} not found")
+    existing = session.exec(
+        select(IncludedNeighborChunkRow).where(IncludedNeighborChunkRow.turn_id == turn_id)
+    ).all()
+    for row in existing:
+        session.delete(row)
+    for chunk_id in chunk_ids:
+        session.add(IncludedNeighborChunkRow(turn_id=turn_id, chunk_id=chunk_id))
+    session.commit()
+
+
+def get_neighbor_chunk_ids(session: Session, turn_id: int) -> list[str]:
+    rows = session.exec(
+        select(IncludedNeighborChunkRow).where(IncludedNeighborChunkRow.turn_id == turn_id)
+    ).all()
+    return [row.chunk_id for row in rows]
 
 
 def load_chunk_judgments(session: Session, turn_id: int) -> dict[str, ChunkJudgment]:

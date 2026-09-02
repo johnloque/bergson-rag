@@ -1,7 +1,8 @@
 # Backend API and persistence (Sprint 7, `feat/api-endpoints` + `feat/api-persistence`)
 
 FastAPI scaffold in `src/api/`: `POST /retrieve`, `POST /generate`, `POST
-/evaluate`, `POST /judge-chunk`, `GET /turns/{id}`, `GET /conversations/{id}`.
+/evaluate`, `POST /judge-chunk`, `GET /turns/{id}`, `GET /conversations/{id}`,
+`GET /chunks/{chunk_id}/neighbors` (Sprint 12, see below).
 Each compute endpoint is a thin wrapper around an existing, already-tested
 function — `hybrid_search` + `rerank`, `generate_from_chunks`,
 `generate_evaluation` + `should_auto_expand`, and `judge_chunk` respectively
@@ -229,6 +230,96 @@ landing page's "last conversation" redirect have no way to enumerate
 conversations without it. `Conversation` gained a nullable `title` column
 for the rename action. Full frontend context:
 [`docs/frontend.md`](frontend.md).
+
+## `GET /chunks/{chunk_id}/neighbors` (Sprint 12, `feat/chunk-neighbor-expansion`)
+
+Not turn-scoped — any real `chunk_id` can be queried, no `turn_id`/session
+dependency. Backs Screen 4's position filmstrip (`docs/frontend.md`):
+`{previous: ChunkNeighborSummary | null, next: ChunkNeighborSummary | null}`.
+
+Resolves `chunk_id` -> its one `paragraph_id`
+(`src.paragraph_chunk_map.parse_paragraph_id`), looks up `paragraph_id - 1`/
+`+ 1` via the Sprint 11 paragraph_id -> chunk_id mapping
+(`src.paragraph_chunk_map.resolve_chunk_ids`, reused directly — no second
+implementation), and, for each direction, returns the resolved chunk only if
+it exists *and* shares both `work_id` and `section_id` (Sprint 1) with the
+current chunk. **Section-boundary rule, decided explicitly, not a default to
+infer**: a neighbor is only offered within the same section — at a section
+edge, that direction comes back `null` even though the adjacent paragraph_id
+resolves to a real chunk in the next/previous section. `null` also covers
+simply running out of paragraphs at the very start/end of a work; the
+response doesn't distinguish the two cases (the frontend's filmstrip cell
+renders the same disabled/empty state for both).
+
+**Known simplification, not built for the general case**: assumes
+production's current 1-paragraph-per-chunk scheme — a chunk is expected to
+have exactly one `paragraph_ids` entry, and neighbor resolution is a single
+paragraph_id lookup, not a chunk-level paragraph *range*. If chunking ever
+groups multiple paragraphs per chunk again (Sprint 14's chunk-size
+experiments), this endpoint needs updating to resolve the paragraph just
+past this chunk's own range in each direction instead — noted in the code
+(`src/api/main.py`), not solved preemptively.
+
+`ChunkNeighborSummary` (`src/api/schemas.py`) is close to `ChunkResult` but
+carries `section_id` (which `ChunkResult` doesn't) and no `score` (a textual
+neighbor was never retrieved/ranked). `src.api.converters.fetch_chunk_summary`
+rebuilds it from Qdrant's payload, the same accepted reindex-gap limitation
+as `fetch_chunk_input` (a chunk_id no longer indexed returns a 404 here,
+rather than silently dropping — there's no larger response for it to be
+dropped from).
+
+Test coverage: `tests/test_api.py`'s neighbor tests, against real chunk_ids
+hand-verified from `data/processed/chunks/1934_PM.json` — a chunk mid-section
+(both directions resolve), a chunk at a section's last paragraph (`next`
+would resolve to a real chunk_id, but in the following section — the actual
+section-boundary regression case), a chunk at a section's first paragraph
+(same, for `previous`), and an unknown `chunk_id` (404).
+
+## `POST /turns/{id}/included-chunks`, `POST /turns/{id}/neighbor-chunks` (chunk-neighbor-persistence fix)
+
+The chunk rail's include/exclude state and Screen 4's manually-included
+neighbor chunks (`state/turnUi.tsx`'s `included`/`neighbors` maps) were
+client-only until this fix — a reload reset the rail to its top-N default
+and lost every neighbor chunk entirely, and any past generation that had
+used a neighbor chunk showed "Œuvre inconnue" for it in the answer's
+included-chunks list, since that chunk_id no longer resolved to anything
+citable client-side.
+
+Both endpoints take `{chunk_ids: string[]}` and replace the turn's set
+wholesale — the client always sends its full current set, not a delta,
+mirroring `save_retrieved_chunks`'s own contract for `retrieved_chunks`.
+Called by `components/ChunkRail.tsx`'s existing debounced sync effect (the
+same 300ms debounce/trigger already used for `/confidence-preview`) on
+every include/exclude change. Both 404 if `turn_id` is unknown.
+
+- `included-chunks` sets `Turn.included_chunk_ids` (nullable JSON column;
+  `null` means never customized, so the client falls back to its own
+  top-`DEFAULT_INCLUDED_COUNT` default — same contract as `work_ids`/
+  `date_range`).
+- `neighbor-chunks` replaces the `included_neighbor_chunks` table's rows
+  for that turn (composite PK `(turn_id, chunk_id)`, presence = inclusion,
+  mirroring the frontend's own `neighbors` map). Only `chunk_id` is stored;
+  `GET /turns/{id}` resolves full content live from Qdrant
+  (`converters.fetch_chunk_summary`, the same function
+  `/chunks/{id}/neighbors` uses), same accepted reindex-gap limitation as
+  `retrieved_chunks`.
+
+`GET /turns/{id}` echoes both back as `included_chunk_ids` and
+`neighbor_chunks` (fully resolved `ChunkNeighborSummary[]`, a no-longer-
+indexed chunk_id simply dropped) — `state/useTurnController.ts`'s hydrate
+effect and `routes/ChunkDetail.tsx`'s own init effect both pass them into
+`turnUi.initTurn` to restore the exact rail state a prior session left.
+
+New `Turn.included_chunk_ids` column and `included_neighbor_chunks` table
+are both additive — `src/api/db.py`'s existing `_sync_additive_columns`/
+`create_all` migration adds them to an already-created dev DB with no
+backfill needed (the column is nullable, the table starts empty) and no
+data loss to existing rows.
+
+Test coverage: `tests/test_persistence.py` — persisted value read back by
+`GET /turns/{id}`, wholesale-replace (not accumulate) on a second call,
+`neighbor-chunks`'s resolution against a real Qdrant chunk_id, and 404s for
+both on an unknown `turn_id`.
 
 ## Test coverage
 

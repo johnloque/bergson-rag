@@ -48,6 +48,7 @@ from src.generation.generate import (
 )
 from src.indexing.embeddings import DenseEmbedder, SparseEmbedder
 from src.indexing.qdrant_index import COLLECTION_NAME, point_id_for
+from src.paragraph_chunk_map import DEFAULT_CHUNKS_DIR
 from src.retrieval.hybrid import hybrid_search
 from src.retrieval.reranking import CrossEncoderReranker, rerank
 
@@ -127,6 +128,17 @@ _qdrant_skip = pytest.mark.skipif(
     not _collection_populated(),
     reason="Qdrant not reachable or `bergson_chunks` empty — run `docker compose up qdrant` "
     "and scripts/build_index.py first",
+)
+
+# GET /chunks/{chunk_id}/neighbors (docs/ROADMAP.md, Sprint 12
+# `feat/chunk-neighbor-expansion`) needs both the indexed Qdrant collection
+# (for chunk payloads) and the local chunks build artifact (for the
+# paragraph_id -> chunk_id lookup, src/paragraph_chunk_map.py) — same
+# discipline as tests/test_paragraph_chunk_map.py's own skip.
+_neighbor_skip = pytest.mark.skipif(
+    not _collection_populated() or not DEFAULT_CHUNKS_DIR.exists(),
+    reason="Qdrant not reachable/empty, or data/processed/chunks not built — run "
+    "`docker compose up qdrant`, scripts/run_ingestion.py, and scripts/build_index.py first",
 )
 
 RESOLVED_FALLBACK_MODEL = os.environ.get(FALLBACK_MODEL_ENV_VAR, DEFAULT_FALLBACK_MODEL)
@@ -720,4 +732,67 @@ def test_judge_chunk_unknown_turn_id_returns_404(client):
     response = client.post(
         "/judge-chunk", json={"query": "une question", "chunk": chunk, "turn_id": 999999}
     )
+    assert response.status_code == 404
+
+
+# --- GET /chunks/{chunk_id}/neighbors ----------------------------------------
+#
+# Fixtures below are real chunk_ids from 1934_PM's current chunking
+# (data/processed/chunks/1934_PM.json), hand-verified against that file:
+# section 1934_PM_s2 runs paragraphs 4-24 (chunks c4-c24), section
+# 1934_PM_s3 starts right after at paragraph 25 (chunk c25) — a real,
+# adjacent-paragraph, different-section pair, not a synthetic one.
+
+# Mid-section: both paragraph_id-1 and +1 exist and stay inside 1934_PM_s2.
+NEIGHBOR_MID_CHUNK_ID = "1934_PM_c5"
+NEIGHBOR_MID_PREV_ID = "1934_PM_c4"
+NEIGHBOR_MID_NEXT_ID = "1934_PM_c6"
+
+# Last chunk of 1934_PM_s2: paragraph_id+1 (p25) exists but resolves to
+# 1934_PM_c25, which belongs to the next section (1934_PM_s3) — the actual
+# section-boundary regression case, not just "no more paragraphs".
+NEIGHBOR_SECTION_LAST_CHUNK_ID = "1934_PM_c24"
+NEIGHBOR_SECTION_LAST_PREV_ID = "1934_PM_c23"
+
+# First chunk of 1934_PM_s3: paragraph_id-1 (p24) exists but resolves to
+# 1934_PM_c24, which belongs to the previous section (1934_PM_s2).
+NEIGHBOR_SECTION_FIRST_CHUNK_ID = "1934_PM_c25"
+NEIGHBOR_SECTION_FIRST_NEXT_ID = "1934_PM_c26"
+
+
+@_neighbor_skip
+def test_chunk_neighbors_mid_section_returns_both_directions(client):
+    response = client.get(f"/chunks/{NEIGHBOR_MID_CHUNK_ID}/neighbors")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["previous"]["chunk_id"] == NEIGHBOR_MID_PREV_ID
+    assert body["next"]["chunk_id"] == NEIGHBOR_MID_NEXT_ID
+
+
+@_neighbor_skip
+def test_chunk_neighbors_at_section_end_has_no_next(client):
+    """Last paragraph of a section: `next` resolves to a real chunk_id, but
+    it's in the following section — must come back null, not that chunk."""
+    response = client.get(f"/chunks/{NEIGHBOR_SECTION_LAST_CHUNK_ID}/neighbors")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["previous"]["chunk_id"] == NEIGHBOR_SECTION_LAST_PREV_ID
+    assert body["next"] is None
+
+
+@_neighbor_skip
+def test_chunk_neighbors_at_section_start_has_no_previous(client):
+    """First paragraph of a section: `previous` resolves to a real chunk_id
+    in the preceding section — must come back null (the section-boundary
+    regression test: an existing paragraph_id-1 is not enough on its own)."""
+    response = client.get(f"/chunks/{NEIGHBOR_SECTION_FIRST_CHUNK_ID}/neighbors")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["previous"] is None
+    assert body["next"]["chunk_id"] == NEIGHBOR_SECTION_FIRST_NEXT_ID
+
+
+@_qdrant_skip
+def test_chunk_neighbors_unknown_chunk_id_returns_404(client):
+    response = client.get("/chunks/NOT_A_REAL_CHUNK_ID/neighbors")
     assert response.status_code == 404

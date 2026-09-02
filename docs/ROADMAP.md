@@ -376,14 +376,22 @@ considered" detail and server-side filter persistence
 (`feat/retrieval-filter-ui`, `fix/date-range-slider-interaction`); chunk
 rail defaults, real citations, and the unified Générer/Régénérer button
 (`feat/chunk-rail-and-citations`); answer display improvements
-(`feat/answer-display-improvements`). **Still pending, verified against
+(`feat/answer-display-improvements`); chunk-detail neighbor-inspection —
+Screen 4 restructured into a master-detail view (retrieval rail + textual-
+position filmstrip + one shared detail panel) and the Screen 3 rail
+extended to surface neighbor-included chunks, backed by a new
+`GET /chunks/{chunk_id}/neighbors` endpoint
+(`feat/chunk-neighbor-expansion`), later refined so manually-included
+neighbor chunks render in their own titled rail (separate from the
+retrieved-candidates rail, no more scrolling one to see the other) and
+both that rail and the position filmstrip show each chunk's paragraph
+distance from the nearest originally-retrieved anchor (e.g. "+1"/"-2").
+**Still pending, verified against
 current code, not assumed done**: the landing page still follows Sprint
 8's once-per-session behavior (no app-icon re-entry point yet); the
 sidebar remains a single fixed column, not three resizable/collapsible
-sections; no settings panel exists yet; chunk-detail neighbor-inspection
-remains open, tracked separately from `feat/chunk-rail-and-citations`'s
-scope. Full design, current status per item, and test coverage:
-[`docs/frontend.md`](frontend.md).
+sections; no settings panel exists yet. Full design, current status per
+item, and test coverage: [`docs/frontend.md`](frontend.md).
 
 ### Sprint 13 — MCP layer
 Pure search tools: `/retrieve` and `/lookup` (work + paragraph number, or

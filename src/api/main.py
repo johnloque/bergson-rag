@@ -143,6 +143,8 @@ from src.api.schemas import (
     RetrievedChunkOut,
     RetrieveRequest,
     RetrieveResponse,
+    SetChunkIdsRequest,
+    SetChunkIdsResponse,
     StructuralCheckOut,
     TitleYearMismatchOut,
     TurnDetailResponse,
@@ -428,6 +430,38 @@ def judge_chunk_endpoint(
     return JudgeChunkResponse(label=judgment["label"], justification=judgment["justification"])
 
 
+@app.post("/turns/{turn_id}/included-chunks", response_model=SetChunkIdsResponse)
+def set_included_chunks(
+    turn_id: int, body: SetChunkIdsRequest, session: Session = Depends(get_session)
+) -> SetChunkIdsResponse:
+    """Persists the chunk rail's current included subset of `turn_id`'s
+    retrieved chunks (docs/ROADMAP.md, chunk-neighbor-persistence fix) —
+    replaces wholesale, mirroring `save_retrieved_chunks`'s own "client
+    sends its full current set" contract, not an incremental toggle. 404s
+    if `turn_id` is unknown. Called on every include/exclude change
+    (`frontend/src/components/ChunkRail.tsx`, debounced), not just at
+    generation time, so a reload restores the exact rail state a prior
+    session left instead of resetting to the top-N default."""
+    persistence.set_included_chunk_ids(session, turn_id, body.chunk_ids)
+    return SetChunkIdsResponse(chunk_ids=body.chunk_ids)
+
+
+@app.post("/turns/{turn_id}/neighbor-chunks", response_model=SetChunkIdsResponse)
+def set_neighbor_chunks(
+    turn_id: int, body: SetChunkIdsRequest, session: Session = Depends(get_session)
+) -> SetChunkIdsResponse:
+    """Persists `turn_id`'s currently manually-included neighbor chunks
+    (docs/ROADMAP.md, chunk-neighbor-persistence fix) — replaces wholesale,
+    same contract as `set_included_chunks` above. 404s if `turn_id` is
+    unknown. Without this, `state/turnUi.tsx`'s `neighbors` map was
+    client-only: a reload lost which neighbor chunks were included, and any
+    past generation that used one showed "Œuvre inconnue" for it
+    (`lib/generationChunks.ts`) since its chunk_id no longer resolved to
+    anything citable."""
+    persistence.set_neighbor_chunk_ids(session, turn_id, body.chunk_ids)
+    return SetChunkIdsResponse(chunk_ids=body.chunk_ids)
+
+
 @app.get("/chunks/{chunk_id}/neighbors", response_model=ChunkNeighborsResponse)
 def get_chunk_neighbors(chunk_id: str) -> ChunkNeighborsResponse:
     """Textual-position neighbors for the Screen 4 filmstrip (docs/ROADMAP.md,
@@ -516,6 +550,17 @@ def get_turn(turn_id: int, session: Session = Depends(get_session)) -> TurnDetai
             )
         )
 
+    # Chunk-neighbor-persistence fix (docs/ROADMAP.md): resolved the same
+    # way retrieved_chunks are above — live from Qdrant by chunk_id, a
+    # missing one simply dropped (accepted reindex-gap limitation, module
+    # docstring) rather than fabricated.
+    neighbor_chunk_ids = persistence.get_neighbor_chunk_ids(session, turn_id)
+    neighbor_chunks = [
+        summary
+        for summary in (fetch_chunk_summary(client, chunk_id) for chunk_id in neighbor_chunk_ids)
+        if summary is not None
+    ]
+
     generation_outs = []
     for generation in generations:
         evaluation = persistence.get_evaluation_for_generation(session, generation.id)
@@ -542,6 +587,8 @@ def get_turn(turn_id: int, session: Session = Depends(get_session)) -> TurnDetai
         chunk_judgments=chunk_judgments,
         work_ids=turn.work_ids,
         date_range=turn.date_range,
+        included_chunk_ids=turn.included_chunk_ids,
+        neighbor_chunks=neighbor_chunks,
     )
 
 

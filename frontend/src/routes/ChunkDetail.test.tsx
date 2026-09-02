@@ -211,6 +211,6 @@ describe('ChunkDetail — master-detail', () => {
       expect(card).toHaveAttribute('data-origin', 'neighbor')
       expect(within(card).getByTestId('chunk-citation')).toHaveTextContent(formatCitation(NEIGHBOR_C3))
     }
-    expect(screen.getAllByTestId('neighbor-divider')).toHaveLength(2)
+    expect(screen.getAllByTestId('neighbor-rail')).toHaveLength(2)
   })
 })

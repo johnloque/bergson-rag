@@ -110,3 +110,52 @@ describe('turnUi — neighbor-origin inclusion', () => {
     expect(result.current.getNeighborChunks(2)).toHaveLength(0)
   })
 })
+
+// docs/ROADMAP.md, chunk-neighbor-persistence fix: GET /turns/{id} now
+// returns the turn's persisted included_chunk_ids/neighbor_chunks
+// (previously client-only and lost on reload) — initTurn restores them
+// instead of always falling back to the top-N default / an empty
+// neighbor set.
+describe('turnUi — restoring persisted inclusion state at initTurn', () => {
+  it('uses the server-persisted included_chunk_ids instead of the top-N default', () => {
+    const { result } = renderHook(() => useTurnUi(), { wrapper })
+    act(() => result.current.initTurn(1, ['c1', 'c2', 'c3', 'c4', 'c5'], undefined, ['c4']))
+
+    expect(result.current.getIncluded(1, 'c1')).toBe(false)
+    expect(result.current.getIncluded(1, 'c4')).toBe(true)
+    expect(result.current.getIncludedCount(1)).toBe(1)
+  })
+
+  it('falls back to the top-N default when includedChunkIds is null (never customized)', () => {
+    const { result } = renderHook(() => useTurnUi(), { wrapper })
+    act(() => result.current.initTurn(1, ['c1', 'c2', 'c3', 'c4', 'c5'], undefined, null))
+
+    expect(result.current.getIncludedCount(1)).toBe(3)
+    expect(result.current.getIncluded(1, 'c1')).toBe(true)
+    expect(result.current.getIncluded(1, 'c4')).toBe(false)
+  })
+
+  it('seeds the neighbors map from server-persisted neighborChunks', () => {
+    const { result } = renderHook(() => useTurnUi(), { wrapper })
+    act(() =>
+      result.current.initTurn(1, ['c1'], undefined, undefined, [neighbor('n1'), neighbor('n2')]),
+    )
+
+    expect(result.current.getNeighborChunks(1).map((c) => c.chunk_id).sort()).toEqual(['n1', 'n2'])
+    expect(result.current.getIncluded(1, 'n1')).toBe(true)
+    expect(result.current.getIncludedCount(1)).toBe(3)
+  })
+
+  it('a second initTurn call for an already-seeded turn never clobbers a toggle made since', () => {
+    const { result } = renderHook(() => useTurnUi(), { wrapper })
+    act(() => result.current.initTurn(1, ['c1', 'c2', 'c3', 'c4', 'c5'], undefined, ['c1']))
+    act(() => result.current.toggleChunk(1, 'c2')) // c1, c2 now both included
+
+    // A remount (e.g. Screen 3 and Screen 4 both mounted for this turn)
+    // re-runs initTurn with the same server snapshot — must not revert c2.
+    act(() => result.current.initTurn(1, ['c1', 'c2', 'c3', 'c4', 'c5'], undefined, ['c1']))
+
+    expect(result.current.getIncluded(1, 'c2')).toBe(true)
+    expect(result.current.getIncludedCount(1)).toBe(2)
+  })
+})

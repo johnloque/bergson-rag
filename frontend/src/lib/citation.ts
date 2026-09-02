@@ -46,7 +46,7 @@ const WORKS_BY_ID = new Map(WORKS.map((w) => [w.id, w]))
 
 const PARAGRAPH_INDEX_PATTERN = /_p(\d+)$/
 
-function paragraphIndex(paragraphId: string | undefined): number | null {
+export function paragraphIndex(paragraphId: string | undefined): number | null {
   if (!paragraphId) return null
   const match = paragraphId.match(PARAGRAPH_INDEX_PATTERN)
   return match ? Number(match[1]) : null

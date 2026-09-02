@@ -239,6 +239,26 @@ export interface TurnDetailResponse {
   // reloaded page can reconstruct and display it (state/useTurnController.ts).
   work_ids: string[] | null
   date_range: DateRange | null
+  // Chunk-neighbor-persistence fix (docs/ROADMAP.md): the turn's
+  // currently-included subset of `retrieved_chunks` (null = never
+  // customized, state/turnUi.tsx applies its own top-N default) and its
+  // manually-included neighbor chunks, fully resolved — what lets
+  // initTurn restore the exact chunk rail state a prior session left,
+  // instead of resetting to defaults on reload.
+  included_chunk_ids: string[] | null
+  neighbor_chunks: ChunkNeighborSummary[]
+}
+
+// POST /turns/{id}/included-chunks and POST /turns/{id}/neighbor-chunks
+// (docs/ROADMAP.md, chunk-neighbor-persistence fix) share this shape —
+// both replace the turn's chunk_id set wholesale, mirroring how
+// `/retrieve` already replaces `retrieved_chunks` wholesale.
+export interface SetChunkIdsRequest {
+  chunk_ids: string[]
+}
+
+export interface SetChunkIdsResponse {
+  chunk_ids: string[]
 }
 
 export interface ConversationTurnOut {

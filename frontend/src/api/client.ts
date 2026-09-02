@@ -13,6 +13,8 @@ import type {
   JudgeChunkResponse,
   RetrieveRequest,
   RetrieveResponse,
+  SetChunkIdsRequest,
+  SetChunkIdsResponse,
   TurnDetailResponse,
 } from './types'
 
@@ -67,6 +69,22 @@ export const api = {
     request<JudgeChunkResponse>('/judge-chunk', { method: 'POST', body: JSON.stringify(body) }),
 
   getTurn: (turnId: number) => request<TurnDetailResponse>(`/turns/${turnId}`),
+
+  // Chunk-neighbor-persistence fix (docs/ROADMAP.md): replaces the turn's
+  // current included/neighbor chunk_id set wholesale, called by
+  // components/ChunkRail.tsx's debounced sync effect on every
+  // include/exclude change.
+  setIncludedChunks: (turnId: number, body: SetChunkIdsRequest) =>
+    request<SetChunkIdsResponse>(`/turns/${turnId}/included-chunks`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  setNeighborChunks: (turnId: number, body: SetChunkIdsRequest) =>
+    request<SetChunkIdsResponse>(`/turns/${turnId}/neighbor-chunks`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 
   getChunkNeighbors: (chunkId: string) =>
     request<ChunkNeighborsResponse>(`/chunks/${chunkId}/neighbors`),

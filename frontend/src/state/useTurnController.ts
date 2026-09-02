@@ -265,6 +265,8 @@ export function useTurnController(options: TurnControllerOptions) {
           id,
           detail.retrieved_chunks.map((rc) => rc.chunk_id),
           detail.chunk_judgments,
+          detail.included_chunk_ids,
+          detail.neighbor_chunks,
         )
         const persistedEntries: GenerationEntry[] = detail.generations.map((g) => ({
           generationId: g.generation_id,

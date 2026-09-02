@@ -44,11 +44,18 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function renderFilmstrip(focused: FocusedChunk, onSelect: (chunk: ChunkNeighborSummary) => void) {
+// Anchors default to the focused chunk itself — treats it as the
+// originally-retrieved chunk (offset 0), so a resolved previous/next cell
+// one paragraph away shows "-1"/"+1".
+function renderFilmstrip(
+  focused: FocusedChunk,
+  onSelect: (chunk: ChunkNeighborSummary) => void,
+  anchors: ChunkResult[] = [chunkResult(focused.chunk_id)],
+) {
   const queryClient = new QueryClient()
   return render(
     <QueryClientProvider client={queryClient}>
-      <PositionFilmstrip focusedChunk={focused} onSelect={onSelect} />
+      <PositionFilmstrip focusedChunk={focused} anchors={anchors} onSelect={onSelect} />
     </QueryClientProvider>,
   )
 }
@@ -81,6 +88,68 @@ describe('PositionFilmstrip', () => {
     // Compact selector: the focused chunk's own body text never renders here.
     expect(screen.queryByText('Texte actuel.')).not.toBeInTheDocument()
     expect(screen.queryByText('Texte voisin.')).not.toBeInTheDocument()
+  })
+
+  // docs/ROADMAP.md, Sprint 12 refinement: each cell shows its distance,
+  // in paragraphs, from the nearest originally-retrieved anchor —
+  // lib/chunkOffset.ts, not tracked through navigation.
+  it('labels each cell with its distance from the originally-retrieved anchor', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ previous: neighborSummary('1907_EC_c4', '1907_EC_p4'), next: neighborSummary('1907_EC_c6', '1907_EC_p6') }),
+      ),
+    )
+    const focused = focusedChunkFromResult(chunkResult('1907_EC_c5'))
+    renderFilmstrip(focused, vi.fn(), [chunkResult('1907_EC_c5')])
+
+    await waitFor(() => expect(screen.getByTestId('filmstrip-cell-previous-offset')).toHaveTextContent('-1'))
+    expect(screen.getByTestId('filmstrip-cell-current-offset')).toHaveTextContent('0')
+    expect(screen.getByTestId('filmstrip-cell-next-offset')).toHaveTextContent('+1')
+  })
+
+  // QA regression: when the focused chunk is itself a retrieved anchor
+  // (e.g. rank 3) and its *previous* neighbor happens to ALSO be a
+  // retrieved anchor (rank-adjacent, but a different rank), each cell used
+  // to independently look up its own nearest anchor — the previous cell
+  // then found itself as its own nearest anchor (distance 0) instead of
+  // being positioned relative to the chunk actually being inspected, so
+  // both cells showed "0". previous/next must always be exactly
+  // currentOffset ∓ 1.
+  it('positions the previous cell relative to the focused chunk even when the previous chunk is itself a retrieved anchor', async () => {
+    function pmChunkResult(chunkId: string, paragraph: number): ChunkResult {
+      return {
+        chunk_id: chunkId,
+        work_id: '1934_PM',
+        section_path: '',
+        paragraph_ids: [`1934_PM_p${paragraph}`],
+        page_start: EMPTY_PAGE,
+        page_end: EMPTY_PAGE,
+        text: 'Texte.',
+        score: 0.7,
+      }
+    }
+    const c67 = pmChunkResult('1934_PM_c67', 67)
+    const c68 = pmChunkResult('1934_PM_c68', 68)
+    const previousNeighbor: ChunkNeighborSummary = {
+      chunk_id: c67.chunk_id,
+      work_id: c67.work_id,
+      section_id: '1934_PM_s1',
+      section_path: '',
+      paragraph_ids: c67.paragraph_ids,
+      page_start: EMPTY_PAGE,
+      page_end: EMPTY_PAGE,
+      text: c67.text,
+    }
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ previous: previousNeighbor, next: null })))
+    const focused = focusedChunkFromResult(c68)
+    // Both c67 and c68 are retrieved anchors, ranked 3 apart — the exact
+    // reported scenario (a rank-3 chunk whose textual predecessor is also
+    // in the retrieved set, just at a different rank).
+    renderFilmstrip(focused, vi.fn(), [c67, pmChunkResult('1934_PM_c50', 50), c68])
+
+    await waitFor(() => expect(screen.getByTestId('filmstrip-cell-previous-offset')).toHaveTextContent('-1'))
+    expect(screen.getByTestId('filmstrip-cell-current-offset')).toHaveTextContent('0')
   })
 
   it('renders a disabled, empty cell (not nothing) for a null neighbor — a section boundary', async () => {
@@ -117,7 +186,11 @@ describe('PositionFilmstrip', () => {
     const queryClient = new QueryClient()
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
-        <PositionFilmstrip focusedChunk={focusedChunkFromResult(chunkResult('1907_EC_c5'))} onSelect={vi.fn()} />
+        <PositionFilmstrip
+          focusedChunk={focusedChunkFromResult(chunkResult('1907_EC_c5'))}
+          anchors={[chunkResult('1907_EC_c5')]}
+          onSelect={vi.fn()}
+        />
       </QueryClientProvider>,
     )
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
@@ -125,7 +198,11 @@ describe('PositionFilmstrip', () => {
 
     rerender(
       <QueryClientProvider client={queryClient}>
-        <PositionFilmstrip focusedChunk={focusedChunkFromResult(chunkResult('1907_EC_c6'))} onSelect={vi.fn()} />
+        <PositionFilmstrip
+          focusedChunk={focusedChunkFromResult(chunkResult('1907_EC_c6'))}
+          anchors={[chunkResult('1907_EC_c5')]}
+          onSelect={vi.fn()}
+        />
       </QueryClientProvider>,
     )
 

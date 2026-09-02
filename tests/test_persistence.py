@@ -484,6 +484,87 @@ def test_get_turn_unknown_id_returns_404(client):
     assert client.get("/turns/999999").status_code == 404
 
 
+# --- POST /turns/{id}/included-chunks, POST /turns/{id}/neighbor-chunks ----
+# docs/ROADMAP.md, chunk-neighbor-persistence fix: the chunk rail's
+# include/exclude state and manually-included neighbor chunks were
+# previously client-only (frontend/src/state/turnUi.tsx) and lost on
+# reload — these two endpoints persist them, and GET /turns/{id} reads
+# them back.
+
+
+def test_get_turn_included_chunk_ids_defaults_to_null_until_set(client, engine):
+    turn_id = _create_turn(engine, Q001_QUERY, retrieved_chunks=[(Q001_CHUNK_ID, 0.9)])
+    body = client.get(f"/turns/{turn_id}").json()
+    assert body["included_chunk_ids"] is None
+    assert body["neighbor_chunks"] == []
+
+
+def test_set_included_chunks_persists_and_is_read_back_by_get_turn(client, engine):
+    turn_id = _create_turn(
+        engine,
+        Q001_QUERY,
+        retrieved_chunks=[(Q001_CHUNK_ID, 0.9), (Q007_CHUNK_ID, 0.5)],
+    )
+    response = client.post(f"/turns/{turn_id}/included-chunks", json={"chunk_ids": [Q001_CHUNK_ID]})
+    assert response.status_code == 200
+    assert response.json() == {"chunk_ids": [Q001_CHUNK_ID]}
+
+    body = client.get(f"/turns/{turn_id}").json()
+    assert body["included_chunk_ids"] == [Q001_CHUNK_ID]
+
+
+def test_set_included_chunks_replaces_wholesale(client, engine):
+    turn_id = _create_turn(engine, Q001_QUERY, retrieved_chunks=[(Q001_CHUNK_ID, 0.9)])
+    client.post(f"/turns/{turn_id}/included-chunks", json={"chunk_ids": [Q001_CHUNK_ID]})
+    client.post(f"/turns/{turn_id}/included-chunks", json={"chunk_ids": []})
+
+    body = client.get(f"/turns/{turn_id}").json()
+    assert body["included_chunk_ids"] == []
+
+
+def test_set_included_chunks_unknown_turn_id_returns_404(client):
+    response = client.post("/turns/999999/included-chunks", json={"chunk_ids": []})
+    assert response.status_code == 404
+
+
+@_qdrant_skip
+def test_set_neighbor_chunks_persists_and_is_resolved_by_get_turn(client, engine, qdrant_client):
+    """The neighbor chunk was never part of `retrieved_chunks` — only its
+    chunk_id is sent and stored (`IncludedNeighborChunkRow`); full content
+    is resolved live from Qdrant by GET /turns/{id}, same as
+    `retrieved_chunks` already are. This is what fixes the "Œuvre inconnue"
+    citation regression: a manually-included neighbor now survives a
+    reload with its real work_id/paragraph_ids intact."""
+    turn_id = _create_turn(engine, Q001_QUERY, retrieved_chunks=[(Q001_CHUNK_ID, 0.9)])
+    response = client.post(f"/turns/{turn_id}/neighbor-chunks", json={"chunk_ids": [Q007_CHUNK_ID]})
+    assert response.status_code == 200
+    assert response.json() == {"chunk_ids": [Q007_CHUNK_ID]}
+
+    body = client.get(f"/turns/{turn_id}").json()
+    assert len(body["neighbor_chunks"]) == 1
+    neighbor = body["neighbor_chunks"][0]
+    assert neighbor["chunk_id"] == Q007_CHUNK_ID
+    expected = _load_chunk_input(qdrant_client, Q007_CHUNK_ID)
+    assert neighbor["work_id"] == expected["work_id"]
+    assert neighbor["paragraph_ids"] == expected["paragraph_ids"]
+    assert neighbor["text"] == expected["text"]
+
+
+@_qdrant_skip
+def test_set_neighbor_chunks_replaces_wholesale(client, engine):
+    turn_id = _create_turn(engine, Q001_QUERY, retrieved_chunks=[(Q001_CHUNK_ID, 0.9)])
+    client.post(f"/turns/{turn_id}/neighbor-chunks", json={"chunk_ids": [Q007_CHUNK_ID]})
+    client.post(f"/turns/{turn_id}/neighbor-chunks", json={"chunk_ids": []})
+
+    body = client.get(f"/turns/{turn_id}").json()
+    assert body["neighbor_chunks"] == []
+
+
+def test_set_neighbor_chunks_unknown_turn_id_returns_404(client):
+    response = client.post("/turns/999999/neighbor-chunks", json={"chunk_ids": []})
+    assert response.status_code == 404
+
+
 # --- GET /conversations/{id} -------------------------------------------------
 
 

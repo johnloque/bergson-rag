@@ -535,9 +535,14 @@ at `initTurn`) is what lets the reducer/components tell a rail-origin
 chunk_id from a neighbor-origin one — the same check the origin tag above
 uses.
 
-`components/ChunkRail.tsx` renders `turnUi.getNeighborChunks(turnId)` after
-the retrieved-candidates loop, past a thin dashed vertical divider
-(`data-testid="neighbor-divider"`). Neighbor-origin cards:
+`components/ChunkRail.tsx` renders `turnUi.getNeighborChunks(turnId)` in a
+**second, separately-titled rail row** below the retrieved-candidates rail
+(`data-testid="neighbor-rail"`, titled "Chunks voisins ajoutés
+manuellement" — the retrieved rail above is titled "Chunks issus de la
+recherche") — a refinement over the original single-rail-plus-divider
+layout, so a card added via Screen 4's neighbor exploration is visible
+without having to scroll the first rail out from under it. Each rail
+scrolls independently. Neighbor-origin cards:
 
 - Are always shown as included (existence in the map = included) with a
   **dashed** red border, vs. rail-origin cards' solid red border when
@@ -545,7 +550,20 @@ the retrieved-candidates loop, past a thin dashed vertical divider
   than inventing a third visual style.
 - Show the real citation (`formatCitation`, work + paragraph — never a
   rank-based position, since a neighbor was never ranked) and a small arrow
-  icon (`IconArrowsExchange`) marking neighbor origin.
+  icon (`IconArrowsExchange`) marking neighbor origin. **No distance
+  badge** here (QA correction after an earlier version added one, `lib/
+  chunkOffset.ts`'s `distanceFromNearestAnchor`): this rail has no reliable
+  way to know which originally-retrieved chunk a given neighbor was
+  actually expanded from — the nearest one by paragraph distance isn't
+  necessarily the one the user navigated from — so a "+1"/"-2" badge here
+  would look precise while sometimes being wrong. `PositionFilmstrip`'s
+  previous/current/next cells (`data-testid="filmstrip-cell-{role}-offset"`)
+  keep their own badge: those three are always exactly ±1 from whichever
+  chunk is currently focused (derived from the *current* cell's own offset,
+  not independently recomputed per cell — an earlier version that did
+  recompute independently could show "0" on two adjacent cells when the
+  previous/next chunk happened to also be a retrieved anchor), so there's
+  no such ambiguity for them.
 - Their "Exclure" click calls `toggleNeighborChunk`, which **removes the
   card from the rail entirely** — not a greyed-out permanently-excluded
   card the way excluding a rail-origin (actually-retrieved) chunk stays
@@ -571,11 +589,14 @@ inconnue" for it in the included-chunks disclosure.
 Test coverage: `state/turnUi.test.tsx` (the neighbor map's toggle-on/toggle-
 off-removes-entirely behavior, the shared cap combining rail- and
 neighbor-origin counts, `isRetrieved`, per-turn isolation);
-`components/ChunkRail.neighbors.test.tsx` (the appended card, dashed
-divider, shared counter, and exclude-removes-entirely behavior);
-`components/PositionFilmstrip.test.tsx` (cell rendering from a real
-neighbors response, the disabled/empty null-neighbor cell, click-to-select,
-refetch-on-focus-change); `routes/ChunkDetail.test.tsx` (initial URL-driven
+`components/ChunkRail.neighbors.test.tsx` (the second titled rail, its
+shared counter, exclude-removes-entirely behavior, and the absence of any
+distance badge); `components/PositionFilmstrip.test.tsx` (cell rendering
+from a real neighbors response, each cell's distance badge — including the
+regression case where the previous/next chunk is itself a retrieved
+anchor — the disabled/empty null-neighbor cell, click-to-select,
+refetch-on-focus-change);
+`routes/ChunkDetail.test.tsx` (initial URL-driven
 focus and its origin tag, a rail-card click and a filmstrip-cell click both
 updating the same detail panel with matching origin tags, and — sharing one
 `TurnUiProvider` between a `ChunkDetail` and a standalone `ChunkRail`

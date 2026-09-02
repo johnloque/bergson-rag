@@ -1,9 +1,10 @@
 import { useEffect } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ChunkRail } from './ChunkRail'
+import { api } from '../api/client'
 import { formatCitation } from '../lib/citation'
 import { TurnUiProvider, useTurnUi } from '../state/turnUi'
 import type { ChunkNeighborSummary, ChunkResult } from '../api/types'
@@ -67,15 +68,42 @@ function renderRailWithNeighbor(neighbor: ChunkNeighborSummary | null, chunks: C
 // rail extension — a chunk included via Screen 4's neighbor exploration
 // must show up here too, distinct from the retrieved-candidate cards.
 describe('ChunkRail — neighbor-origin cards', () => {
-  it('appends a neighbor-origin card after the retrieved candidates, with a dashed divider and the real citation', async () => {
+  it('renders a neighbor-origin card in a second, separately-titled rail below the retrieved candidates, with the real citation', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ retrieval_confidence_tier: 'moyenne' })))
     renderRailWithNeighbor(NEIGHBOR)
 
-    expect(screen.getByTestId('neighbor-divider')).toBeInTheDocument()
-    const card = screen.getByTestId(`chunk-card-${NEIGHBOR.chunk_id}`)
+    expect(screen.getByText('Chunks issus de la recherche')).toBeInTheDocument()
+    expect(screen.getByText('Chunks voisins ajoutés manuellement')).toBeInTheDocument()
+    const neighborRail = screen.getByTestId('neighbor-rail')
+    const card = within(neighborRail).getByTestId(`chunk-card-${NEIGHBOR.chunk_id}`)
     expect(card).toHaveAttribute('data-included', 'true')
     expect(card).toHaveAttribute('data-origin', 'neighbor')
     expect(within(card).getByTestId('chunk-citation')).toHaveTextContent(formatCitation(NEIGHBOR))
+  })
+
+  // docs/ROADMAP.md: no distance badge on the second rail's cards, even
+  // when a same-work retrieved anchor exists to measure against — unlike
+  // PositionFilmstrip's cells (always exactly ±1 from the chunk actually
+  // being inspected), this rail has no reliable way to know which
+  // retrieved chunk a given neighbor was actually expanded from, so a
+  // "nearest anchor by paragraph distance" badge here would look precise
+  // while sometimes being wrong.
+  it('never shows a distance badge on a neighbor-origin card', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ retrieval_confidence_tier: 'moyenne' })))
+    const retrieved: ChunkResult = {
+      chunk_id: '1907_EC_c5',
+      work_id: '1907_EC',
+      section_path: '',
+      paragraph_ids: ['1907_EC_p5'],
+      page_start: { number: null, display: '' },
+      page_end: { number: null, display: '' },
+      text: 'Le chunk retrouvé.',
+      score: 0.8,
+    }
+    renderRailWithNeighbor(NEIGHBOR, [retrieved])
+
+    const card = screen.getByTestId(`chunk-card-${NEIGHBOR.chunk_id}`)
+    expect(within(card).queryByTestId('chunk-offset')).not.toBeInTheDocument()
   })
 
   it('counts a neighbor-origin inclusion toward the same shared x/5 counter', async () => {
@@ -96,14 +124,57 @@ describe('ChunkRail — neighbor-origin cards', () => {
     await user.click(within(card).getByText('Exclure'))
 
     expect(screen.queryByTestId(`chunk-card-${NEIGHBOR.chunk_id}`)).not.toBeInTheDocument()
-    expect(screen.queryByTestId('neighbor-divider')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('neighbor-rail')).not.toBeInTheDocument()
     expect(screen.getByTestId('included-count')).toHaveTextContent('1/5 passages sélectionnés')
   })
 
-  it('renders no divider or neighbor cards when no chunk was included via neighbor exploration', () => {
+  it('renders no second rail or title when no chunk was included via neighbor exploration', () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ retrieval_confidence_tier: 'moyenne' })))
     renderRailWithNeighbor(null)
 
-    expect(screen.queryByTestId('neighbor-divider')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('neighbor-rail')).not.toBeInTheDocument()
+    expect(screen.queryByText('Chunks voisins ajoutés manuellement')).not.toBeInTheDocument()
+  })
+})
+
+// docs/ROADMAP.md, chunk-neighbor-persistence fix: a manually-included
+// neighbor chunk was previously lost on reload (state/turnUi.tsx's
+// `neighbors` map was client-only) — this debounced sync persists it via
+// POST /turns/{id}/neighbor-chunks, the same fix that resolves a past
+// generation showing "Œuvre inconnue" for it (lib/generationChunks.ts).
+describe('ChunkRail — neighbor-chunks persistence sync', () => {
+  it('persists the included neighbor chunk_ids once the debounce settles', async () => {
+    vi.spyOn(api, 'setIncludedChunks').mockResolvedValue({ chunk_ids: [] })
+    const setNeighborChunks = vi
+      .spyOn(api, 'setNeighborChunks')
+      .mockResolvedValue({ chunk_ids: [] })
+    vi.spyOn(api, 'confidencePreview').mockResolvedValue({ retrieval_confidence_tier: 'moyenne' })
+
+    renderRailWithNeighbor(NEIGHBOR)
+
+    await waitFor(() =>
+      expect(setNeighborChunks).toHaveBeenLastCalledWith(1, { chunk_ids: [NEIGHBOR.chunk_id] }),
+    )
+  })
+
+  it('persists an empty neighbor list after excluding the last one', async () => {
+    vi.spyOn(api, 'setIncludedChunks').mockResolvedValue({ chunk_ids: [] })
+    const setNeighborChunks = vi
+      .spyOn(api, 'setNeighborChunks')
+      .mockResolvedValue({ chunk_ids: [] })
+    vi.spyOn(api, 'confidencePreview').mockResolvedValue({ retrieval_confidence_tier: 'moyenne' })
+    const user = userEvent.setup()
+
+    renderRailWithNeighbor(NEIGHBOR)
+    await waitFor(() =>
+      expect(setNeighborChunks).toHaveBeenLastCalledWith(1, { chunk_ids: [NEIGHBOR.chunk_id] }),
+    )
+
+    const card = screen.getByTestId(`chunk-card-${NEIGHBOR.chunk_id}`)
+    await user.click(within(card).getByText('Exclure'))
+
+    await waitFor(() =>
+      expect(setNeighborChunks).toHaveBeenLastCalledWith(1, { chunk_ids: [] }),
+    )
   })
 })

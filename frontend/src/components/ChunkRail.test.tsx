@@ -238,3 +238,41 @@ describe('ChunkRail confidence gauge', () => {
     )
   })
 })
+
+// docs/ROADMAP.md, chunk-neighbor-persistence fix: the rail's included set
+// was previously client-only (state/turnUi.tsx) and lost on reload — this
+// debounced effect (same trigger/timing as the confidence-preview one
+// above) persists it via POST /turns/{id}/included-chunks so GET
+// /turns/{id} can restore it later.
+describe('ChunkRail — included-chunks persistence sync', () => {
+  function stubPersistence() {
+    const setIncludedChunks = vi
+      .spyOn(api, 'setIncludedChunks')
+      .mockResolvedValue({ chunk_ids: [] })
+    vi.spyOn(api, 'setNeighborChunks').mockResolvedValue({ chunk_ids: [] })
+    vi.spyOn(api, 'confidencePreview').mockResolvedValue({ retrieval_confidence_tier: 'moyenne' })
+    return setIncludedChunks
+  }
+
+  it('persists the default-included chunk_ids once the debounce settles', async () => {
+    const setIncludedChunks = stubPersistence()
+    renderInitializedRail([chunkA, chunkB])
+
+    await waitFor(() =>
+      expect(setIncludedChunks).toHaveBeenCalledWith(1, { chunk_ids: ['W_c1', 'W_c2'] }),
+    )
+  })
+
+  it('persists the narrowed set after excluding a chunk', async () => {
+    const setIncludedChunks = stubPersistence()
+    const user = userEvent.setup()
+    renderInitializedRail([chunkA, chunkB])
+    await waitFor(() => expect(setIncludedChunks).toHaveBeenCalledTimes(1))
+
+    await user.click(screen.getAllByText('Exclure')[1])
+
+    await waitFor(() =>
+      expect(setIncludedChunks).toHaveBeenLastCalledWith(1, { chunk_ids: ['W_c1'] }),
+    )
+  })
+})

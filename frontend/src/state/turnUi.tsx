@@ -42,7 +42,20 @@ interface TurnUiState {
 }
 
 type Action =
-  | { type: 'init'; turnId: number; chunkIds: string[]; judgments?: Record<string, ChunkJudgment> }
+  | {
+      type: 'init'
+      turnId: number
+      chunkIds: string[]
+      judgments?: Record<string, ChunkJudgment>
+      // Chunk-neighbor-persistence fix (docs/ROADMAP.md): the server's
+      // persisted inclusion state, from GET /turns/{id} — `includedChunkIds`
+      // null means never customized (apply the DEFAULT_INCLUDED_COUNT
+      // default below, same as before this fix); `neighborChunks` seeds the
+      // `neighbors` map so a reload restores manually-included neighbors
+      // instead of losing them.
+      includedChunkIds?: string[] | null
+      neighborChunks?: ChunkNeighborSummary[]
+    }
   | { type: 'toggle'; turnId: number; chunkId: string }
   | { type: 'toggleNeighbor'; turnId: number; chunk: ChunkNeighborSummary }
   | { type: 'judge'; turnId: number; chunkId: string; judgment: ChunkJudgment }
@@ -62,14 +75,24 @@ function reducer(state: TurnUiState, action: Action): TurnUiState {
     case 'init': {
       const existing = state.included[action.turnId] ?? {}
       const nextIncluded = { ...existing }
-      // Top DEFAULT_INCLUDED_COUNT (by rank — action.chunkIds is always in
-      // the turn's reranked order, state/useTurnController.ts) default to
-      // included; the rest default to explicitly excluded, not to the
-      // `getIncluded` fallback below — every chunk from a real /retrieve or
-      // GET /turns/{id} response gets a concrete entry here, so that
-      // fallback only ever matters for a chunk this reducer has never seen.
+      // `action.includedChunkIds` (GET /turns/{id}'s persisted state) wins
+      // when given: a chunk_id is included iff it's in that list. `null`/
+      // undefined (never customized server-side) falls back to the
+      // original rule — top DEFAULT_INCLUDED_COUNT by rank (action.chunkIds
+      // is always in the turn's reranked order, state/useTurnController.ts)
+      // default to included, the rest excluded. Either way, only fills in
+      // ids not already in `nextIncluded` — every chunk from a real
+      // /retrieve or GET /turns/{id} response gets a concrete entry here,
+      // so the `getIncluded` fallback below only ever matters for a chunk
+      // this reducer has never seen, and a second initTurn call for the
+      // same turnId (e.g. Screen 3 and Screen 4 mounted together) never
+      // clobbers a toggle already made this session.
+      const includedFromServer = action.includedChunkIds
+        ? new Set(action.includedChunkIds)
+        : null
       action.chunkIds.forEach((id, index) => {
-        if (!(id in nextIncluded)) nextIncluded[id] = index < DEFAULT_INCLUDED_COUNT
+        if (id in nextIncluded) return
+        nextIncluded[id] = includedFromServer ? includedFromServer.has(id) : index < DEFAULT_INCLUDED_COUNT
       })
       const nextJudgments = action.judgments
         ? { ...action.judgments, ...state.judgments[action.turnId] }
@@ -85,6 +108,18 @@ function reducer(state: TurnUiState, action: Action): TurnUiState {
           action.turnId in state.retrievedIds
             ? state.retrievedIds
             : { ...state.retrievedIds, [action.turnId]: action.chunkIds },
+        // Same "set once per turnId" guard as retrievedIds above — a
+        // second initTurn call for an already-seeded turn never clobbers
+        // neighbor inclusions/exclusions already made this session.
+        neighbors:
+          action.turnId in state.neighbors
+            ? state.neighbors
+            : {
+                ...state.neighbors,
+                [action.turnId]: Object.fromEntries(
+                  (action.neighborChunks ?? []).map((chunk) => [chunk.chunk_id, chunk]),
+                ),
+              },
       }
     }
     case 'toggle': {
@@ -172,7 +207,13 @@ interface TurnUiContextValue {
    * origin tag and which toggle (toggleChunk vs toggleNeighborChunk) a
    * focused chunk's Inclure/Exclure button should call. */
   isRetrieved: (turnId: number, chunkId: string) => boolean
-  initTurn: (turnId: number, chunkIds: string[], judgments?: Record<string, ChunkJudgment>) => void
+  initTurn: (
+    turnId: number,
+    chunkIds: string[],
+    judgments?: Record<string, ChunkJudgment>,
+    includedChunkIds?: string[] | null,
+    neighborChunks?: ChunkNeighborSummary[],
+  ) => void
   toggleChunk: (turnId: number, chunkId: string) => void
   toggleNeighborChunk: (turnId: number, chunk: ChunkNeighborSummary) => void
   setJudgment: (turnId: number, chunkId: string, judgment: ChunkJudgment) => void
@@ -224,8 +265,13 @@ export function TurnUiProvider({ children }: { children: ReactNode }) {
     [state.retrievedIds],
   )
   const initTurn = useCallback(
-    (turnId: number, chunkIds: string[], judgments?: Record<string, ChunkJudgment>) =>
-      dispatch({ type: 'init', turnId, chunkIds, judgments }),
+    (
+      turnId: number,
+      chunkIds: string[],
+      judgments?: Record<string, ChunkJudgment>,
+      includedChunkIds?: string[] | null,
+      neighborChunks?: ChunkNeighborSummary[],
+    ) => dispatch({ type: 'init', turnId, chunkIds, judgments, includedChunkIds, neighborChunks }),
     [],
   )
   const toggleChunk = useCallback(

@@ -24,9 +24,11 @@ interface ChunkRailProps {
 // evaluation answer card (docs/ROADMAP.md, the retrieval-confidence-split
 // correction): it's advisory input to the decision to generate/regenerate,
 // so it has to be visible *before* that decision, recomputed live from
-// whichever chunks are currently included. Debounced so a burst of rapid
-// include/exclude clicks doesn't fire a request per click.
-const CONFIDENCE_PREVIEW_DEBOUNCE_MS = 300
+// whichever chunks are currently included. Also shared by the persistence
+// sync below (chunk-neighbor-persistence fix) — both react to the exact
+// same trigger, so one debounce timer serves both. Debounced so a burst of
+// rapid include/exclude clicks doesn't fire a request per click.
+const CHUNK_RAIL_DEBOUNCE_MS = 300
 
 export function ChunkRail({ chunks, turnId, conversationId, onInspect }: ChunkRailProps) {
   const turnUi = useTurnUi()
@@ -62,12 +64,35 @@ export function ChunkRail({ chunks, turnId, conversationId, onInspect }: ChunkRa
         .confidencePreview({ chunks: previewChunks })
         .then((result) => setConfidenceTier(result.retrieval_confidence_tier))
         .catch(() => setConfidenceTier(null))
-    }, CONFIDENCE_PREVIEW_DEBOUNCE_MS)
+    }, CHUNK_RAIL_DEBOUNCE_MS)
     return () => window.clearTimeout(handle)
     // includedKey is the real dependency (chunk identity/score/inclusion) —
     // includedChunks/neighborChunks are fresh arrays every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [includedKey])
+
+  // Chunk-neighbor-persistence fix (docs/ROADMAP.md): persists the rail's
+  // current included/neighbor chunk_id sets so a reload restores this
+  // exact state instead of resetting to defaults (state/turnUi.tsx's
+  // `included`/`neighbors` maps were previously client-only). Same
+  // debounce/trigger as the confidence-preview effect above, kept separate
+  // since it writes rather than reads — a failed write is swallowed rather
+  // than surfaced, matching confidence-preview's own "advisory, not
+  // blocking" failure handling; the rail stays fully usable either way,
+  // just without the reload guarantee until the next successful sync.
+  useEffect(() => {
+    if (turnId === null) return
+    const handle = window.setTimeout(() => {
+      void api
+        .setIncludedChunks(turnId, { chunk_ids: includedChunks.map((c) => c.chunk_id) })
+        .catch(() => {})
+      void api
+        .setNeighborChunks(turnId, { chunk_ids: neighborChunks.map((c) => c.chunk_id) })
+        .catch(() => {})
+    }, CHUNK_RAIL_DEBOUNCE_MS)
+    return () => window.clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [turnId, includedKey])
 
   if (chunks.length === 0) return null
 
@@ -97,6 +122,9 @@ export function ChunkRail({ chunks, turnId, conversationId, onInspect }: ChunkRa
       <p className="text-xs" style={{ color: 'var(--ink-3)' }} data-testid="included-count">
         {includedCount}/{MAX_INCLUDED_CHUNKS} passages sélectionnés
         {atCap && ' (maximum atteint)'}
+      </p>
+      <p className="text-[10px] font-semibold uppercase" style={{ color: 'var(--ink-3)' }}>
+        Chunks issus de la recherche
       </p>
       <div className="flex gap-3 overflow-x-auto pb-1" data-testid="chunk-rail">
         {chunks.map((chunk) => {
@@ -169,82 +197,96 @@ export function ChunkRail({ chunks, turnId, conversationId, onInspect }: ChunkRa
             </div>
           )
         })}
-
-        {neighborChunks.length > 0 && (
-          <>
-            {/* Thin dashed vertical divider (docs/ROADMAP.md, Sprint 12):
-                marks where the retrieved 15 end and manually-added
-                neighbor-origin chunks begin. */}
-            <div
-              className="my-1 w-0 shrink-0 self-stretch"
-              style={{ borderLeft: '1px dashed var(--hairline)' }}
-              data-testid="neighbor-divider"
-            />
-            {neighborChunks.map((chunk) => (
-              <div
-                key={chunk.chunk_id}
-                data-testid={`chunk-card-${chunk.chunk_id}`}
-                data-included="true"
-                data-origin="neighbor"
-                className="flex w-[130px] shrink-0 flex-col gap-1.5 rounded-lg p-2.5"
-                style={{ background: 'var(--paper)', border: '1.5px dashed var(--red)' }}
-              >
-                <span
-                  className="flex items-center gap-1 text-[10px] font-semibold uppercase"
-                  style={{ color: 'var(--red)' }}
-                >
-                  <IconArrowsExchange size={11} />
-                  Inclus
-                </span>
-                <span
-                  data-testid="chunk-citation"
-                  className="text-xs font-medium"
-                  style={{
-                    color: 'var(--ink-2)',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {formatCitation(chunk)}
-                </span>
-                <p
-                  className="text-xs"
-                  style={{
-                    color: 'var(--ink)',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {chunk.text || 'Texte indisponible (nouvelle recherche requise).'}
-                </p>
-                <div className="mt-auto flex flex-col gap-1">
-                  <button
-                    type="button"
-                    onClick={() => turnId !== null && turnUi.toggleNeighborChunk(turnId, chunk)}
-                    className="rounded border px-2 py-1 text-[11px]"
-                    style={{ borderColor: 'var(--hairline)', color: 'var(--ink-2)' }}
-                  >
-                    Exclure
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => inspect(chunk)}
-                    disabled={turnId === null}
-                    className="rounded border px-2 py-1 text-[11px] font-medium"
-                    style={{ borderColor: 'var(--hairline)', color: 'var(--ink)' }}
-                  >
-                    Inspecter
-                  </button>
-                </div>
-              </div>
-            ))}
-          </>
-        )}
       </div>
+
+      {neighborChunks.length > 0 && (
+        <>
+          {/* Second rail (docs/ROADMAP.md, Sprint 12 refinement): manually-
+              added neighbor-origin chunks get their own titled row below
+              the retrieved-candidates rail, rather than being appended
+              after a divider in the same scroll container — a card added
+              via Screen 4's neighbor exploration is visible without
+              scrolling the first rail out from under it. */}
+          <p className="text-[10px] font-semibold uppercase" style={{ color: 'var(--ink-3)' }}>
+            Chunks voisins ajoutés manuellement
+          </p>
+          <div className="flex gap-3 overflow-x-auto pb-1" data-testid="neighbor-rail">
+            {neighborChunks.map((chunk) => {
+              return (
+                <div
+                  key={chunk.chunk_id}
+                  data-testid={`chunk-card-${chunk.chunk_id}`}
+                  data-included="true"
+                  data-origin="neighbor"
+                  className="flex w-[130px] shrink-0 flex-col gap-1.5 rounded-lg p-2.5"
+                  style={{ background: 'var(--paper)', border: '1.5px dashed var(--red)' }}
+                >
+                  {/* No distance badge here (docs/ROADMAP.md) — unlike
+                      PositionFilmstrip's cells, which are always exactly
+                      ±1 from whichever chunk is currently focused, this
+                      rail has no reliable "which retrieved chunk was this
+                      expanded from" to measure against: the nearest
+                      originally-retrieved chunk by paragraph distance is
+                      not necessarily the one the user actually navigated
+                      from, so a badge here would show a number that looks
+                      precise but can be wrong. */}
+                  <span
+                    className="flex items-center gap-1 text-[10px] font-semibold uppercase"
+                    style={{ color: 'var(--red)' }}
+                  >
+                    <IconArrowsExchange size={11} />
+                    Inclus
+                  </span>
+                  <span
+                    data-testid="chunk-citation"
+                    className="text-xs font-medium"
+                    style={{
+                      color: 'var(--ink-2)',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {formatCitation(chunk)}
+                  </span>
+                  <p
+                    className="text-xs"
+                    style={{
+                      color: 'var(--ink)',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {chunk.text || 'Texte indisponible (nouvelle recherche requise).'}
+                  </p>
+                  <div className="mt-auto flex flex-col gap-1">
+                    <button
+                      type="button"
+                      onClick={() => turnId !== null && turnUi.toggleNeighborChunk(turnId, chunk)}
+                      className="rounded border px-2 py-1 text-[11px]"
+                      style={{ borderColor: 'var(--hairline)', color: 'var(--ink-2)' }}
+                    >
+                      Exclure
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => inspect(chunk)}
+                      disabled={turnId === null}
+                      className="rounded border px-2 py-1 text-[11px] font-medium"
+                      style={{ borderColor: 'var(--hairline)', color: 'var(--ink)' }}
+                    >
+                      Inspecter
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }

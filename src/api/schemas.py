@@ -304,6 +304,20 @@ class JudgeChunkResponse(BaseModel):
     justification: str
 
 
+class SetChunkIdsRequest(BaseModel):
+    """Shared body shape for `POST /turns/{id}/included-chunks` and
+    `POST /turns/{id}/neighbor-chunks` (docs/ROADMAP.md, chunk-neighbor-
+    persistence fix) — both replace a turn's chunk_id set wholesale, so one
+    request/response pair serves both rather than two near-identical
+    copies."""
+
+    chunk_ids: list[str] = Field(default_factory=list)
+
+
+class SetChunkIdsResponse(BaseModel):
+    chunk_ids: list[str]
+
+
 # --- GET /turns/{id}, GET /conversations/{id} -------------------------------
 #
 # Assembled from persisted state (src/api/persistence.py) — turn/generation/
@@ -354,6 +368,17 @@ class TurnDetailResponse(BaseModel):
     # docs/frontend.md) — None means no filter was applied.
     work_ids: list[str] | None = None
     date_range: DateRange | None = None
+    # Chunk-neighbor-persistence fix (docs/ROADMAP.md): the turn's
+    # currently-included subset of `retrieved_chunks` (None = never
+    # customized, client applies its own top-N default) and its manually-
+    # included neighbor chunks, fully resolved (like `retrieved_chunks`,
+    # live from Qdrant by chunk_id — a chunk_id no longer indexed is simply
+    # dropped rather than fabricated, `converters.fetch_chunk_summary`).
+    # Together these let a reloaded page restore the exact chunk rail state
+    # a prior session left, instead of resetting to defaults and losing
+    # neighbor-origin chunks entirely (frontend/src/state/turnUi.tsx).
+    included_chunk_ids: list[str] | None = None
+    neighbor_chunks: list[ChunkNeighborSummary] = []
 
 
 class ConversationTurnOut(BaseModel):

@@ -51,6 +51,8 @@ export function ChunkDetail() {
       turnId,
       turnDetail.retrieved_chunks.map((rc) => rc.chunk_id),
       turnDetail.chunk_judgments,
+      turnDetail.included_chunk_ids,
+      turnDetail.neighbor_chunks,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turnDetail])
@@ -155,6 +157,7 @@ export function ChunkDetail() {
       {focusedChunk && (
         <PositionFilmstrip
           focusedChunk={focusedChunk}
+          anchors={retrievedChunks}
           onSelect={(chunk) => setFocusedChunk(focusedChunkFromNeighbor(chunk))}
         />
       )}

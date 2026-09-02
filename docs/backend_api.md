@@ -275,6 +275,52 @@ would resolve to a real chunk_id, but in the following section — the actual
 section-boundary regression case), a chunk at a section's first paragraph
 (same, for `previous`), and an unknown `chunk_id` (404).
 
+## `POST /turns/{id}/included-chunks`, `POST /turns/{id}/neighbor-chunks` (chunk-neighbor-persistence fix)
+
+The chunk rail's include/exclude state and Screen 4's manually-included
+neighbor chunks (`state/turnUi.tsx`'s `included`/`neighbors` maps) were
+client-only until this fix — a reload reset the rail to its top-N default
+and lost every neighbor chunk entirely, and any past generation that had
+used a neighbor chunk showed "Œuvre inconnue" for it in the answer's
+included-chunks list, since that chunk_id no longer resolved to anything
+citable client-side.
+
+Both endpoints take `{chunk_ids: string[]}` and replace the turn's set
+wholesale — the client always sends its full current set, not a delta,
+mirroring `save_retrieved_chunks`'s own contract for `retrieved_chunks`.
+Called by `components/ChunkRail.tsx`'s existing debounced sync effect (the
+same 300ms debounce/trigger already used for `/confidence-preview`) on
+every include/exclude change. Both 404 if `turn_id` is unknown.
+
+- `included-chunks` sets `Turn.included_chunk_ids` (nullable JSON column;
+  `null` means never customized, so the client falls back to its own
+  top-`DEFAULT_INCLUDED_COUNT` default — same contract as `work_ids`/
+  `date_range`).
+- `neighbor-chunks` replaces the `included_neighbor_chunks` table's rows
+  for that turn (composite PK `(turn_id, chunk_id)`, presence = inclusion,
+  mirroring the frontend's own `neighbors` map). Only `chunk_id` is stored;
+  `GET /turns/{id}` resolves full content live from Qdrant
+  (`converters.fetch_chunk_summary`, the same function
+  `/chunks/{id}/neighbors` uses), same accepted reindex-gap limitation as
+  `retrieved_chunks`.
+
+`GET /turns/{id}` echoes both back as `included_chunk_ids` and
+`neighbor_chunks` (fully resolved `ChunkNeighborSummary[]`, a no-longer-
+indexed chunk_id simply dropped) — `state/useTurnController.ts`'s hydrate
+effect and `routes/ChunkDetail.tsx`'s own init effect both pass them into
+`turnUi.initTurn` to restore the exact rail state a prior session left.
+
+New `Turn.included_chunk_ids` column and `included_neighbor_chunks` table
+are both additive — `src/api/db.py`'s existing `_sync_additive_columns`/
+`create_all` migration adds them to an already-created dev DB with no
+backfill needed (the column is nullable, the table starts empty) and no
+data loss to existing rows.
+
+Test coverage: `tests/test_persistence.py` — persisted value read back by
+`GET /turns/{id}`, wholesale-replace (not accumulate) on a second call,
+`neighbor-chunks`'s resolution against a real Qdrant chunk_id, and 404s for
+both on an unknown `turn_id`.
+
 ## Test coverage
 
 `tests/test_api.py`: same real-corpus / gold-dataset fixture discipline as

@@ -387,6 +387,90 @@ describe('TurnCard — resuming an in-flight generation after navigate-away-and-
   })
 })
 
+// Regression test (docs/ROADMAP.md, chunk-neighbor-persistence fix): a
+// neighbor chunk manually included via Screen 4 used to be client-only
+// (state/turnUi.tsx's `neighbors` map) — a reload lost it entirely, so a
+// past generation that had included it showed "Œuvre inconnue" for that
+// chunk in its included-chunks bullet list (lib/generationChunks.ts's
+// byId-lookup-miss fallback), even though the generation genuinely used
+// it. GET /turns/{id} now returns `neighbor_chunks`, fully resolved, and
+// the hydrate effect (state/useTurnController.ts) seeds turnUi with them —
+// this is the exact "hard refresh on an old conversation" scenario.
+describe('TurnCard — neighbor-origin chunk citation survives a reload', () => {
+  const NEIGHBOR = {
+    chunk_id: '1907_EC_c6',
+    work_id: '1907_EC',
+    section_id: '1907_EC_s1',
+    section_path: '',
+    paragraph_ids: ['1907_EC_p6'],
+    page_start: { number: null, display: '' },
+    page_end: { number: null, display: '' },
+    text: 'Un passage voisin.',
+  }
+
+  it('resolves the neighbor chunk’s real citation, not "Œuvre inconnue", after a fresh mount', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/turns/1')) {
+          return jsonResponse({
+            turn_id: 1,
+            conversation_id: 1,
+            query: 'Quelle est la nature du temps ?',
+            created_at: new Date().toISOString(),
+            retrieved_chunks: [{ ...CHUNK_A, rank: 0 }],
+            chunk_judgments: {},
+            included_chunk_ids: null,
+            neighbor_chunks: [NEIGHBOR],
+            generations: [
+              {
+                generation_id: 7,
+                model: 'test-model',
+                // The generation used both the retrieved chunk and the
+                // manually-included neighbor.
+                chunk_ids: [CHUNK_A.chunk_id, NEIGHBOR.chunk_id],
+                answer: `Réponse fondée [${CHUNK_A.chunk_id}] [${NEIGHBOR.chunk_id}].`,
+                chunk_judgments_used: null,
+                created_at: new Date().toISOString(),
+                evaluation: null,
+              },
+            ],
+          })
+        }
+        if (url.endsWith('/confidence-preview')) {
+          return jsonResponse({ retrieval_confidence_tier: 'moyenne' })
+        }
+        if (url.endsWith('/included-chunks') || url.endsWith('/neighbor-chunks')) {
+          return jsonResponse({ chunk_ids: [] })
+        }
+        throw new Error(`Unhandled fetch: ${url}`)
+      }),
+    )
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <TurnUiProvider>
+          <MemoryRouter>
+            <TurnCard turnId={1} conversationId={1} />
+          </MemoryRouter>
+        </TurnUiProvider>
+      </QueryClientProvider>,
+    )
+
+    const toggle = await screen.findByRole('button', {
+      name: 'Afficher les passages inclus dans la génération',
+    })
+    await user.click(toggle)
+
+    const list = screen.getByTestId('included-chunks')
+    const citations = within(list).getAllByTestId('chunk-citation').map((el) => el.textContent)
+    expect(citations).toHaveLength(2)
+    expect(citations.some((c) => c?.includes('Œuvre inconnue'))).toBe(false)
+    expect(citations.some((c) => c?.includes('1907'))).toBe(true)
+  })
+})
+
 // Regression test: persistence.create_turn (src/api/persistence.py) commits
 // a turn well before its /retrieve call finishes hybrid search + reranking
 // and saves retrieved_chunks (src/api/main.py) — so GET /turns/{id} can

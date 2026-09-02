@@ -3,7 +3,7 @@ import { IconArrowsExchange } from '@tabler/icons-react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { ChunkNeighborSummary, ChunkResult, RetrievalConfidenceTier } from '../api/types'
-import { formatCitation } from '../lib/citation'
+import { formatCitation, paragraphIndex } from '../lib/citation'
 import { MAX_INCLUDED_CHUNKS, useTurnUi } from '../state/turnUi'
 import { ConfidenceGauge } from './ConfidenceGauge'
 
@@ -161,6 +161,15 @@ export function ChunkRail({ chunks, turnId, conversationId, onInspect }: ChunkRa
               >
                 {formatCitation(chunk)}
               </span>
+              {paragraphIndex(chunk.paragraph_ids[0]) !== null && (
+                <span
+                  data-testid="chunk-paragraph-number"
+                  className="text-[10px] font-semibold"
+                  style={{ color: 'var(--ink-3)' }}
+                >
+                  Paragraphe {paragraphIndex(chunk.paragraph_ids[0])}
+                </span>
+              )}
               <p
                 className="text-xs"
                 style={{
@@ -250,6 +259,15 @@ export function ChunkRail({ chunks, turnId, conversationId, onInspect }: ChunkRa
                   >
                     {formatCitation(chunk)}
                   </span>
+                  {paragraphIndex(chunk.paragraph_ids[0]) !== null && (
+                    <span
+                      data-testid="chunk-paragraph-number"
+                      className="text-[10px] font-semibold"
+                      style={{ color: 'var(--ink-3)' }}
+                    >
+                      Paragraphe {paragraphIndex(chunk.paragraph_ids[0])}
+                    </span>
+                  )}
                   <p
                     className="text-xs"
                     style={{

@@ -4,8 +4,10 @@ import { TurnUiProvider } from './state/turnUi'
 import { AppShell } from './routes/AppShell'
 import { ChunkDetail } from './routes/ChunkDetail'
 import { Conversation } from './routes/Conversation'
-import { Documentation } from './routes/Documentation'
+import { GuideUtilisation } from './routes/GuideUtilisation'
 import { Landing } from './routes/Landing'
+import { Presentation } from './routes/Presentation'
+import { Sources } from './routes/Sources'
 
 const queryClient = new QueryClient()
 
@@ -29,12 +31,14 @@ export function AppRoutes() {
   return (
     <Routes location={location}>
       <Route path="/" element={<Landing />} />
+      <Route path="/presentation" element={<Presentation />} />
       <Route element={<AppShell />}>
         <Route path="/new" element={<Conversation key={location.key} />} />
         <Route path="/new/:draftId" element={<Conversation />} />
         <Route path="/c/:conversationId" element={<Conversation />} />
         <Route path="/c/:conversationId/turn/:turnId/chunk/:chunkId" element={<ChunkDetail />} />
-        <Route path="/docs" element={<Documentation />} />
+        <Route path="/guide/utilisation" element={<GuideUtilisation />} />
+        <Route path="/guide/sources" element={<Sources />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

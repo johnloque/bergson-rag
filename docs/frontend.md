@@ -629,10 +629,10 @@ separate screen to exit from.
   with the full sidebar. Reached from Landing's "Commencer", and from
   clicking the wordmark/icon at any later point (`components/
   Sidebar.tsx`) — that icon always targets `/presentation`, since Landing
-  is never a valid manual destination. Content is just README's "What it
-  does" paragraph, near-verbatim in French, styled like Guide
-  d'utilisation and Sources — no button, no separate "enter the app"
-  step.
+  is never a valid manual destination. No button, no separate "enter the
+  app" step — just page content (originally README's "What it does"
+  paragraph as a placeholder; see the Presentation and Guide d'utilisation
+  content addendum below for the real, final copy and layout).
 - **The app** — for a *returning* session, Landing's auto-skip resolves
   `lastConversationPath()` (`lib/entry.ts`) directly, bypassing both
   Landing and Presentation. A first-time session goes through Landing →
@@ -671,29 +671,101 @@ separate screen to exit from.
 
 ### Placeholder content
 
-- **Presentation**: README's "What it does" paragraph (see above).
 - **Sources** (`routes/Sources.tsx`): short paragraph — the corpus's
   public-domain status in France (70-years-post-mortem rule, from
   README's License section) and bergson-synoptique's role as the source
   of the paragraph-level XML encoding and reference editions (`docs/
   ROADMAP.md`'s "Source data" decision).
-- **Guide d'utilisation** (`routes/GuideUtilisation.tsx`): short
-  walkthrough of the actual current flow — retrieve (top 15, top 3
-  pre-selected) → inspect chunks (read, explain, include/exclude up to 5,
-  explore neighbors) → generate → blurred-until-verified answer (citation
-  check, then faithfulness check) → optionally adjust selection and
-  regenerate. Deliberately short, not a restatement of the old
-  `Documentation.tsx`'s longer "Comment la réponse est vérifiée" section.
 
 Test coverage: `routes/Landing.test.tsx` (auto-show regression, "Commencer"
-→ Presentation), `routes/Presentation.test.tsx` (renders as plain content,
-no leftover entry button), `components/Sidebar.test.tsx` (wordmark →
+→ Presentation), `components/Sidebar.test.tsx` (wordmark →
 Presentation never Landing, resize persisting across a remount, the three
 collapsible entries — including Présentation — toggling independently,
 conversation-list navigation unchanged) and the existing `components/
 Sidebar.pendingConversation.test.tsx`, updated to navigate via the
 "Guide d'utilisation" sidebar link instead of the removed "Documentation"
-one.
+one. Presentation and Guide d'utilisation's own real content and test
+coverage are below (`feat/presentation-and-guide-content`).
+
+## Addendum — Presentation and Guide d'utilisation content (Sprint 12, `feat/presentation-and-guide-content`)
+
+Replaces `feat/sidebar-restructure`'s placeholder copy for both pages (the
+README paragraph on Presentation, the short current-flow summary on the
+Guide) with the approved final content and layout. Builds on the
+Presentation-screen/sidebar restructure above.
+
+### Presentation (`routes/Presentation.tsx`)
+
+Centered, one column: the shared `AbstractGraphic` (see below, `size={70}`)
+above a Georgia-serif greeting ("Bienvenue sur Bergson-RAG !"), an intro
+paragraph, an italic pull-quote framed by top/bottom hairline rules, a
+two-card row (`IconListSearch` "Le retrieval" / `IconSparkles` "La
+génération" — the two-stage retrieve-then-generate design this whole
+project is built around, restated for a first-time reader), and two CTAs:
+"Guide d'utilisation" (`navigate('/guide/utilisation')`) and "Poser ma
+première question", which calls the same `lib/entry.ts:lastConversationPath`
+Landing's own returning-session skip uses — last conversation if one
+exists, else `/new` — rather than a second, parallel "which conversation to
+enter" decision living here.
+
+**`AbstractGraphic` gained a `size` prop** (`components/AbstractGraphic.tsx`,
+default `120`, Landing's own call site unchanged) so Presentation's smaller
+`70`px header graphic is the same SVG markup as Landing's, not a second copy
+at a different scale — the two screens are now the only two call sites, and
+both go through the one component.
+
+### Guide d'utilisation (`routes/GuideUtilisation.tsx`)
+
+A four-step walkthrough around a vertical dashed spine (`components/
+DashedConnector.tsx`'s `DashedLine`, see below), styled as a timeline:
+steps 1, 2 and 4 alternate left/right of the spine in a 3-column grid
+(content / 40px icon column / content, the unused side rendering an empty
+grid cell so the icon column stays centered on the line), each icon inside
+a 32px circle marker (`--paper` fill, `1.5px solid var(--red)`, `StepMarker`
+local to the file). Step 3 ("Analyser les passages récupérés") deliberately
+breaks that rhythm — a full-width `--paper-2` card, not confined to a
+column, since it covers more ground (rail inspection, explanation,
+neighbor navigation, the 5-paragraph include/exclude cap) than a
+single-sentence step; both step rows and the step-3 card sit at `z-10` so
+they visually occlude the spine running behind them rather than the line
+drawing on top.
+
+Below the four steps, a neutral "closing" three-column row (`--ink-3`
+icons — `IconMessageOff`, `IconDice5`, `IconChartArrowsVertical` — no red)
+states this project's standing honesty commitments in the user's own
+terms: no cross-turn memory (docs/frontend.md's own multi-turn addendum
+above), non-deterministic/imperfect answers even absent a flagged
+hallucination, and retrieval-dependent answer quality. Deliberately
+uncolored so it doesn't compete visually with the numbered sequence above
+it — these are limitations to know about, not steps to follow.
+
+### Extracted: `components/DashedConnector.tsx`
+
+The "dashed line + arrow" visual vocabulary `PositionFilmstrip` introduced
+for its previous/current/next cell connectors
+(`feat/chunk-neighbor-expansion`, addendum above) is reused here for the
+Guide's step spine — a second use that would have made a third inline copy
+a real duplication smell, so it's extracted now rather than after. Two
+exports: `DashedArrow` (the small `--ink-3` arrow icon, `PositionFilmstrip`'s
+two `IconArrowRight` connectors now call this instead of inlining the icon
++ style directly) and `DashedLine` (a standalone `--hairline` dashed line,
+vertical or horizontal, with no arrow — the Guide page's spine is one
+absolutely-positioned vertical `DashedLine` behind the whole step sequence,
+not per-row borders). `PositionFilmstrip`'s own cell styling (dashed cell
+borders, `--paper-2` background) is unchanged — only its inter-cell arrows
+were swapped to the shared component; `components/PositionFilmstrip.test.tsx`
+needed no changes.
+
+Test coverage: `routes/Presentation.test.tsx` (pull-quote and both cards
+render, "Guide d'utilisation" navigates to `/guide/utilisation`, "Poser ma
+première question" resolves through the real entry logic — both the
+no-conversations-yet and an-existing-conversation cases) and
+`routes/GuideUtilisation.test.tsx` (steps 1/2/4 render with the correct
+`data-side`, step 3 renders as the non-`data-side` full-width card with all
+four bullet points, and the closing three-item section renders with its
+own content) — structural presence only, per this sprint's explicit
+no-pixel-test scope; exact spacing was checked manually against the
+approved mockup instead.
 
 ## Known gap, not a finished feature: dark mode and full responsive layout
 

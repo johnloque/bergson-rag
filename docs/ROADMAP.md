@@ -373,15 +373,16 @@ coverage: [`docs/backend_api.md`](backend_api.md),
 
 **Landed** (`feat/retrieval-filter-ui`, `feat/chunk-rail-and-citations`,
 `feat/answer-display-improvements`, `feat/chunk-neighbor-expansion`,
-`feat/sidebar-restructure`, `fix/date-range-slider-interaction`).**
-Retrieval filter UI, chunk rail defaults + real citations + unified
-Générer/Régénérer button, answer display improvements, a master-detail
-Screen 4 for chunk neighbor inspection (new `GET /chunks/{chunk_id}
-/neighbors` endpoint), and a new Presentation screen with a resizable,
-collapsible sidebar. **Still pending**: the settings panel — "Réglages"
-is a content-free placeholder, deferred to `feat/settings-panel`. Full
-design, current status per item, and test coverage:
-[`docs/frontend.md`](frontend.md).
+`feat/sidebar-restructure`, `feat/presentation-and-guide-content`,
+`fix/date-range-slider-interaction`).** Retrieval filter UI, chunk rail
+defaults + real citations + unified Générer/Régénérer button, answer
+display improvements, a master-detail Screen 4 for chunk neighbor
+inspection (new `GET /chunks/{chunk_id}/neighbors` endpoint), a new
+Presentation screen with a resizable, collapsible sidebar, and final copy
++ layout for both the Presentation screen and the "Guide d'utilisation"
+sidebar sub-page. **Still pending**: the settings panel — "Réglages" is a
+content-free placeholder, deferred to `feat/settings-panel`. Full design,
+current status per item, and test coverage: [`docs/frontend.md`](frontend.md).
 
 ### Sprint 13 — MCP layer
 Pure search tools: `/retrieve` and `/lookup` (work + paragraph number, or

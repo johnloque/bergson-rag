@@ -1,26 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../api/client'
 import { AbstractGraphic } from '../components/AbstractGraphic'
 import { Wordmark } from '../components/Wordmark'
+import { lastConversationPath } from '../lib/entry'
 import { hasSeenLanding, markLandingSeen } from '../lib/session'
-
-async function lastConversationPath(): Promise<string> {
-  try {
-    const { conversations } = await api.listConversations()
-    if (conversations.length > 0) {
-      return `/c/${conversations[0].conversation_id}`
-    }
-  } catch {
-    // API unreachable — fall through to a fresh conversation.
-  }
-  return '/new'
-}
 
 export function Landing() {
   const navigate = useNavigate()
   const [show, setShow] = useState(false)
-  const [starting, setStarting] = useState(false)
   // Guards against React StrictMode's dev-only double effect invocation:
   // without it, the second invocation would see the flag the first one just
   // set and redirect away from a landing page the user never got to see.
@@ -37,12 +24,6 @@ export function Landing() {
     setShow(true)
   }, [navigate])
 
-  async function handleStart() {
-    setStarting(true)
-    const path = await lastConversationPath()
-    navigate(path)
-  }
-
   if (!show) return null
 
   return (
@@ -55,11 +36,13 @@ export function Landing() {
       <p className="max-w-xs text-center text-sm" style={{ color: 'var(--ink-2)' }}>
         Explorez la pensée de Bergson, une source à la fois
       </p>
+      {/* Goes to the Presentation screen, which lives inside the app shell
+          (AppShell) alongside the sidebar — there's no separate "enter the
+          app" step past this button (docs/frontend.md). */}
       <button
         type="button"
-        onClick={handleStart}
-        disabled={starting}
-        className="rounded-lg px-6 py-2 text-sm font-medium text-white disabled:opacity-60"
+        onClick={() => navigate('/presentation')}
+        className="rounded-lg px-6 py-2 text-sm font-medium text-white"
         style={{ background: 'var(--red)' }}
       >
         Commencer

@@ -371,27 +371,17 @@ coverage: [`docs/backend_api.md`](backend_api.md),
   generation shown first; markdown rendering.
 - **Deliverable**: redesigned UI against the Sprint 10/11 backend changes.
 
-**Landed**: retrieval filter UI, including the expandable "sources
-considered" detail and server-side filter persistence
-(`feat/retrieval-filter-ui`, `fix/date-range-slider-interaction`); chunk
-rail defaults, real citations, and the unified Générer/Régénérer button
-(`feat/chunk-rail-and-citations`); answer display improvements
-(`feat/answer-display-improvements`); chunk-detail neighbor-inspection —
-Screen 4 restructured into a master-detail view (retrieval rail + textual-
-position filmstrip + one shared detail panel) and the Screen 3 rail
-extended to surface neighbor-included chunks, backed by a new
-`GET /chunks/{chunk_id}/neighbors` endpoint
-(`feat/chunk-neighbor-expansion`), later refined so manually-included
-neighbor chunks render in their own titled rail (separate from the
-retrieved-candidates rail, no more scrolling one to see the other) and
-both that rail and the position filmstrip show each chunk's paragraph
-distance from the nearest originally-retrieved anchor (e.g. "+1"/"-2").
-**Still pending, verified against
-current code, not assumed done**: the landing page still follows Sprint
-8's once-per-session behavior (no app-icon re-entry point yet); the
-sidebar remains a single fixed column, not three resizable/collapsible
-sections; no settings panel exists yet. Full design, current status per
-item, and test coverage: [`docs/frontend.md`](frontend.md).
+**Landed** (`feat/retrieval-filter-ui`, `feat/chunk-rail-and-citations`,
+`feat/answer-display-improvements`, `feat/chunk-neighbor-expansion`,
+`feat/sidebar-restructure`, `fix/date-range-slider-interaction`).**
+Retrieval filter UI, chunk rail defaults + real citations + unified
+Générer/Régénérer button, answer display improvements, a master-detail
+Screen 4 for chunk neighbor inspection (new `GET /chunks/{chunk_id}
+/neighbors` endpoint), and a new Presentation screen with a resizable,
+collapsible sidebar. **Still pending**: the settings panel — "Réglages"
+is a content-free placeholder, deferred to `feat/settings-panel`. Full
+design, current status per item, and test coverage:
+[`docs/frontend.md`](frontend.md).
 
 ### Sprint 13 — MCP layer
 Pure search tools: `/retrieve` and `/lookup` (work + paragraph number, or

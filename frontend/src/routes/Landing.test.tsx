@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { Landing } from './Landing'
 
 describe('Landing', () => {
@@ -27,5 +28,20 @@ describe('Landing', () => {
       </MemoryRouter>,
     )
     expect(screen.queryByText('Commencer')).not.toBeInTheDocument()
+  })
+
+  it('"Commencer" navigates to the Presentation screen, not directly into the app', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/presentation" element={<div>Écran de présentation</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await user.click(await screen.findByText('Commencer'))
+    expect(await screen.findByText('Écran de présentation')).toBeInTheDocument()
   })
 })

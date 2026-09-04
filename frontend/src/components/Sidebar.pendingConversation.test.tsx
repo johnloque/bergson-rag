@@ -72,7 +72,7 @@ describe('Sidebar — pending new-conversation placeholder', () => {
     expect(retrieveCallCount).toBe(1)
 
     // Leave the page entirely (a different route, not just a re-render).
-    await user.click(screen.getByText('Documentation'))
+    await user.click(screen.getByText("Guide d'utilisation"))
     await waitFor(() => expect(screen.queryByTestId('turn-card')).not.toBeInTheDocument())
 
     // Come back via the sidebar's pending row instead of waiting.

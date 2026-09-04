@@ -604,6 +604,97 @@ instance, the same setup `App.tsx` gives the real app — including a
 neighbor chunk from the detail panel appearing in the rail with the dashed
 border and real citation).
 
+## Addendum — Presentation screen and sidebar restructure (Sprint 12, `feat/sidebar-restructure`)
+
+Adds a Presentation screen and restructures the sidebar. Builds on the
+chunk-neighbor-expansion addendum above.
+
+Revised after the initial cut: Presentation started as a third
+full-screen pre-app step between Landing and the app (its own centered
+layout, an "Entrer dans l'application" button resolving
+`lastConversationPath()`). It's now a normal sidebar destination nested
+under `AppShell`, alongside Guide d'utilisation and Sources — Landing's
+"Commencer" and the sidebar icon both still target `/presentation`, but
+landing there means being in the app already (sidebar and all), not a
+separate screen to exit from.
+
+### Entry flow
+
+- **Landing** (`routes/Landing.tsx`) — unchanged: session-scoped auto-show
+  via `sessionStorage` (`lib/session.ts`), shown once per session, never
+  reachable by manual navigation from within the app. Its "Commencer"
+  button navigates to `/presentation`.
+- **Presentation** (`routes/Presentation.tsx`, `/presentation`) — nested
+  under `AppShell` like the conversation and guide routes, so it renders
+  with the full sidebar. Reached from Landing's "Commencer", and from
+  clicking the wordmark/icon at any later point (`components/
+  Sidebar.tsx`) — that icon always targets `/presentation`, since Landing
+  is never a valid manual destination. Content is just README's "What it
+  does" paragraph, near-verbatim in French, styled like Guide
+  d'utilisation and Sources — no button, no separate "enter the app"
+  step.
+- **The app** — for a *returning* session, Landing's auto-skip resolves
+  `lastConversationPath()` (`lib/entry.ts`) directly, bypassing both
+  Landing and Presentation. A first-time session goes through Landing →
+  Presentation and from there uses the sidebar (new conversation or an
+  existing one) like any other in-app navigation.
+
+### Sidebar (`components/Sidebar.tsx`)
+
+- Wordmark/icon at top, a button targeting `/presentation` (see above) —
+  the app's default landing spot once inside.
+- Resizable via a drag handle on the right edge (`data-testid=
+  "sidebar-resize-handle"`), bounded to 180–360px, width persisted to
+  `localStorage` (`bergson_sidebar_width`) on every drag and restored on
+  mount — a per-browser layout preference, not synced server-side.
+- Two independently collapsible sections, each with its own open/closed
+  `useState` (`SectionHeader`, local to `Sidebar.tsx`):
+  - **"Guide & Sources"** — three sub-page links: `routes/
+    Presentation.tsx` (`/presentation`), `routes/GuideUtilisation.tsx`
+    (`/guide/utilisation`) and `routes/Sources.tsx` (`/guide/sources`),
+    all nested under `AppShell` like the conversation routes. Replaces
+    the old single `/docs` route and its `Documentation.tsx`, which had
+    drifted out of date (no mention of neighbor exploration, for
+    instance).
+  - **"Conversations"** — the conversation list (pending-conversation
+    reattachment, rename/delete affordances), unchanged.
+  - The **"Nouvelle conversation"** button sits between these two
+    sections, at the same level as their headers rather than inside
+    either — always visible regardless of which section is expanded or
+    collapsed.
+- **"Réglages"**, pinned below the scrollable Conversations section (last
+  flex child, not part of the `overflow-y-auto` area) — always visible,
+  itself click-to-expand/collapse like the two sections above, but
+  content-free: expanding it shows only "Aucun réglage disponible pour le
+  moment." Functional settings (`top_k_retrieval`, prompts, LLM choice)
+  are `feat/settings-panel`, a separate branch.
+
+### Placeholder content
+
+- **Presentation**: README's "What it does" paragraph (see above).
+- **Sources** (`routes/Sources.tsx`): short paragraph — the corpus's
+  public-domain status in France (70-years-post-mortem rule, from
+  README's License section) and bergson-synoptique's role as the source
+  of the paragraph-level XML encoding and reference editions (`docs/
+  ROADMAP.md`'s "Source data" decision).
+- **Guide d'utilisation** (`routes/GuideUtilisation.tsx`): short
+  walkthrough of the actual current flow — retrieve (top 15, top 3
+  pre-selected) → inspect chunks (read, explain, include/exclude up to 5,
+  explore neighbors) → generate → blurred-until-verified answer (citation
+  check, then faithfulness check) → optionally adjust selection and
+  regenerate. Deliberately short, not a restatement of the old
+  `Documentation.tsx`'s longer "Comment la réponse est vérifiée" section.
+
+Test coverage: `routes/Landing.test.tsx` (auto-show regression, "Commencer"
+→ Presentation), `routes/Presentation.test.tsx` (renders as plain content,
+no leftover entry button), `components/Sidebar.test.tsx` (wordmark →
+Presentation never Landing, resize persisting across a remount, the three
+collapsible entries — including Présentation — toggling independently,
+conversation-list navigation unchanged) and the existing `components/
+Sidebar.pendingConversation.test.tsx`, updated to navigate via the
+"Guide d'utilisation" sidebar link instead of the removed "Documentation"
+one.
+
 ## Known gap, not a finished feature: dark mode and full responsive layout
 
 The design tokens are CSS custom properties (`frontend/src/index.css`), not

@@ -379,9 +379,14 @@ defaults + real citations + unified Générer/Régénérer button, answer
 display improvements, a master-detail Screen 4 for chunk neighbor
 inspection (new `GET /chunks/{chunk_id}/neighbors` endpoint), a new
 Presentation screen with a resizable, collapsible sidebar, and final copy
-+ layout for both the Presentation screen and the "Guide d'utilisation"
-sidebar sub-page. **Still pending**: the settings panel — "Réglages" is a
-content-free placeholder, deferred to `feat/settings-panel`. Full design,
++ layout for the Presentation screen, the "Guide d'utilisation" sidebar
+sub-page, and the "Sources" sidebar sub-page (publisher per work extracted
+from the raw TEI corpus, `scripts/extract_source_metadata.py`; the two
+anthology works' individual texts expandable via a shared `Disclosure`
+component, extracted from `StepLine`'s pre-existing chevron interaction
+rather than a third bespoke copy). **Still pending**: the settings panel —
+"Réglages" is a content-free placeholder, deferred to `feat/settings-panel`.
+Full design,
 current status per item, and test coverage: [`docs/frontend.md`](frontend.md).
 
 ### Sprint 13 — MCP layer

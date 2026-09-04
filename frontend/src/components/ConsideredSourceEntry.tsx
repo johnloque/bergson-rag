@@ -1,6 +1,5 @@
-import { useState } from 'react'
-import { IconChevronDown, IconChevronUp } from '@tabler/icons-react'
 import type { ConsideredWorkEntry } from '../lib/retrievalScope'
+import { Disclosure } from './Disclosure'
 
 interface ConsideredSourceEntryProps {
   entry: ConsideredWorkEntry
@@ -17,36 +16,32 @@ interface ConsideredSourceEntryProps {
 // collapsed by default, so the user has a clear signal that this work's
 // inclusion was narrowed to specific texts and can drill into which ones.
 export function ConsideredSourceEntry({ entry }: ConsideredSourceEntryProps) {
-  const [expanded, setExpanded] = useState(false)
   const hasTexts = entry.texts !== undefined && entry.texts.length > 0
+
+  // Bold + a touch darker than the (lighter, regular-weight) nested texts
+  // below — the parent work needs to read as a clearly different list
+  // level, not just an indented continuation of it.
+  const title = (
+    <span className="font-semibold" style={{ color: 'var(--ink-2)' }}>
+      {entry.title} ({entry.year})
+    </span>
+  )
+
+  if (!hasTexts) {
+    return (
+      <li>
+        <div className="flex items-center gap-1">{title}</div>
+      </li>
+    )
+  }
 
   return (
     <li>
-      <div className="flex items-center gap-1">
-        {/* Bold + a touch darker than the (lighter, regular-weight) nested
-            texts below — the parent work needs to read as a clearly
-            different list level, not just an indented continuation of it. */}
-        <span className="font-semibold" style={{ color: 'var(--ink-2)' }}>
-          {entry.title} ({entry.year})
-        </span>
-        {hasTexts && (
-          <button
-            type="button"
-            onClick={() => setExpanded((e) => !e)}
-            aria-expanded={expanded}
-            aria-label={
-              expanded
-                ? `Masquer les textes datés pris en compte pour ${entry.title}`
-                : `Afficher les textes datés pris en compte pour ${entry.title}`
-            }
-            className="flex items-center rounded p-0.5"
-            style={{ color: 'var(--ink-3)' }}
-          >
-            {expanded ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />}
-          </button>
-        )}
-      </div>
-      {hasTexts && expanded && (
+      <Disclosure
+        trigger={title}
+        expandLabel={`les textes datés pris en compte pour ${entry.title}`}
+        chevronSize={12}
+      >
         <ul className="mt-1.5 flex flex-col gap-1.5 pl-4">
           {entry.texts!.map((text) => (
             <li key={text.title}>
@@ -54,7 +49,7 @@ export function ConsideredSourceEntry({ entry }: ConsideredSourceEntryProps) {
             </li>
           ))}
         </ul>
-      )}
+      </Disclosure>
     </li>
   )
 }

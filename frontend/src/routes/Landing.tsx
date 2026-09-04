@@ -36,9 +36,9 @@ export function Landing() {
       <p className="max-w-xs text-center text-sm" style={{ color: 'var(--ink-2)' }}>
         Explorez la pensée de Bergson, une source à la fois
       </p>
-      {/* Goes to the Presentation screen, not straight into the app — that
-          entry point (`lastConversationPath`) lives on Presentation's own
-          "Entrer dans l'application" button (docs/frontend.md). */}
+      {/* Goes to the Presentation screen, which lives inside the app shell
+          (AppShell) alongside the sidebar — there's no separate "enter the
+          app" step past this button (docs/frontend.md). */}
       <button
         type="button"
         onClick={() => navigate('/presentation')}

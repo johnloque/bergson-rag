@@ -606,49 +606,62 @@ border and real citation).
 
 ## Addendum — Presentation screen and sidebar restructure (Sprint 12, `feat/sidebar-restructure`)
 
-Adds a third pre-app screen and restructures the sidebar. Builds on the
+Adds a Presentation screen and restructures the sidebar. Builds on the
 chunk-neighbor-expansion addendum above.
 
-### Three-screen entry flow
+Revised after the initial cut: Presentation started as a third
+full-screen pre-app step between Landing and the app (its own centered
+layout, an "Entrer dans l'application" button resolving
+`lastConversationPath()`). It's now a normal sidebar destination nested
+under `AppShell`, alongside Guide d'utilisation and Sources — Landing's
+"Commencer" and the sidebar icon both still target `/presentation`, but
+landing there means being in the app already (sidebar and all), not a
+separate screen to exit from.
+
+### Entry flow
 
 - **Landing** (`routes/Landing.tsx`) — unchanged: session-scoped auto-show
   via `sessionStorage` (`lib/session.ts`), shown once per session, never
-  reachable by manual navigation from within the app. The one change is
-  its "Commencer" button's target: it now navigates to `/presentation`
-  instead of resolving `lastConversationPath()` itself.
-- **Presentation** (new, `routes/Presentation.tsx`, `/presentation`) —
-  reached from Landing's "Commencer", and from clicking the
-  wordmark/icon at any later point in the session
-  (`components/Sidebar.tsx`) — the sidebar icon's click target moved from
-  `/` (Landing) to `/presentation`, since Landing is never a valid manual
-  destination. Content is README's "What it does" paragraph, near-verbatim
-  in French, plus an "Entrer dans l'application" button.
-- **The app** — entered via Presentation's button, which resolves
-  `lastConversationPath()` (`lib/entry.ts`, extracted out of
-  `routes/Landing.tsx` so both screens share the exact same
-  last-conversation-or-new rule rather than two copies of it) exactly as
-  Landing's own returning-session skip already did. Nothing else about
-  app entry changed.
+  reachable by manual navigation from within the app. Its "Commencer"
+  button navigates to `/presentation`.
+- **Presentation** (`routes/Presentation.tsx`, `/presentation`) — nested
+  under `AppShell` like the conversation and guide routes, so it renders
+  with the full sidebar. Reached from Landing's "Commencer", and from
+  clicking the wordmark/icon at any later point (`components/
+  Sidebar.tsx`) — that icon always targets `/presentation`, since Landing
+  is never a valid manual destination. Content is just README's "What it
+  does" paragraph, near-verbatim in French, styled like Guide
+  d'utilisation and Sources — no button, no separate "enter the app"
+  step.
+- **The app** — for a *returning* session, Landing's auto-skip resolves
+  `lastConversationPath()` (`lib/entry.ts`) directly, bypassing both
+  Landing and Presentation. A first-time session goes through Landing →
+  Presentation and from there uses the sidebar (new conversation or an
+  existing one) like any other in-app navigation.
 
 ### Sidebar (`components/Sidebar.tsx`)
 
-- Wordmark/icon at top, now a button targeting `/presentation` (see
-  above).
+- Wordmark/icon at top, a button targeting `/presentation` (see above) —
+  the app's default landing spot once inside.
 - Resizable via a drag handle on the right edge (`data-testid=
   "sidebar-resize-handle"`), bounded to 180–360px, width persisted to
   `localStorage` (`bergson_sidebar_width`) on every drag and restored on
   mount — a per-browser layout preference, not synced server-side.
 - Two independently collapsible sections, each with its own open/closed
   `useState` (`SectionHeader`, local to `Sidebar.tsx`):
-  - **"Guide & Sources"** — two sub-page links, `routes/GuideUtilisation.tsx`
+  - **"Guide & Sources"** — three sub-page links: `routes/
+    Presentation.tsx` (`/presentation`), `routes/GuideUtilisation.tsx`
     (`/guide/utilisation`) and `routes/Sources.tsx` (`/guide/sources`),
-    both nested under `AppShell` like the conversation routes. Replaces
+    all nested under `AppShell` like the conversation routes. Replaces
     the old single `/docs` route and its `Documentation.tsx`, which had
     drifted out of date (no mention of neighbor exploration, for
     instance).
-  - **"Conversations"** — the existing "Nouvelle conversation" button and
-    conversation list, relocated unchanged (same pending-conversation
-    reattachment behavior, same rename/delete affordances).
+  - **"Conversations"** — the conversation list (pending-conversation
+    reattachment, rename/delete affordances), unchanged.
+  - The **"Nouvelle conversation"** button sits between these two
+    sections, at the same level as their headers rather than inside
+    either — always visible regardless of which section is expanded or
+    collapsed.
 - **"Réglages"**, pinned below the scrollable Conversations section (last
   flex child, not part of the `overflow-y-auto` area) — always visible,
   itself click-to-expand/collapse like the two sections above, but
@@ -673,14 +686,14 @@ chunk-neighbor-expansion addendum above.
   `Documentation.tsx`'s longer "Comment la réponse est vérifiée" section.
 
 Test coverage: `routes/Landing.test.tsx` (auto-show regression, "Commencer"
-→ Presentation), `routes/Presentation.test.tsx` ("Entrer dans
-l'application" → last conversation or a fresh one), `components/
-Sidebar.test.tsx` (wordmark → Presentation never Landing, resize
-persisting across a remount, the three collapsible entries toggling
-independently, conversation-list navigation unchanged) and the existing
-`components/Sidebar.pendingConversation.test.tsx`, updated to navigate via
-the new "Guide d'utilisation" sidebar link instead of the removed
-"Documentation" one.
+→ Presentation), `routes/Presentation.test.tsx` (renders as plain content,
+no leftover entry button), `components/Sidebar.test.tsx` (wordmark →
+Presentation never Landing, resize persisting across a remount, the three
+collapsible entries — including Présentation — toggling independently,
+conversation-list navigation unchanged) and the existing `components/
+Sidebar.pendingConversation.test.tsx`, updated to navigate via the
+"Guide d'utilisation" sidebar link instead of the removed "Documentation"
+one.
 
 ## Known gap, not a finished feature: dark mode and full responsive layout
 

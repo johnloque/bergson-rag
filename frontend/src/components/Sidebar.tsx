@@ -109,9 +109,10 @@ export function Sidebar() {
       className="relative flex h-screen shrink-0 flex-col gap-3 p-3"
       style={{ width, background: 'var(--paper-2)', borderRight: '0.5px solid var(--hairline)' }}
     >
-      {/* Reached only via the automatic per-session show
-          (routes/Landing.tsx) — from inside the app, this icon always goes
-          to the Presentation screen instead (docs/frontend.md). */}
+      {/* Always goes to the Presentation screen, the app's default landing
+          spot once inside (docs/frontend.md) — never back to Landing
+          itself, which is only reached via the automatic per-session show
+          (routes/Landing.tsx). */}
       <button
         type="button"
         onClick={() => navigate('/presentation')}
@@ -129,6 +130,14 @@ export function Sidebar() {
         />
         {guideOpen && (
           <div className="flex flex-col gap-0.5 pl-[19px]">
+            <button
+              type="button"
+              onClick={() => navigate('/presentation')}
+              className="rounded-md px-2 py-1.5 text-left text-xs"
+              style={{ color: location.pathname === '/presentation' ? 'var(--ink)' : 'var(--ink-2)' }}
+            >
+              Présentation
+            </button>
             <button
               type="button"
               onClick={() => navigate('/guide/utilisation')}
@@ -149,6 +158,16 @@ export function Sidebar() {
         )}
       </div>
 
+      <button
+        type="button"
+        onClick={() => navigate('/new')}
+        className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium text-white"
+        style={{ background: 'var(--red)' }}
+      >
+        <IconMessagePlus size={16} />
+        Nouvelle conversation
+      </button>
+
       <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
         <SectionHeader
           title="Conversations"
@@ -157,16 +176,6 @@ export function Sidebar() {
         />
         {conversationsOpen && (
           <div className="flex flex-1 flex-col gap-2 overflow-y-auto pl-[19px] pr-1">
-            <button
-              type="button"
-              onClick={() => navigate('/new')}
-              className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium text-white"
-              style={{ background: 'var(--red)' }}
-            >
-              <IconMessagePlus size={16} />
-              Nouvelle conversation
-            </button>
-
             <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
               {pendingConversations.map((pending) => (
                 <button

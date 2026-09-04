@@ -75,12 +75,16 @@ describe('Sidebar', () => {
     const settingsToggle = screen.getByRole('button', { name: /Réglages/ })
 
     // All start visible except the Réglages placeholder note, which starts collapsed.
+    // "Nouvelle conversation" sits between the two menus, outside both, so it is
+    // always visible regardless of their expand/collapse state.
+    expect(screen.getByText('Présentation')).toBeInTheDocument()
     expect(screen.getByText("Guide d'utilisation")).toBeInTheDocument()
     expect(screen.getByText('Nouvelle conversation')).toBeInTheDocument()
     expect(screen.queryByText('Aucun réglage disponible pour le moment.')).not.toBeInTheDocument()
 
-    // Collapsing Guide & Sources doesn't touch Conversations or Réglages.
+    // Collapsing Guide & Sources doesn't touch Conversations, Réglages, or the button.
     await user.click(guideToggle)
+    expect(screen.queryByText('Présentation')).not.toBeInTheDocument()
     expect(screen.queryByText("Guide d'utilisation")).not.toBeInTheDocument()
     expect(screen.getByText('Nouvelle conversation')).toBeInTheDocument()
 
@@ -89,9 +93,9 @@ describe('Sidebar', () => {
     expect(screen.getByText('Aucun réglage disponible pour le moment.')).toBeInTheDocument()
     expect(screen.queryByText("Guide d'utilisation")).not.toBeInTheDocument()
 
-    // Collapsing Conversations leaves Réglages open.
+    // Collapsing Conversations leaves Réglages open and the button visible.
     await user.click(conversationsToggle)
-    expect(screen.queryByText('Nouvelle conversation')).not.toBeInTheDocument()
+    expect(screen.getByText('Nouvelle conversation')).toBeInTheDocument()
     expect(screen.getByText('Aucun réglage disponible pour le moment.')).toBeInTheDocument()
   })
 

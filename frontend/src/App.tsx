@@ -31,8 +31,8 @@ export function AppRoutes() {
   return (
     <Routes location={location}>
       <Route path="/" element={<Landing />} />
-      <Route path="/presentation" element={<Presentation />} />
       <Route element={<AppShell />}>
+        <Route path="/presentation" element={<Presentation />} />
         <Route path="/new" element={<Conversation key={location.key} />} />
         <Route path="/new/:draftId" element={<Conversation />} />
         <Route path="/c/:conversationId" element={<Conversation />} />

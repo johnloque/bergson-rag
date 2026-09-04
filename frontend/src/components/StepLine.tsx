@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from 'react'
-import { IconCheck, IconChevronDown, IconChevronUp, IconLoader2, IconX } from '@tabler/icons-react'
+import type { ReactNode } from 'react'
+import { IconCheck, IconLoader2, IconX } from '@tabler/icons-react'
+import { Disclosure } from './Disclosure'
 
 interface StepLineProps {
   label: string
@@ -38,34 +39,41 @@ export function StepLine({
   children,
   expandLabel = 'les sources prises en compte',
 }: StepLineProps) {
-  const [expanded, setExpanded] = useState(false)
   const expandable = !failed && children != null
 
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--ink-2)' }}>
-        {failed ? (
-          <IconX size={15} style={{ color: 'var(--red)' }} />
-        ) : done ? (
-          <IconCheck size={15} style={{ color: 'var(--gray-dark)' }} />
-        ) : (
-          <IconLoader2 size={15} className="animate-spin" style={{ color: 'var(--ink-3)' }} />
-        )}
-        <span>{label}</span>
-        {expandable && (
-          <button
-            type="button"
-            onClick={() => setExpanded((e) => !e)}
-            aria-expanded={expanded}
-            aria-label={expanded ? `Masquer ${expandLabel}` : `Afficher ${expandLabel}`}
-            className="flex items-center rounded p-0.5"
-            style={{ color: 'var(--ink-3)' }}
-          >
-            {expanded ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
-          </button>
-        )}
+  const statusIcon = failed ? (
+    <IconX size={15} style={{ color: 'var(--red)' }} />
+  ) : done ? (
+    <IconCheck size={15} style={{ color: 'var(--gray-dark)' }} />
+  ) : (
+    <IconLoader2 size={15} className="animate-spin" style={{ color: 'var(--ink-3)' }} />
+  )
+
+  if (!expandable) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--ink-2)' }}>
+          {statusIcon}
+          <span>{label}</span>
+        </div>
       </div>
-      {expandable && expanded && <div className="pl-[23px]">{children}</div>}
-    </div>
+    )
+  }
+
+  return (
+    <Disclosure
+      trigger={
+        <>
+          {statusIcon}
+          <span>{label}</span>
+        </>
+      }
+      expandLabel={expandLabel}
+      rowClassName="flex items-center gap-2 text-sm"
+      rowStyle={{ color: 'var(--ink-2)' }}
+      contentClassName="pl-[23px]"
+    >
+      {children}
+    </Disclosure>
   )
 }

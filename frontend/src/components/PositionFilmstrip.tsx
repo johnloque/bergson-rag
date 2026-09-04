@@ -1,10 +1,10 @@
-import { IconArrowRight } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { ChunkNeighborSummary } from '../api/types'
 import { formatCitation } from '../lib/citation'
 import { distanceFromNearestAnchor, formatOffset, type OffsetAnchorChunk } from '../lib/chunkOffset'
 import type { FocusedChunk } from '../lib/focusedChunk'
+import { DashedArrow } from './DashedConnector'
 
 interface PositionFilmstripProps {
   focusedChunk: FocusedChunk
@@ -57,7 +57,7 @@ export function PositionFilmstrip({ focusedChunk, anchors, onSelect }: PositionF
         loading={isLoading}
         onSelect={onSelect}
       />
-      <IconArrowRight size={16} className="my-auto shrink-0" style={{ color: 'var(--ink-3)' }} />
+      <DashedArrow className="my-auto shrink-0" />
       <FilmstripCell
         role="current"
         label="Actuel"
@@ -66,7 +66,7 @@ export function PositionFilmstrip({ focusedChunk, anchors, onSelect }: PositionF
         loading={false}
         current
       />
-      <IconArrowRight size={16} className="my-auto shrink-0" style={{ color: 'var(--ink-3)' }} />
+      <DashedArrow className="my-auto shrink-0" />
       <FilmstripCell
         role="next"
         label="Suivant"

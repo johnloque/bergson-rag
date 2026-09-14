@@ -13,6 +13,13 @@ interface GenerationBlockProps {
    * a citation (lib/citation.ts) for the "Génération..." step's expandable
    * included-chunks list below. */
   chunks: (CitableChunk & { chunk_id: string })[]
+  /** Forwarded to AnswerCard to build each clickable inline citation's
+   * Screen 4 route (`feat/clickable-citations`) — same ids TurnCard already
+   * passes to ChunkRail's "Inspecter" navigation. Optional/nullable, same
+   * as AnswerCardProps: a not-yet-created turn simply disables
+   * linkification rather than requiring every call site to pass it. */
+  conversationId?: number | null
+  turnId?: number | null
   onReveal: () => void
   onEvaluate: () => void
 }
@@ -26,7 +33,15 @@ interface GenerationBlockProps {
 // rather than replacing this one, so earlier answers stay reachable
 // (docs/ROADMAP.md, Sprint 12 — TurnCard.tsx shows the most recent one
 // primary and the rest behind a "versions" disclosure).
-export function GenerationBlock({ entry, isFirst, chunks, onReveal, onEvaluate }: GenerationBlockProps) {
+export function GenerationBlock({
+  entry,
+  isFirst,
+  chunks,
+  conversationId = null,
+  turnId = null,
+  onReveal,
+  onEvaluate,
+}: GenerationBlockProps) {
   const generateLabel = isFirst ? 'Génération de la réponse' : "Génération d'une nouvelle réponse"
   const verifyLabel =
     entry.evaluationStatus === 'done'
@@ -67,6 +82,8 @@ export function GenerationBlock({ entry, isFirst, chunks, onReveal, onEvaluate }
             revealed={entry.revealed}
             onReveal={onReveal}
             onEvaluate={onEvaluate}
+            conversationId={conversationId}
+            turnId={turnId}
           />
 
           {entry.evaluationStatus !== 'idle' && (

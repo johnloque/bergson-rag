@@ -356,7 +356,36 @@ def _extract_citations(answer: str) -> tuple[str, ...]:
     `CITATION_INSTRUCTION` (src/generation/prompt.py) asks the model to
     produce — order-preserved, de-duplicated. A single bracket may list more
     than one chunk_id (comma/semicolon-separated); each is extracted
-    individually."""
+    individually.
+
+    `CITATION_PATTERN` (`src/generation/prompt.py`) is deliberately
+    shape-agnostic — `\\[([^\\[\\]]+)\\]`, any bracketed text, not a
+    chunk_id-shaped pattern like `\\d+_[A-Z]+_c\\d+`. Two reasons, not one:
+
+    1. A shape pattern would be wrong on real data. `1932_2S` is a real
+       work_id (`data/processed/chunks/1932_2S.json`) whose segment after
+       the first underscore starts with a digit, not a letter — an
+       `[A-Z]+`-style pattern would fail to recognize a genuine citation
+       like `1932_2S_c62` (a real chunk_id seen in this project's own
+       `eval/results/ragas_checkpoint.jsonl` output) as a citation at all.
+    2. Even a token that *is* shaped exactly like a chunk_id can still be
+       wrong — out of range, or naming a real chunk_id from outside this
+       particular generation's `chunks`. The question this check actually
+       needs answered is "was this exact id in the chunks passed to this
+       generation," which only the `known_ids` set-membership test in
+       `check_structure` below can answer; a shape regex could never
+       substitute for it, so adding one would only add a way to be wrong
+       (case 1) without removing the need for the real check.
+
+    A side benefit of staying shape-agnostic: a malformed or hallucinated
+    id still gets extracted as a citation candidate and then correctly
+    lands in `unknown_citations` (surfaced to the user via
+    `CitationFlag.tsx`) rather than silently failing to match and
+    disappearing as if no citation were there at all — a guardrail should
+    flag an unresolved reference, not lose it. `frontend/src/lib/
+    citationLinkPlugin.ts` mirrors this same two-step (shape-agnostic
+    bracket/token extraction, then membership) for the same reasons, since
+    it has to agree with this function on what counts as a citation."""
     found: list[str] = []
     for bracket in CITATION_PATTERN.findall(answer):
         for token in re.split(r"[,;]\s*", bracket):

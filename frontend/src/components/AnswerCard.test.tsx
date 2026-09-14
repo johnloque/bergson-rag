@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom'
 import { AnswerCard } from './AnswerCard'
 import type { EvaluateResponse } from '../api/types'
 
@@ -368,5 +370,154 @@ describe('AnswerCard manual evaluation trigger', () => {
       />,
     )
     expect(screen.queryByText('Évaluer')).not.toBeInTheDocument()
+  })
+})
+
+// `feat/clickable-citations`: a `[chunk_id]` inline citation becomes a
+// clickable link to Screen 4 (routes/ChunkDetail.tsx), gated strictly on
+// whether Layer 1 (src/generation/guardrail.py's check_structure) confirmed
+// that chunk_id is present in the generation's own input chunk set — reused
+// directly via `evaluation.structural.unknown_citations`, not recomputed.
+describe('AnswerCard citation links', () => {
+  function evaluationWith(
+    opts: { unknownCitations?: string[]; claims?: EvaluateResponse['faithfulness']['claims'] } = {},
+  ): EvaluateResponse {
+    const claims = opts.claims ?? []
+    return {
+      structural: {
+        citations: ['1907_EC_c5'],
+        unknown_citations: opts.unknownCitations ?? [],
+        has_citation: true,
+        fabricated_titles: [],
+        title_year_mismatches: [],
+        passed: (opts.unknownCitations ?? []).length === 0,
+      },
+      faithfulness: { score: 1, model: 'judge', claims },
+      should_auto_expand: true,
+    }
+  }
+
+  // Renders AnswerCard at /c/1, with Screen 4's real route target next to
+  // it, so a click can be asserted to actually land on the right chunk —
+  // not just that an <a> with a plausible-looking href exists.
+  function renderAtConversation(answer: string, evaluation: EvaluateResponse | null) {
+    function ChunkDetailStub() {
+      const params = useParams()
+      return <div data-testid="screen4">{`${params.conversationId}/${params.turnId}/${params.chunkId}`}</div>
+    }
+    return render(
+      <MemoryRouter initialEntries={['/c/1']}>
+        <Routes>
+          <Route
+            path="/c/:conversationId"
+            element={
+              <AnswerCard
+                answer={answer}
+                evaluation={evaluation}
+                evaluationStatus="done"
+                revealed={true}
+                onReveal={() => {}}
+                conversationId={1}
+                turnId={2}
+              />
+            }
+          />
+          <Route path="/c/:conversationId/turn/:turnId/chunk/:chunkId" element={<ChunkDetailStub />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('renders a citation confirmed present in the input chunk set as a clickable link, text unchanged', () => {
+    renderAtConversation('Une affirmation [1907_EC_c5].', evaluationWith())
+    const link = screen.getByTestId('citation-link')
+    expect(link.tagName).toBe('A')
+    // Regression: the link's text content is the bare chunk_id, exactly as
+    // written — never reformatted to the work+year+paragraph citation
+    // format used elsewhere (lib/citation.ts's formatCitation).
+    expect(link.textContent).toBe('1907_EC_c5')
+    // The surrounding brackets stay as plain text, next to the link, so the
+    // paragraph still reads "[1907_EC_c5]" overall.
+    expect(screen.getByTestId('answer-content').textContent).toBe('Une affirmation [1907_EC_c5].')
+  })
+
+  // Restyled from plain red/underlined text to a red pill on direct
+  // request (docs/frontend.md's "Styling, revised after initial review") —
+  // reuses the same rounded-full `--red-bg`/`--red` pill convention as
+  // StatusPill.tsx/RelevancePill.tsx elsewhere in this app.
+  it('styles the link as a red pill, not plain underlined text', () => {
+    renderAtConversation('Une affirmation [1907_EC_c5].', evaluationWith())
+    const link = screen.getByTestId('citation-link')
+    expect(link.className).toContain('rounded-full')
+    expect(link).toHaveStyle({ background: 'var(--red-bg)', color: 'var(--red)' })
+  })
+
+  it('navigates to Screen 4 with the correct chunk focused on click', async () => {
+    const user = userEvent.setup()
+    renderAtConversation('Une affirmation [1907_EC_c5].', evaluationWith())
+    await user.click(screen.getByTestId('citation-link'))
+    expect(await screen.findByTestId('screen4')).toHaveTextContent('1/2/1907_EC_c5')
+  })
+
+  it('does not link a citation Layer 1 flagged as unknown — existing flag treatment only', () => {
+    renderAtConversation('Une affirmation [1907_EC_c5].', evaluationWith({ unknownCitations: ['1907_EC_c5'] }))
+    expect(screen.queryByTestId('citation-link')).not.toBeInTheDocument()
+    expect(screen.getByTestId('answer-content').textContent).toBe('Une affirmation [1907_EC_c5].')
+    expect(
+      screen.getByText('La citation [1907_EC_c5] ne correspond à aucun passage fourni.'),
+    ).toBeInTheDocument()
+  })
+
+  it('does not link anything when there is no evaluation yet (no confirmed exists-in-set result)', () => {
+    renderAtConversation('Une affirmation [1907_EC_c5].', null)
+    expect(screen.queryByTestId('citation-link')).not.toBeInTheDocument()
+  })
+
+  it('renders correctly as both bold and a link when the citation sits inside a bolded phrase', () => {
+    renderAtConversation('**Une affirmation [1907_EC_c5]** notable.', evaluationWith())
+    const { container } = { container: screen.getByTestId('answer-content') }
+    const strong = container.querySelector('strong')
+    expect(strong).not.toBeNull()
+    const link = strong!.querySelector('a')
+    expect(link?.textContent).toBe('1907_EC_c5')
+    expect(strong!.textContent).toBe('Une affirmation [1907_EC_c5]')
+  })
+
+  it('renders both the faithfulness highlight and the citation link when a flagged quote contains the citation', () => {
+    renderAtConversation(
+      'Le texte affirme une chose surprenante [1907_EC_c5], à vérifier.',
+      evaluationWith({
+        claims: [
+          {
+            statement: 'x',
+            supported: false,
+            reason: 'non étayé',
+            quote: 'une chose surprenante [1907_EC_c5]',
+          },
+        ],
+      }),
+    )
+    const mark = screen.getByTestId('answer-content').querySelector('mark')
+    expect(mark).not.toBeNull()
+    const link = mark!.querySelector('a')
+    expect(link).not.toBeNull()
+    expect(link!.textContent).toBe('1907_EC_c5')
+    // Highlight and link compose: the mark still contains the full flagged
+    // quote (bracket included), the link nests inside it and doesn't
+    // truncate or duplicate any of the surrounding highlighted text.
+    expect(mark!.textContent).toBe('une chose surprenante [1907_EC_c5]')
+  })
+
+  it('links each known chunk_id independently within a multi-id bracket', () => {
+    renderAtConversation(
+      'Plusieurs passages convergent [1888_EDIC_c1, 1934_PM_c23].',
+      evaluationWith({ unknownCitations: ['1934_PM_c23'] }),
+    )
+    const links = screen.getAllByTestId('citation-link')
+    expect(links).toHaveLength(1)
+    expect(links[0].textContent).toBe('1888_EDIC_c1')
+    expect(screen.getByTestId('answer-content').textContent).toBe(
+      'Plusieurs passages convergent [1888_EDIC_c1, 1934_PM_c23].',
+    )
   })
 })

@@ -139,6 +139,8 @@ export function TurnCard({
           entry={currentGeneration}
           isFirst={latestIndex === 0}
           chunks={citableChunks}
+          conversationId={turn.conversationId}
+          turnId={turn.turnId}
           onReveal={() => turn.reveal(latestIndex)}
           onEvaluate={() => turn.evaluate(latestIndex)}
         />
@@ -174,6 +176,8 @@ export function TurnCard({
                   entry={turn.generations[index]}
                   isFirst={index === 0}
                   chunks={citableChunks}
+                  conversationId={turn.conversationId}
+                  turnId={turn.turnId}
                   onReveal={() => turn.reveal(index)}
                   onEvaluate={() => turn.evaluate(index)}
                 />

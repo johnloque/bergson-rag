@@ -853,6 +853,163 @@ the Zenodo link is present, correct, and opens in a new tab; the 1888_EDIC
 `sourceDesc` warning fires. Backend: `tests/test_source_metadata.py` (see
 above).
 
+## Addendum — clickable inline citations (`feat/clickable-citations`)
+
+Inline `[chunk_id]` citations in a generated answer's own text become
+clickable links to Screen 4's master-detail chunk inspection view
+(`feat/chunk-neighbor-expansion`, above), gated by whether that chunk_id is
+actually one of the chunks passed to the generation that produced the
+answer.
+
+### Confirmed citation format, before any parsing logic was written
+
+Read from `src/generation/prompt.py`'s `CITATION_INSTRUCTION`/
+`CITATION_PATTERN` and confirmed against real `generate_from_chunks` output
+(`eval/results/ragas_checkpoint.jsonl`) rather than assumed: a citation is a
+bracket, `[chunk_id]`, e.g. `[1907_EC_c5]` — but a single bracket can also
+name more than one chunk_id, comma-separated, e.g. the real Q007
+`generation_only` answer's `[1888_EDIC_c1, 1934_PM_c23, 1934_PM_c39]`. The
+backend's own citation extraction (`src/generation/guardrail.py`'s
+`_extract_citations`) already handles this — splitting each bracket's
+contents on `[,;]\s*` and checking every token independently — so the
+frontend parser mirrors that exactly (`lib/citationLinkPlugin.ts`) rather
+than assuming one chunk_id per bracket. Real answers also place a citation
+bracket at the end of a markdown-formatted or quoted sentence, not only in
+plain paragraph text, so parsing has to work on parsed markdown text
+leaves, not just a raw string (see below).
+
+### Gating: exists in this generation's input chunk set, reusing Layer 1's own result
+
+A chunk_id becomes a link if and only if it is present in the chunks
+actually sent to `generate_from_chunks` for that answer — the exact check
+Layer 1 already performs
+(`src/generation/guardrail.py`'s `check_structure`,
+`StructuralCheck.unknown_citations`, see
+[`docs/anti_hallucination_guardrails.md`](anti_hallucination_guardrails.md)).
+The frontend reuses that computed result directly
+(`evaluation.structural.unknown_citations`, already shipped to the client
+for `CitationFlag.tsx`) rather than recomputing a second, independent
+existence check against the chunk list itself — one shared source of truth,
+same discipline as `src.generation.signals.retrieval_confidence_tier`
+having exactly one computation reused by two call sites elsewhere in this
+project. A citation Layer 1 has already flagged as unknown keeps its
+existing `CitationFlag` treatment unchanged and is never linked — this is a
+strictly narrower question than general "validity" (no title/year
+fabrication check feeds into it; that is a separate, prose-level concern
+`check_title_fabrication`/`check_title_year_mismatch` already own). No
+evaluation yet for a generation (`evaluation === null`) means no confirmed
+exists-in-set result to gate on, so nothing is linked yet either — same
+"can't show what isn't known" discipline as everywhere else `evaluation`
+gates a UI decision in this component.
+
+### Display text is untouched — chunk_id format, not the work+year+paragraph citation format
+
+The link's visible text stays the bare chunk_id exactly as generated
+(e.g. `1907_EC_c5`) — never reformatted to `lib/citation.ts`'s
+`formatCitation` (the "{work_title} ({year})[, paragraphe {n}]" format the
+chunk rail and included-chunks list use). Deliberate: chunk_id strings have
+a roughly constant, predictable length, which keeps inline paragraph flow
+visually stable; `formatCitation`'s output length varies far more
+(especially for an anthology-work citation carrying both the work's and the
+individual text's title/year) and would disrupt the surrounding paragraph's
+layout if substituted inline. Only the click behavior and link styling
+change — regression-tested directly (`AnswerCard.test.tsx`: the link
+element's `textContent` must equal the original chunk_id string exactly).
+Only the bare chunk_id token is wrapped in the `<a>`; the brackets and any
+comma/semicolon separator stay plain text next to it, so a mixed multi-id
+bracket (one known chunk_id, one Layer-1-flagged unknown one) links only
+the known token.
+
+### Implementation: a second rehype plugin, composing with the first
+
+`lib/citationLinkPlugin.ts`'s `rehypeLinkCitations` is a second
+`react-markdown` `rehypePlugins` entry (`components/AnswerCard.tsx`),
+alongside `lib/highlightPlugin.ts`'s `rehypeHighlightClaims` — same
+technique, same reason: markdown structure is already parsed into the HAST
+tree by the time either plugin runs, so a citation bracket inside a bold
+run or list item is still just text at that leaf, and wrapping it in an
+`<a>` leaves `<strong>`/`<li>` intact rather than fighting react-markdown's
+own parsing. **Order matters and is deliberate**: the highlight plugin runs
+first, so its quote-matching (`lib/highlightMatching.ts`) sees the answer's
+original, unsplit text and is completely unaffected by this feature; the
+citation-link plugin runs second, walking whatever text leaves remain —
+including inside a `<mark>` the highlight pass just produced. This is what
+lets a citation bracket sitting inside a faithfulness-flagged quote still
+become a link nested inside the highlight, rather than one transform
+clobbering the other — explicit regression test in `AnswerCard.test.tsx`
+("renders both the faithfulness highlight and the citation link when a
+flagged quote contains the citation"), alongside a citation-inside-bold
+composability test and a multi-id-bracket test. Rendered via `react-router-dom`'s
+`Link` (`markdownComponents.a` in `AnswerCard.tsx`) rather than a plain
+`<a href>`, so a click is client-side navigation, not a full page reload —
+`rehypeLinkCitations` already bakes the full in-app path into the HAST
+node's `href`, so the renderer just forwards it as `Link`'s `to`.
+
+### Link target and styling
+
+Targets the exact same Screen 4 route `feat/chunk-neighbor-expansion`
+already uses for the chunk rail's "Inspecter" button
+(`/c/{conversationId}/turn/{turnId}/chunk/{chunkId}`,
+`components/ChunkRail.tsx`'s `navigate(...)` call) — no new route, no new
+focusing mechanism: the `:chunkId` param seeds Screen 4's initial
+`focusedChunk` on mount exactly as an "Inspecter" click's navigation
+already does. `AnswerCard` needs `conversationId`/`turnId` to build this
+path, threaded down from `TurnCard.tsx` (which already has both, for its
+own `ChunkRail`) through `GenerationBlock.tsx`; both are optional/nullable
+on every component in that chain (a not-yet-created turn simply disables
+linkification, matching the null-guards already used for the
+confidence-preview/persistence effects in `ChunkRail.tsx`).
+
+**Styling, revised after initial review**: first shipped as plain `--red`
+underlined text (matching the Sources page's Zenodo attribution link,
+`routes/Sources.tsx`), then changed to a small rounded-full pill
+(`--red-bg` background, `--red` text) on direct request — plain colored
+text read as too subtle sitting inline in a paragraph. Reuses the exact
+`rounded-full`/`--X-bg`+`--X` pill convention `StatusPill.tsx`/
+`RelevancePill.tsx` already establish elsewhere in this app, rather than a
+third, independently-invented pill style. Structural output is unchanged
+by this restyle: the surrounding `[`/`]`/separator characters still render
+as plain text next to the pill (`lib/citationLinkPlugin.ts` only ever
+wrapped the bare chunk_id token, never the brackets), so a paragraph still
+reads `[1907_EC_c5]` with the id itself rendered as a small red badge
+between the two literal bracket characters — only the link element's own
+color/shape changed, not what surrounds it or its text content.
+
+### Back-navigation: reported, not changed
+
+Screen 4's "Retour" button (`routes/ChunkDetail.tsx`) calls
+`navigate(\`/c/${conversationId}\`)` — an explicit route, not
+browser-history back (`navigate(-1)`). Checked directly against that source
+rather than assumed. Consequence: returning from Screen 4 after clicking an
+inline citation link (same as after an "Inspecter" click — this is not a
+citation-link-specific behavior) always lands at the top of the
+conversation route, not at the specific scroll position within it where the
+citation was clicked; a long conversation with several turns loses its
+reading position on the way back. This is pre-existing behavior from
+`feat/chunk-neighbor-expansion`, unchanged by this branch — reported here
+per this feature's own scope decision rather than silently fixed: switching
+"Retour" to true browser-history back would change behavior for every
+existing Screen 4 entry point (including "Inspecter"), not just citation
+links, which is a broader change than this branch's scope and was left for
+a decision on its own rather than bundled in here.
+
+### Test coverage
+
+`lib/citationLinkPlugin.test.ts` — the pure HAST transform, decoupled from
+React rendering (single known citation, an unknown one left as plain text,
+a multi-id bracket linking only the known tokens with the rest reconstructed
+verbatim, recursion into a non-text child such as a prior highlight's
+`<mark>`, and a no-citation no-op). `components/AnswerCard.test.tsx` (new
+`AnswerCard citation links` describe block) — a known citation renders as a
+link with unchanged chunk_id text; clicking it navigates to Screen 4 with
+the correct `conversationId`/`turnId`/`chunkId` (asserted against the real
+route, not just the `href` string); a Layer-1-flagged unknown citation
+renders no link and keeps `CitationFlag`'s existing message; no evaluation
+yet means no link; a citation inside a bolded phrase renders as both bold
+and a link; a citation inside a Layer 2 highlight span renders both the
+`<mark>` and the nested link; a multi-id bracket links only the known
+token.
+
 ## Known gap, not a finished feature: dark mode and full responsive layout
 
 The design tokens are CSS custom properties (`frontend/src/index.css`), not

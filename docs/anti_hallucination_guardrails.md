@@ -48,7 +48,16 @@ All in `src/generation/`:
   for an initial generation and a manual regeneration:
   - **Layer 1**, `check_structure` — deterministic, no LLM call: every
     `[chunk_id]` citation in the answer must resolve to a chunk actually
-    passed in, and at least one citation must be present. Carried on
+    passed in, and at least one citation must be present. Extraction
+    (`_extract_citations`) matches any bracketed text, not a chunk_id-shaped
+    pattern — deliberate, not a missed tightening opportunity: a shape
+    pattern would misfire on real data (e.g. `1932_2S_c62`, since
+    `1932_2S`'s segment after the first underscore starts with a digit), and
+    the check that actually matters — is this exact id one of the chunks
+    given to *this* generation — is a `known_ids` set-membership test
+    regardless, which a shape pattern could never substitute for. Full
+    rationale in `_extract_citations`'s own docstring
+    (`src/generation/guardrail.py`). Carried on
     `EvaluationResult` for the caller/UI, but **not** wired into
     `should_auto_expand`'s own gate (see next point) — the local generation
     model was found, empirically, to often omit citations even from
@@ -579,3 +588,34 @@ Test coverage: `tests/test_paragraph_chunk_map.py`, against real,
 already-verified gold_dataset.csv mappings (Q001, Q004, Q007's four
 paragraph_ids across two works) plus a round-trip check over every
 paragraph/chunk pair in 1907_EC's current chunking.
+
+## `feat/clickable-citations`: Layer 1's citation-existence result also gates a UI behavior, not just the structural flag
+
+`check_structure`'s citation-resolution half — `StructuralCheck.citations`/
+`unknown_citations`, every `[chunk_id]` bracket in the answer checked
+against the `chunks` actually passed to that generation — already had one
+consumer before this branch: `CitationFlag.tsx`'s warning message when a
+citation doesn't resolve. This branch adds a second, independent consumer
+on the frontend, reusing the exact same computed result rather than a
+second existence check: a `[chunk_id]` citation in the answer's own
+rendered text becomes a clickable link to Screen 4's chunk inspection view
+(`feat/chunk-neighbor-expansion`) if and only if its chunk_id is **not**
+in `unknown_citations` — i.e. Layer 1 already confirmed it names a chunk
+present in this generation's input set. A citation Layer 1 flagged as
+unknown is never linked; it keeps the existing `CitationFlag` treatment
+unchanged. Full detail, including the confirmed `[chunk_id]` format (single
+and multi-id-per-bracket), the markdown-composability requirement, and the
+chunk_id-format-preserved-for-link-text rationale, is in
+[`docs/frontend.md`](frontend.md)'s "clickable inline citations" addendum —
+nothing on the backend/`check_structure` side changed for this branch, only
+a new frontend reader of its existing output.
+
+This is deliberately **not** the same question as general answer
+"validity": it does not depend on `check_title_fabrication` or
+`check_title_year_mismatch` (both above) — a citation can be exists-in-set
+(linkable) in an answer that separately fabricates a title elsewhere, and
+`should_auto_expand`'s own gate is unaffected by this addition, same as it
+already was unaffected by `unknown_citations` itself (see this module's
+docstring for why: citation omission/presence isn't gated, but resolution
+correctness for citations that *are* present still feeds this new link
+behavior regardless).

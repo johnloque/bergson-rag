@@ -521,3 +521,129 @@ describe('AnswerCard citation links', () => {
     )
   })
 })
+
+// "Vérifié" (StatusPill) only ever means "the check ran and completed" — it
+// says nothing about the verdict, so a verified-but-still-collapsed card
+// (should_auto_expand false, evaluationStatus 'done') read as contradictory/
+// buggy without an explanation (user report, fix/answer-verification): the
+// badge says done, the content is still hidden behind "Lire quand même".
+// `collapseReason` names the actual reason: a structural flag (Layer 1) or
+// an unsupported claim (Layer 2) — the only two things that can make
+// should_auto_expand false (src/generation/guardrail.py). Retrieval
+// confidence used to be a third gate, inferred here by elimination when
+// neither of the other two fired, but no longer gates should_auto_expand
+// at all (`fix/answer-verification`'s "Dropped: retrieval confidence as an
+// auto-expand gate", docs/anti_hallucination_guardrails.md) — the "neither
+// flag fired" case can no longer happen for a real API response, but
+// `evaluation` is still a plain prop, so the component doesn't assume that
+// invariant and simply shows no reason for a combination it can't explain
+// (see the last test below).
+describe('AnswerCard collapse reason', () => {
+  function evaluation(overrides: {
+    fabricatedTitles?: string[]
+    titleYearMismatches?: EvaluateResponse['structural']['title_year_mismatches']
+    claims?: EvaluateResponse['faithfulness']['claims']
+  }): EvaluateResponse {
+    return {
+      structural: {
+        citations: [],
+        unknown_citations: [],
+        has_citation: true,
+        fabricated_titles: overrides.fabricatedTitles ?? [],
+        title_year_mismatches: overrides.titleYearMismatches ?? [],
+        passed: true,
+      },
+      faithfulness: { score: 1, model: 'judge', claims: overrides.claims ?? [] },
+      should_auto_expand: false,
+    }
+  }
+
+  it('shows no reason for a should_auto_expand: false evaluation with neither flag fired (not a real API shape, defensive only)', () => {
+    render(
+      <AnswerCard
+        answer="Une réponse."
+        evaluation={evaluation({})}
+        evaluationStatus="done"
+        revealed={false}
+        onReveal={() => {}}
+      />,
+    )
+    expect(screen.queryByTestId('collapse-reason')).not.toBeInTheDocument()
+  })
+
+  it('names the unsupported claim when Layer 2 flagged one, even with no structural flag', () => {
+    render(
+      <AnswerCard
+        answer="Une réponse."
+        evaluation={evaluation({
+          claims: [{ statement: 'A', supported: false, reason: 'non étayé', quote: null }],
+        })}
+        evaluationStatus="done"
+        revealed={false}
+        onReveal={() => {}}
+      />,
+    )
+    expect(screen.getByTestId('collapse-reason').textContent).toMatch(/sources citées/i)
+  })
+
+  it('names the structural flag when Layer 1 fired, even with every claim supported', () => {
+    render(
+      <AnswerCard
+        answer="Une réponse."
+        evaluation={evaluation({
+          fabricatedTitles: ['Le comique de caractère'],
+          claims: [{ statement: 'A', supported: true, reason: 'ok', quote: null }],
+        })}
+        evaluationStatus="done"
+        revealed={false}
+        onReveal={() => {}}
+      />,
+    )
+    expect(screen.getByTestId('collapse-reason').textContent).toMatch(/titre ou une date/i)
+  })
+
+  it('prefers the structural reason when both a structural and a faithfulness flag fired', () => {
+    render(
+      <AnswerCard
+        answer="Une réponse."
+        evaluation={evaluation({
+          fabricatedTitles: ['Le comique de caractère'],
+          claims: [{ statement: 'A', supported: false, reason: 'non étayé', quote: null }],
+        })}
+        evaluationStatus="done"
+        revealed={false}
+        onReveal={() => {}}
+      />,
+    )
+    expect(screen.getByTestId('collapse-reason').textContent).toMatch(/titre ou une date/i)
+  })
+
+  it('does not render once expanded — the reason only makes sense next to the veil', () => {
+    render(
+      <AnswerCard
+        answer="Une réponse."
+        evaluation={evaluation({})}
+        evaluationStatus="done"
+        revealed={true}
+        onReveal={() => {}}
+      />,
+    )
+    expect(screen.queryByTestId('collapse-reason')).not.toBeInTheDocument()
+  })
+
+  it('does not render before evaluation has actually completed (idle/pending/error)', () => {
+    for (const status of ['idle', 'pending', 'error'] as const) {
+      const { unmount } = render(
+        <AnswerCard
+          answer="Une réponse."
+          evaluation={null}
+          evaluationStatus={status}
+          revealed={false}
+          onReveal={() => {}}
+        />,
+      )
+      expect(screen.queryByTestId('collapse-reason')).not.toBeInTheDocument()
+      unmount()
+    }
+  })
+})

@@ -131,7 +131,23 @@ class Evaluation(SQLModel, table=True):
     __tablename__ = "evaluations"
 
     id: int | None = Field(default=None, primary_key=True)
-    generation_id: int = Field(foreign_key="generations.id", index=True)
+    # unique=True (fix/answer-verification): one generation gets at most one
+    # evaluation row. `/evaluate` (src/api/main.py) already checked for an
+    # existing row before recomputing, and `save_evaluation`
+    # (src/api/persistence.py) already re-checked before inserting, but
+    # neither made that check-then-insert atomic — two genuinely concurrent
+    # `/evaluate` calls for the same `generation_id` (FastAPI runs sync path
+    # operations in a thread pool, so this isn't just a multi-process/
+    # multi-tab scenario) could both pass the check before either committed,
+    # leaving two rows. This constraint makes that impossible at the DB
+    # level instead of best-effort at the application layer; the loser's
+    # `IntegrityError` is caught in `save_evaluation` and turned into
+    # "return the winner's row", not a 500. An already-existing dev DB
+    # predating this column change is retrofitted by `src/api/db.py`'s
+    # `_sync_unique_indexes` (`create_all()` alone won't add a constraint to
+    # an already-created table, same limitation `_sync_additive_columns`
+    # documents for columns).
+    generation_id: int = Field(foreign_key="generations.id", index=True, unique=True)
     structural_flags: dict = Field(sa_column=Column(JSON))
     faithfulness_annotations: dict = Field(sa_column=Column(JSON))
     should_auto_expand: bool

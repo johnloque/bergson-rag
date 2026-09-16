@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from src.api.models import (
@@ -231,10 +232,17 @@ def save_evaluation(
 
     Upserts on `generation_id` (mirrors `upsert_chunk_judgment`'s
     (turn_id, chunk_id) upsert): `/evaluate` (src/api/main.py) already
-    checks for an existing evaluation before rerunning the LLM check, but
-    two concurrent `/evaluate` calls for the same `generation_id` could both
-    pass that check before either commits — upserting here keeps that race
-    from leaving duplicate rows for one generation."""
+    checks for an existing evaluation before rerunning the LLM check, and
+    this function re-checks again right before inserting — but two
+    concurrent `/evaluate` calls for the same `generation_id` (FastAPI runs
+    sync path operations in a thread pool, so this race is real even
+    single-process) could still both pass both checks before either
+    commits. `evaluations.generation_id` now carries a DB-level unique
+    constraint (`src/api/models.py`, fix/answer-verification) that turns
+    that race into a losing `IntegrityError` for whichever request commits
+    second, caught below and turned into "return the winner's row" instead
+    of a 500 — true idempotency instead of the previous best-effort-only
+    check-then-insert."""
     if session.get(Generation, generation_id) is None:
         raise HTTPException(status_code=404, detail=f"generation_id {generation_id} not found")
     evaluation = get_evaluation_for_generation(session, generation_id)
@@ -244,7 +252,15 @@ def save_evaluation(
     evaluation.faithfulness_annotations = faithfulness_annotations
     evaluation.should_auto_expand = should_auto_expand
     session.add(evaluation)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        winner = get_evaluation_for_generation(session, generation_id)
+        assert winner is not None, (
+            "IntegrityError on evaluations.generation_id implies a row for " "it already exists"
+        )
+        return winner
     session.refresh(evaluation)
     return evaluation
 

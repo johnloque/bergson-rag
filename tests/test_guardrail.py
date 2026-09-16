@@ -44,7 +44,12 @@ import pytest
 from qdrant_client import QdrantClient
 
 from src.generation.chunk_judgment import ChunkJudgment
-from src.generation.faithfulness import DEFAULT_JUDGE_MODEL, FaithfulnessResult, build_judge_llm
+from src.generation.faithfulness import (
+    DEFAULT_JUDGE_MODEL,
+    ClaimVerdict,
+    FaithfulnessResult,
+    build_judge_llm,
+)
 from src.generation.generate import (
     DEFAULT_FALLBACK_MODEL,
     DEFAULT_MODEL,
@@ -335,6 +340,52 @@ def test_q009_persistent_retrieval_miss_gets_very_low_confidence_tier(
         Q009_QUERY, reranked, result.answer, confidence, judge_llm=judge_llm
     )
     assert evaluation.retrieval_confidence == "très faible"
+    # `should_auto_expand` no longer gates on retrieval confidence at all
+    # (fix/answer-verification, src/generation/guardrail.py's "Dropped:
+    # retrieval confidence as an auto-expand gate" section) — before that
+    # branch this asserted `not should_auto_expand(evaluation)` specifically
+    # *because of* the "très faible" tier. This real, non-hand-picked case
+    # is exactly the one the policy change affects: whatever
+    # `should_auto_expand` returns here now depends only on Layer 1/Layer 2,
+    # not on this tier — see
+    # test_should_auto_expand_ignores_confidence_when_layers_clean below for
+    # a deterministic, LLM-independent test of that policy itself.
+
+
+def test_should_auto_expand_ignores_confidence_when_layers_clean():
+    """fix/answer-verification: retrieval confidence no longer gates
+    `should_auto_expand` — a "très faible" tier alone must not block
+    auto-expand once Layer 1 and Layer 2 are both clean. No LLM/Qdrant
+    needed: `structural` comes from `check_structure` on a plain,
+    citation-free answer (nothing for either Layer 1 check to flag) and
+    `faithfulness` is constructed directly with no claims, same isolation
+    discipline as test_q004_fabricated_title_caught_by_layer1_without_llm
+    above."""
+    structural = check_structure("Une réponse fondée sur les passages fournis.", [])
+    assert not structural.fabricated_titles
+    assert not structural.title_year_mismatches
+
+    evaluation = EvaluationResult(
+        structural=structural,
+        faithfulness=FaithfulnessResult(score=1.0, model="test", claims=()),
+        retrieval_confidence="très faible",
+    )
+    assert should_auto_expand(evaluation)
+
+
+def test_should_auto_expand_still_blocks_on_layer2_regardless_of_confidence():
+    """The other half of the same policy: a high confidence tier must not
+    override a genuine Layer 2 flag — confidence was dropped from the gate
+    entirely, not swapped for "confidence can override the other checks"."""
+    structural = check_structure("Une réponse fondée sur les passages fournis.", [])
+    faithfulness = FaithfulnessResult(
+        score=0.0,
+        model="test",
+        claims=(ClaimVerdict(statement="x", supported=False, reason="non étayé", quote=None),),
+    )
+    evaluation = EvaluationResult(
+        structural=structural, faithfulness=faithfulness, retrieval_confidence="élevée"
+    )
     assert not should_auto_expand(evaluation)
 
 

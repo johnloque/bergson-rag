@@ -6,6 +6,7 @@ import { neighborSummaryToChunkInput, toChunkInput } from '../lib/chunkInput'
 import { CHUNK_RAIL_TOP_K } from '../lib/retrievalConfig'
 import { cacheChunks, getCachedChunk } from './chunkCache'
 import { getPendingConversation, startOrAttachPendingConversation } from './pendingConversations'
+import { pendingEvaluations } from './pendingEvaluations'
 import { pendingGenerations } from './pendingGenerations'
 import type { RetrieveFilterParams } from './retrievalFilter'
 import { useTurnUi } from './turnUi'
@@ -93,7 +94,16 @@ export function useTurnController(options: TurnControllerOptions) {
   const runEvaluationAt = useCallback(async (index: number, generationId: number) => {
     setGenerations((prev) => patchAt(prev, index, { evaluationStatus: 'pending' }))
     try {
-      const result = await api.evaluate({ generation_id: generationId })
+      // Registered under the generation id (state/pendingEvaluations.ts) so
+      // that if this component unmounts before /evaluate resolves — the
+      // user navigated away — a later remount of this same turn's card (the
+      // hydrate effect below) can find it still running and reattach,
+      // instead of the UI just looking unverified again and inviting a
+      // second "Évaluer"/"Réessayer la vérification" click that would fire
+      // a genuine duplicate /evaluate call (fix/answer-verification).
+      const result = await pendingEvaluations.start(String(generationId), () =>
+        api.evaluate({ generation_id: generationId }),
+      )
       setGenerations((prev) => patchAt(prev, index, { evaluation: result, evaluationStatus: 'done' }))
     } catch {
       // Evaluation failure (e.g. provider down) shouldn't hide the answer
@@ -279,6 +289,35 @@ export function useTurnController(options: TurnControllerOptions) {
           revealed: false,
         }))
         setGenerations(persistedEntries)
+
+        // A "Évaluer"/"Réessayer la vérification" click made before this
+        // mount may still be running server-side with no persisted
+        // evaluations row to show for it yet (state/pendingEvaluations.ts)
+        // — resume its "Vérification en cours" state and attach to the same
+        // call, per generation, instead of falling back to 'idle' (which
+        // is what invited a second click; fix/answer-verification).
+        // Deliberately does *not* re-issue /evaluate for a generation that
+        // simply was never manually evaluated at all — /evaluate has been a
+        // manual, on-demand action since before Sprint 10
+        // (docs/turn_lifecycle.md), and auto-firing it for every
+        // never-verified past turn on every reload would silently override
+        // that product decision, not just close this navigation gap.
+        persistedEntries.forEach((persisted, i) => {
+          if (persisted.generationId === null || persisted.evaluation !== null) return
+          const inFlightEvaluation = pendingEvaluations.get(String(persisted.generationId))
+          if (!inFlightEvaluation) return
+          setGenerations((prev) => patchAt(prev, i, { evaluationStatus: 'pending' }))
+          inFlightEvaluation.promise.then(
+            (result) => {
+              if (cancelled) return
+              setGenerations((prev) => patchAt(prev, i, { evaluation: result, evaluationStatus: 'done' }))
+            },
+            () => {
+              if (cancelled) return
+              setGenerations((prev) => patchAt(prev, i, { evaluationStatus: 'error' }))
+            },
+          )
+        })
 
         // A "Générer"/"Régénérer" click made before this mount (e.g. the
         // user navigated away right after clicking, then back) may still be

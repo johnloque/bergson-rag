@@ -37,7 +37,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 from src.api.converters import chunk_input_to_generation_chunk
 from src.api.db import get_session
 from src.api.main import app
-from src.api.models import Conversation, Generation, RetrievedChunkRow, Turn
+from src.api.models import Conversation, Evaluation, Generation, RetrievedChunkRow, Turn
 from src.api.schemas import ChunkInput
 from src.generation.faithfulness import DEFAULT_JUDGE_MODEL
 from src.generation.generate import (
@@ -663,6 +663,54 @@ def test_evaluate_unreachable_provider_returns_503(client, engine, monkeypatch):
     response = client.post("/evaluate", json={"generation_id": generation_id})
     assert response.status_code == 503
     assert "ollama_chat" in response.json()["detail"]
+
+
+@_qdrant_skip
+@_judge_skip
+def test_evaluate_second_call_for_same_generation_id_reuses_existing_row(client, engine):
+    """fix/answer-verification: a second `/evaluate` call for a
+    `generation_id` that's already been evaluated must return the existing
+    row instead of rerunning the judge — this is what makes it safe for the
+    frontend to re-issue `/evaluate` after a navigate-away-and-back without
+    either paying for a second judge call or re-exposing this project's
+    known judge-noise variance (docs/anti_hallucination_guardrails.md,
+    Sprint 10's judge-noise calibration) on a second, possibly different,
+    verdict for the same generation. `src.api.main.generate_evaluation` is
+    wrapped (not replaced — it still runs for real, same discipline as the
+    real-judge tests above) purely to count invocations, since that's the
+    one call in `/evaluate`'s path that reaches the judge."""
+    import src.api.main as api_main
+
+    call_count = 0
+    real_generate_evaluation = api_main.generate_evaluation
+
+    def _counting_generate_evaluation(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return real_generate_evaluation(*args, **kwargs)
+
+    turn_id = _create_turn(engine, Q001_QUERY)
+    generation_id = _insert_generation(engine, turn_id, Q001_CHUNK_ID, Q001_HALLUCINATED_ANSWER)
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(api_main, "generate_evaluation", _counting_generate_evaluation)
+
+        first = client.post("/evaluate", json={"generation_id": generation_id})
+        assert first.status_code == 200
+        assert call_count == 1
+
+        second = client.post("/evaluate", json={"generation_id": generation_id})
+        assert second.status_code == 200
+        # The judge was not invoked a second time.
+        assert call_count == 1
+
+    assert first.json() == second.json()
+
+    with Session(engine) as session:
+        rows = session.exec(
+            select(Evaluation).where(Evaluation.generation_id == generation_id)
+        ).all()
+        assert len(rows) == 1
 
 
 # --- /judge-chunk ----------------------------------------------------------

@@ -131,6 +131,55 @@ turnId=...>` hydrating purely from `GET /turns/{id}`) — the answer stays
 unblurred with no "Lire quand même" prompt, matching the live pre-navigation
 state exactly.
 
+## `fix/answer-verification`: a gap this fix didn't close, surfacing later as the same user-visible symptom
+
+Real-usage reports of "verification status lost on navigation" kept
+recurring after this sprint shipped. Investigated per standing project
+discipline (diagnose before fixing, `docs/ROADMAP.md`) rather than assumed
+to be a regression from one of the Sprint 12 UI branches
+(`feat/sidebar-restructure`, `feat/chunk-neighbor-expansion`,
+`feat/answer-display-improvements`, `feat/clickable-citations`) — none of
+which touch `useTurnController.ts`'s hydrate effect, `AnswerCard.tsx`'s
+`expanded` derivation, or `/evaluate` at all (`git log --follow -p` on each
+confirms this). **Not a regression: a second, independent gap that this
+sprint's fix above never covered, because the two problems only look alike
+from the outside.**
+
+The bug 4 fix above closes the *redirect-remount* race: a full-page
+navigation landing mid-`/generate`-then-`/evaluate`. But `/evaluate` has
+been a fully manual, user-triggered action (the "Évaluer"/"Réessayer la
+vérification" button, `AnswerCard.tsx`) since a `feat/frontend`-era commit
+(Sprint 8, PR #23 — predating this sprint entirely). By the time
+`fix/turn-lifecycle-and-manual-generation` branched off, `/evaluate` was
+already manual on `main`; `generate()` (`useTurnController.ts`) has never
+called it automatically on any branch this document's fixes touch. That
+manual-trigger design is deliberate and unaffected by anything in this
+document; the gap is elsewhere. When a user
+clicks "Évaluer" and then navigates away *within* the app (no full
+page/redirect remount needed — any ordinary in-app navigation unmounts
+`TurnCard`) before the request resolves, the in-flight call has no
+persisted trace (`evaluations` rows are written only once the request
+completes, `src/api/persistence.py`) and, unlike `/generate`, this fix's
+own `pendingGenerations.ts`/`InFlightRegistry` resume-tracking mechanism
+was never built for `/evaluate` — so a remounted card falls back to
+`evaluationStatus: 'idle'` ("Non vérifié"), indistinguishable from having
+never clicked "Évaluer" at all, inviting a second click that fires a
+genuine duplicate `/evaluate` call for the same `generation_id`.
+
+**Fixed in `fix/answer-verification`** by giving `/evaluate` the same
+resume-tracking treatment this sprint already gave `/generate`:
+`state/pendingEvaluations.ts`, a second `InFlightRegistry` instance keyed by
+`generation_id` instead of `turn_id`. `runEvaluationAt`
+(`useTurnController.ts`) registers its `api.evaluate` call under it; the
+hydrate effect, after building `persistedEntries`, checks each generation
+lacking a persisted evaluation against the registry and — only if a call is
+genuinely still running — resumes its "Vérification en cours" state and
+reattaches, instead of re-issuing `/evaluate` unconditionally for every
+never-yet-verified past generation (which would silently override the
+manual-verification design this whole section just described). See
+`docs/anti_hallucination_guardrails.md`'s `fix/answer-verification` section
+for the full fix, including the matching backend idempotency guarantee.
+
 ## Test coverage
 
 - `tests/test_api.py`: `/retrieve` now persists the turn and its retrieved

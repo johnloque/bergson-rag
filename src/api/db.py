@@ -131,11 +131,60 @@ def _sync_additive_columns(engine: Engine) -> None:
                 backfill(conn)
 
 
+def _has_unique_index(inspector, table_name: str, column_name: str) -> bool:
+    """Column-signature check, not a name check — `create_all()`'s
+    auto-generated index name for a `unique=True` field and this function's
+    own explicit fallback name below need not match, and shouldn't have to."""
+    for ix in inspector.get_indexes(table_name):
+        if ix.get("unique") and ix.get("column_names") == [column_name]:
+            return True
+    for uc in inspector.get_unique_constraints(table_name):
+        if uc.get("column_names") == [column_name]:
+            return True
+    return False
+
+
+def _sync_unique_indexes(engine: Engine) -> None:
+    """Retrofits `evaluations.generation_id`'s unique index
+    (`src/api/models.py`, fix/answer-verification) onto an already-created
+    dev DB — `create_all()` only creates missing tables, it never adds a
+    constraint newly declared on a table that already exists on disk, same
+    limitation `_sync_additive_columns` documents for columns.
+
+    A pre-fix dev DB could in principle already hold duplicate `evaluations`
+    rows for one `generation_id`, from the exact application-layer race this
+    constraint closes — creating a unique index over that would fail, so any
+    duplicates are deduped first (keeping the most recently written row per
+    `generation_id`, the same row `save_evaluation`'s own upsert already
+    preferred)."""
+    inspector = inspect(engine)
+    if not inspector.has_table("evaluations"):
+        return
+    if _has_unique_index(inspector, "evaluations", "generation_id"):
+        return
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                DELETE FROM evaluations
+                WHERE id NOT IN (SELECT MAX(id) FROM evaluations GROUP BY generation_id)
+                """
+            )
+        )
+        conn.execute(
+            text(
+                'CREATE UNIQUE INDEX "ix_evaluations_generation_id_unique" '
+                'ON "evaluations" ("generation_id")'
+            )
+        )
+
+
 @lru_cache(maxsize=1)
 def get_engine() -> Engine:
     engine = create_engine(_db_url(), connect_args={"check_same_thread": False})
     SQLModel.metadata.create_all(engine)
     _sync_additive_columns(engine)
+    _sync_unique_indexes(engine)
     return engine
 
 

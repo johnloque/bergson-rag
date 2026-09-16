@@ -38,7 +38,11 @@ Schema (`src/api/models.py`):
 - `generations(id, turn_id, model, chunk_ids, answer, chunk_judgments_used,
   created_at)`
 - `evaluations(id, generation_id, structural_flags, faithfulness_annotations,
-  retrieval_confidence_tier, should_auto_expand, created_at)`
+  should_auto_expand, created_at)` — `generation_id` carries a unique
+  constraint (`fix/answer-verification`; see "`/evaluate` idempotency"
+  below). `retrieval_confidence_tier` lives on `generations` instead (moved
+  there by the retrieval-confidence-split correction, below), not on this
+  row.
 - `chunk_judgments(turn_id, chunk_id, label, justification, model,
   created_at)` — composite primary key `(turn_id, chunk_id)`, upsert
   semantics: a chunk judged twice in the same turn overwrites, never
@@ -212,6 +216,47 @@ flagged two risks as deferred rather than solved:
    is gone. `GET /conversations/{id}` returns just the list of turns (id,
    query, created_at) in a conversation, enough for a history sidebar
    later (Sprint 8) — use `GET /turns/{id}` for full per-turn detail.
+
+## `/evaluate` idempotency, made a real guarantee (`fix/answer-verification`)
+
+`/evaluate` was already, and remains, idempotent per `generation_id` at the
+application layer: it checks `persistence.get_evaluation_for_generation`
+before calling `generate_evaluation` (the ~8-9s RAGAS/LLM faithfulness
+check) at all, returning the existing row instead of rerunning it. That
+check alone was only best-effort — nothing stopped two genuinely concurrent
+`/evaluate` calls for the same `generation_id` (FastAPI runs sync path
+operations in a thread pool, so this isn't a multi-process-only scenario)
+from both passing it before either committed, leaving two `evaluations`
+rows and paying for the judge call twice.
+
+**Now backed by a DB-level guarantee.** `evaluations.generation_id`
+(`src/api/models.py`) carries a unique constraint. `persistence.
+save_evaluation` still re-checks for an existing row immediately before
+inserting (upserting in place if a *sequential* call finds one), but the
+constraint is what makes the *concurrent* case actually safe: the losing
+request's `session.commit()` raises `IntegrityError`, caught and turned
+into "return the winner's row" rather than a 500 or a duplicate row. An
+already-existing dev DB (predating this constraint) is retrofitted by
+`src/api/db.py`'s `_sync_unique_indexes`, run alongside
+`_sync_additive_columns` on every `get_engine()` call — `create_all()`
+alone never adds a constraint to a table that already exists on disk, only
+to one it's creating fresh. Any duplicate rows a pre-fix dev DB might
+already hold (from the exact race this constraint now closes) are deduped
+first, keeping the most recently written row per `generation_id` — the same
+row `save_evaluation`'s own upsert already preferred.
+
+This guarantee is what makes it safe for the frontend to re-issue
+`/evaluate` for a `generation_id` it isn't sure has already resolved — the
+resume-after-navigate-away fix in `state/pendingEvaluations.ts`
+(`docs/anti_hallucination_guardrails.md`'s `fix/answer-verification`
+section) depends on this exact property, not just on the older
+best-effort check.
+
+Test coverage: `tests/test_persistence.py::test_save_evaluation_concurrent_duplicate_insert_returns_winner_row`
+(the race itself, reproduced deterministically at the persistence layer,
+no LLM/Qdrant needed); `tests/test_api.py::test_evaluate_second_call_for_same_generation_id_reuses_existing_row`
+(request-level: a real judge call, counted, invoked exactly once across two
+sequential `/evaluate` calls for the same `generation_id`).
 
 ## Provider failures and CORS
 

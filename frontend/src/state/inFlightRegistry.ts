@@ -33,7 +33,14 @@ export class InFlightRegistry<T> {
   get = (key: string): InFlightEntry<T> | undefined => this.entries.get(key)
 
   /** Starts `run()` under `key`, or returns the promise already running for
-   * it — never calls `run()` a second time while the first is pending. */
+   * it — never calls `run()` a second time while the first is pending.
+   *
+   * A failed `run()` clears the entry (rather than leaving it parked at
+   * `status: 'error'` forever) so the *next* `start(key, ...)` call for the
+   * same key genuinely retries instead of just replaying the same stale
+   * rejection — the caller (e.g. a "Réessayer" button) already decides
+   * whether/when to call `start` again; nothing here should silently make
+   * that retry a no-op. */
   start(key: string, run: () => Promise<T>): Promise<T> {
     const existing = this.entries.get(key)
     if (existing) return existing.promise
@@ -45,11 +52,7 @@ export class InFlightRegistry<T> {
         return result
       },
       (e: unknown) => {
-        this.entries.set(key, {
-          status: 'error',
-          error: e instanceof Error ? e.message : String(e),
-          promise,
-        })
+        this.entries.delete(key)
         this.emit()
         throw e
       },

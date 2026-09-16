@@ -387,6 +387,248 @@ describe('TurnCard — resuming an in-flight generation after navigate-away-and-
   })
 })
 
+// Regression test (fix/answer-verification): /evaluate has been a manual,
+// user-triggered action since before Sprint 10 (unlike /generate, it never
+// got Sprint 10's own resume-tracking treatment) — a user who clicks
+// "Évaluer", then navigates away before it resolves and back again, used to
+// land on a freshly hydrated TurnCard showing "Non vérifié" again,
+// indistinguishable from never having clicked "Évaluer" at all. That
+// invited a second click, firing a genuine duplicate /evaluate call — with
+// no DB-level guard against two evaluation rows for the same generation_id
+// before this fix. state/pendingEvaluations.ts (keyed by generation_id) now
+// lets the resumed TurnCard notice the call is still running and reattach
+// to it instead.
+describe('TurnCard — resuming an in-flight evaluation after navigate-away-and-back', () => {
+  it('shows "Vérification en cours" again and does not fire a second /evaluate call', async () => {
+    const user = userEvent.setup()
+    let resolveEvaluate: (value: unknown) => void = () => {}
+    const pendingEvaluate = new Promise((resolve) => {
+      resolveEvaluate = resolve
+    })
+    let evaluateCallCount = 0
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/retrieve')) {
+          return jsonResponse({ turn_id: 1, conversation_id: 1, chunks: [CHUNK_A] })
+        }
+        if (url.endsWith('/generate')) {
+          return jsonResponse({
+            answer: 'Réponse fondée [W_c1].',
+            model_used: 'test-model',
+            generation_id: 7,
+            turn_id: 1,
+            conversation_id: 1,
+          })
+        }
+        if (url.endsWith('/evaluate')) {
+          evaluateCallCount += 1
+          return pendingEvaluate.then(jsonResponse)
+        }
+        if (url.endsWith('/confidence-preview')) {
+          return jsonResponse({ retrieval_confidence_tier: 'moyenne' })
+        }
+        if (url.endsWith('/turns/1')) {
+          return jsonResponse({
+            turn_id: 1,
+            conversation_id: 1,
+            query: 'Quelle est la nature du temps ?',
+            created_at: new Date().toISOString(),
+            retrieved_chunks: [{ ...CHUNK_A, rank: 0 }],
+            chunk_judgments: {},
+            generations: [
+              {
+                generation_id: 7,
+                model: 'test-model',
+                chunk_ids: [CHUNK_A.chunk_id],
+                answer: 'Réponse fondée [W_c1].',
+                chunk_judgments_used: null,
+                created_at: new Date().toISOString(),
+                // /evaluate hasn't resolved server-side yet either — no
+                // persisted row for it.
+                evaluation: null,
+              },
+            ],
+          })
+        }
+        throw new Error(`Unhandled fetch: ${url}`)
+      }),
+    )
+
+    const client = new QueryClient()
+    const first = render(
+      <QueryClientProvider client={client}>
+        <TurnUiProvider>
+          <MemoryRouter>
+            <TurnCard pendingQuery="Quelle est la nature du temps ?" />
+          </MemoryRouter>
+        </TurnUiProvider>
+      </QueryClientProvider>,
+    )
+
+    await user.click(await screen.findByText('Générer'))
+    await user.click(await screen.findByText('Évaluer'))
+    // Both the badge (AnswerCard) and the verification step line
+    // (GenerationBlock) read "Vérification en cours" at once.
+    await waitFor(() => expect(screen.getAllByText('Vérification en cours').length).toBe(2))
+    expect(evaluateCallCount).toBe(1)
+
+    // Navigate away mid-evaluation: the live TurnCard/useTurnController
+    // instance is gone, but the /evaluate call it started keeps running.
+    first.unmount()
+
+    // Navigate back: a brand-new instance, hydrating from GET /turns/{id}
+    // (which has no evaluation row yet) plus whatever's still in flight.
+    render(
+      <QueryClientProvider client={client}>
+        <TurnUiProvider>
+          <MemoryRouter>
+            <TurnCard turnId={1} conversationId={1} />
+          </MemoryRouter>
+        </TurnUiProvider>
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(screen.getAllByText('Vérification en cours').length).toBe(2))
+    // Still just the one call — resumed, not duplicated, and no "Non
+    // vérifié" flash inviting a second click in between.
+    expect(evaluateCallCount).toBe(1)
+    expect(screen.queryByText('Non vérifié')).not.toBeInTheDocument()
+
+    resolveEvaluate({
+      structural: {
+        citations: ['W_c1'],
+        unknown_citations: [],
+        has_citation: true,
+        fabricated_titles: [],
+        title_year_mismatches: [],
+        passed: true,
+      },
+      faithfulness: { score: 1, model: 'judge', claims: [] },
+      should_auto_expand: true,
+    })
+
+    await screen.findByText('Vérification terminée')
+    expect(evaluateCallCount).toBe(1)
+    expect(screen.getByTestId('answer-content')).toHaveStyle({ filter: 'none' })
+  })
+})
+
+// Regression test (fix/answer-verification, Problem 2 — verified explicitly
+// rather than assumed to follow automatically from the resume fix above):
+// mounting a turn whose evaluation genuinely already completed in the past
+// (simulated purely via GET /turns/{id}'s response, no live /generate or
+// /evaluate call in this test at all) must render its final state directly.
+// The blurred veil / "Lire quand même" prompt must never appear, not even
+// momentarily before GET /turns/{id} resolves.
+describe('TurnCard — mounting an already-evaluated turn never shows the veil', () => {
+  function stubTurnFetch(shouldAutoExpand: boolean) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/turns/1')) {
+          return jsonResponse({
+            turn_id: 1,
+            conversation_id: 1,
+            query: 'Quelle est la nature du temps ?',
+            created_at: new Date().toISOString(),
+            retrieved_chunks: [{ ...CHUNK_A, rank: 0 }],
+            chunk_judgments: {},
+            generations: [
+              {
+                generation_id: 7,
+                model: 'test-model',
+                chunk_ids: [CHUNK_A.chunk_id],
+                answer: 'Réponse fondée [W_c1].',
+                chunk_judgments_used: null,
+                created_at: new Date().toISOString(),
+                evaluation: {
+                  structural: {
+                    citations: ['W_c1'],
+                    unknown_citations: [],
+                    has_citation: true,
+                    fabricated_titles: [],
+                    title_year_mismatches: [],
+                    passed: true,
+                  },
+                  // should_auto_expand: false is only ever produced by a
+                  // real Layer 1/Layer 2 flag now (retrieval confidence no
+                  // longer gates it, fix/answer-verification) — an
+                  // unsupported claim here keeps this fixture a realistic
+                  // API shape instead of an inconsistent one.
+                  faithfulness: {
+                    score: shouldAutoExpand ? 1 : 0,
+                    model: 'judge',
+                    claims: shouldAutoExpand
+                      ? []
+                      : [{ statement: 'x', supported: false, reason: 'non étayé', quote: null }],
+                  },
+                  should_auto_expand: shouldAutoExpand,
+                },
+              },
+            ],
+          })
+        }
+        throw new Error(`Unhandled fetch: ${url}`)
+      }),
+    )
+  }
+
+  function renderHydratedTurnCard() {
+    const client = new QueryClient()
+    return render(
+      <QueryClientProvider client={client}>
+        <TurnUiProvider>
+          <MemoryRouter>
+            <TurnCard turnId={1} conversationId={1} />
+          </MemoryRouter>
+        </TurnUiProvider>
+      </QueryClientProvider>,
+    )
+  }
+
+  it('renders auto-expanded immediately, with no blurred/veiled flash beforehand', async () => {
+    stubTurnFetch(true)
+    renderHydratedTurnCard()
+
+    // Before GET /turns/{id} resolves: no answer card at all yet (a
+    // loading/skeleton gap, not a defaulted-to-veiled one) — nothing to
+    // assert "not blurred" on if it doesn't exist, but critically nothing
+    // showing the veil/"Lire quand même" either.
+    expect(screen.queryByText('Lire quand même')).not.toBeInTheDocument()
+
+    const content = await screen.findByTestId('answer-content')
+    expect(content).toHaveStyle({ filter: 'none' })
+    expect(screen.getByText('Vérification terminée')).toBeInTheDocument()
+    expect(screen.queryByText('Lire quand même')).not.toBeInTheDocument()
+    expect(screen.queryByText('Non vérifié')).not.toBeInTheDocument()
+    expect(screen.queryByText('Vérification en cours')).not.toBeInTheDocument()
+  })
+
+  it('renders collapsed with the "Vérifié" badge immediately when should_auto_expand is false, never "Non vérifié" or a spinner', async () => {
+    stubTurnFetch(false)
+    renderHydratedTurnCard()
+
+    expect(screen.queryByText('Lire quand même')).not.toBeInTheDocument()
+
+    // should_auto_expand: false with a completed evaluation is the other
+    // legitimate final state (docs/anti_hallucination_guardrails.md) — the
+    // veil and "Lire quand même" correctly stay available (the user can
+    // always read early), but the badge must read "Vérifié" immediately,
+    // never "Non vérifié" or a verifying spinner.
+    await screen.findByText('Lire quand même')
+    expect(screen.getByTestId('answer-content')).toHaveStyle({ filter: 'blur(5px)' })
+    expect(screen.getByText('Vérifié')).toBeInTheDocument()
+    expect(screen.queryByText('Non vérifié')).not.toBeInTheDocument()
+    expect(screen.queryByText('Vérification en cours')).not.toBeInTheDocument()
+    // "Vérifié" alone reads as contradictory next to a still-blurred answer
+    // (fix/answer-verification, user report) — the veil must also explain
+    // why it's still collapsed despite being verified.
+    expect(screen.getByTestId('collapse-reason')).toBeInTheDocument()
+  })
+})
+
 // Regression test (docs/ROADMAP.md, chunk-neighbor-persistence fix): a
 // neighbor chunk manually included via Screen 4 used to be client-only
 // (state/turnUi.tsx's `neighbors` map) — a reload lost it entirely, so a

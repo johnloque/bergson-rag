@@ -48,24 +48,59 @@ Three inputs feed `EvaluationResult`:
   `/confidence-preview` — both API-level call sites of the shared function,
   never this one.
 
-`should_auto_expand` folds `retrieval_confidence` and Layer 2 into one
-boolean: confidence at "moyenne" or above (`CONFIDENT_TIERS`,
-`src/generation/signals.py` — the same set Sprint 5's `is_confident` also
-checks against), and no claim flagged unsupported (Layer 2). Layer 1's
-citation-resolution half (`StructuralCheck.unknown_citations`/
-`has_citation`) is carried on `EvaluationResult` for the caller (and
-Sprint 7's UI badge) but deliberately does not gate `should_auto_expand` on
-its own: the local generation model was found, empirically, to often omit
-`[chunk_id]` citations even from otherwise well-grounded answers
-(`CITATION_INSTRUCTION` in `src/generation/prompt.py` is a request, not an
-enforced constraint) — gating on citation *presence* would make auto-expand
-practically unreachable regardless of actual faithfulness. A citation to a
-chunk_id absent from `chunks`, in practice, is accompanied by a claim
-Layer 2 also flags unsupported (the fabricated "evidence" isn't in
-`retrieved_contexts` either), so Layer 2 still catches that failure mode in
-practice even though this half of Layer 1 isn't wired into the gate
-directly. `StructuralCheck.fabricated_titles` (below) *is* wired into the
-gate — a different failure mode with no equivalent omission problem.
+`should_auto_expand` folds Layer 1 and Layer 2 into one boolean: no claim
+flagged unsupported (Layer 2), and no fabricated title / title-year
+mismatch (Layer 1, below). Layer 1's citation-resolution half
+(`StructuralCheck.unknown_citations`/`has_citation`) is carried on
+`EvaluationResult` for the caller (and Sprint 7's UI badge) but deliberately
+does not gate `should_auto_expand` on its own: the local generation model
+was found, empirically, to often omit `[chunk_id]` citations even from
+otherwise well-grounded answers (`CITATION_INSTRUCTION` in
+`src/generation/prompt.py` is a request, not an enforced constraint) —
+gating on citation *presence* would make auto-expand practically
+unreachable regardless of actual faithfulness. A citation to a chunk_id
+absent from `chunks`, in practice, is accompanied by a claim Layer 2 also
+flags unsupported (the fabricated "evidence" isn't in `retrieved_contexts`
+either), so Layer 2 still catches that failure mode in practice even though
+this half of Layer 1 isn't wired into the gate directly.
+`StructuralCheck.fabricated_titles` (below) *is* wired into the gate — a
+different failure mode with no equivalent omission problem.
+
+### Dropped: retrieval confidence as an auto-expand gate (`fix/answer-verification`)
+
+Through Sprint 8, `should_auto_expand` also required `retrieval_confidence`
+at "moyenne" or above (`CONFIDENT_TIERS`, `src/generation/signals.py`) —
+a third, independent gate alongside Layer 1/Layer 2 above, motivated by
+Sprint 6's original always-automatic-generation flow: retrieval finished,
+generation fired immediately with no user decision point in between, and
+low retrieval confidence was the only pre-generation signal the guardrail
+had reason to weigh in on the presentation decision at all.
+
+`fix/turn-lifecycle-and-manual-generation` (Sprint 10) changed the premise
+this gate was built on without revisiting the gate itself: generation is
+now a manual, explicit "Générer" click, made only after the user has
+already seen the same retrieval confidence tier live, pre-generation, via
+`ConfidenceGauge`/`/confidence-preview` (`docs/backend_api.md`) —
+recomputed on every chunk include/exclude and neighbor-chunk change, so it
+reflects the exact chunk set that will actually be sent to `/generate` by
+the time the user commits to it. Continuing to gate the *post-generation*
+auto-expand decision on that same tier no longer adds a check the user
+hasn't already had the chance to weigh; it only ever produced the veil for
+a signal already shown and already acted on. Dropped on this branch,
+per this reasoning: the gate now depends only on Layer 1 and Layer 2, which
+evaluate the *answer actually produced*, not the evidence that was
+available going in. `retrieval_confidence` remains a field on
+`EvaluationResult`/computed and persisted exactly as before — nothing about
+the signal itself or its pre-generation display changed, only its role
+here.
+
+Real consequence, not a hypothetical: `tests/test_guardrail.py`'s Q009 case
+(a genuine, non-hand-picked "très faible" retrieval miss where the model
+declines to fabricate) used to be blocked from auto-expanding by
+confidence alone; after this branch, the same answer auto-expands as long
+as Layer 1/Layer 2 stay clean — see that test's own updated comment, and
+`test_should_auto_expand_ignores_confidence_when_layers_clean` for a
+dedicated, LLM-independent regression test of this exact policy change.
 
 ## Prose-embedded title fabrication (Sprint 10 addition)
 
@@ -206,7 +241,7 @@ from src.generation.faithfulness import (
     check_faithfulness,
 )
 from src.generation.prompt import CITATION_PATTERN
-from src.generation.signals import CONFIDENT_TIERS, GenerationChunk, RetrievalConfidenceTier
+from src.generation.signals import GenerationChunk, RetrievalConfidenceTier
 from src.works import TEXTS, WORKS
 
 # The corpus's fixed, closed set of 8 works (docs/ROADMAP.md scope
@@ -502,21 +537,21 @@ def generate_evaluation(
 
 
 def should_auto_expand(evaluation: EvaluationResult) -> bool:
-    """True only if retrieval confidence is at least "moyenne", no claim was
-    flagged unsupported by Layer 2, AND Layer 1 found no fabricated work
-    title or title/year mismatch — see the module docstring for why Layer
-    1's citation-resolution half (`unknown_citations`/`has_citation`) isn't
-    part of this gate while `fabricated_titles`/`title_year_mismatches` are.
-    The first generated answer is always rendered collapsed by default
-    regardless of this result (Sprint 7, docs/ROADMAP.md) — this only
-    decides whether it may then auto-expand; the user can always expand it
-    manually either way."""
-    confidence_ok = evaluation.retrieval_confidence in CONFIDENT_TIERS
+    """True only if no claim was flagged unsupported by Layer 2, AND Layer 1
+    found no fabricated work title or title/year mismatch — see the module
+    docstring for why Layer 1's citation-resolution half
+    (`unknown_citations`/`has_citation`) isn't part of this gate while
+    `fabricated_titles`/`title_year_mismatches` are. The first generated
+    answer is always rendered collapsed by default regardless of this result
+    (Sprint 7, docs/ROADMAP.md) — this only decides whether it may then
+    auto-expand; the user can always expand it manually either way.
+
+    Does *not* gate on `evaluation.retrieval_confidence`
+    (`fix/answer-verification`, reversing Sprint 6/8's original design) —
+    see the module docstring's "Dropped: retrieval confidence as an
+    auto-expand gate" section for the full rationale. The tier itself is
+    still computed, persisted, and returned unchanged; it simply no longer
+    feeds this decision."""
     no_fabricated_titles = not evaluation.structural.fabricated_titles
     no_year_mismatches = not evaluation.structural.title_year_mismatches
-    return (
-        confidence_ok
-        and not evaluation.has_unsupported_claims
-        and no_fabricated_titles
-        and no_year_mismatches
-    )
+    return not evaluation.has_unsupported_claims and no_fabricated_titles and no_year_mismatches

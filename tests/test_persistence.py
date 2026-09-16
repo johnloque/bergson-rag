@@ -28,12 +28,13 @@ from fastapi.testclient import TestClient
 from litellm import ModelResponse
 from qdrant_client import QdrantClient
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 
+from src.api import persistence
 from src.api.converters import chunk_input_to_generation_chunk
 from src.api.db import get_session
 from src.api.main import app
-from src.api.models import Conversation, Generation, RetrievedChunkRow, Turn
+from src.api.models import Conversation, Evaluation, Generation, RetrievedChunkRow, Turn
 from src.api.schemas import ChunkInput
 from src.generation.faithfulness import DEFAULT_JUDGE_MODEL
 from src.generation.prompt import CHUNK_JUDGMENT_INSTRUCTION
@@ -372,6 +373,76 @@ def test_evaluate_via_generation_id_flags_known_hallucination(
     unsupported = [c for c in body["faithfulness"]["claims"] if not c["supported"]]
     assert any(fabricated_term in c["statement"].lower() for c in unsupported), unsupported
     assert body["should_auto_expand"] is False
+
+
+def test_save_evaluation_concurrent_duplicate_insert_returns_winner_row(engine, monkeypatch):
+    """fix/answer-verification: `evaluations.generation_id` now carries a
+    DB-level unique constraint (src/api/models.py) — this is the reliability
+    guarantee behind `/evaluate`'s idempotency, closing a real gap the
+    application-layer check-then-insert alone (`save_evaluation`'s own
+    re-check right before inserting) couldn't: two genuinely concurrent
+    `/evaluate` calls for the same `generation_id` can both see "no row yet"
+    before either commits (FastAPI runs sync path operations in a thread
+    pool). Reproduced deterministically here by making the *first* internal
+    existence-check inside `save_evaluation` both report "not found" and, as
+    a side effect, plant the competing row a genuinely concurrent request
+    would have already committed by then — exactly the race window that
+    matters, without needing real threads."""
+    turn_id = _create_turn(engine, Q001_QUERY)
+    with Session(engine) as session:
+        generation = Generation(
+            turn_id=turn_id,
+            model="test-model",
+            chunk_ids=[Q001_CHUNK_ID],
+            answer="une réponse",
+            retrieval_confidence_tier="moyenne",
+        )
+        session.add(generation)
+        session.commit()
+        session.refresh(generation)
+        generation_id = generation.id
+
+    real_check = persistence.get_evaluation_for_generation
+    call_count = 0
+
+    def _racy_check(session, gid):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            with Session(engine) as other_session:
+                other_session.add(
+                    Evaluation(
+                        generation_id=gid,
+                        structural_flags={"winner": True},
+                        faithfulness_annotations={},
+                        should_auto_expand=True,
+                    )
+                )
+                other_session.commit()
+            return None
+        return real_check(session, gid)
+
+    monkeypatch.setattr(persistence, "get_evaluation_for_generation", _racy_check)
+
+    with Session(engine) as session:
+        result = persistence.save_evaluation(
+            session,
+            generation_id=generation_id,
+            structural_flags={"winner": False},
+            faithfulness_annotations={},
+            should_auto_expand=False,
+        )
+
+    # The already-committed "concurrent" row won, not this call's own data —
+    # the IntegrityError from the unique constraint was caught and turned
+    # into "return the existing row" rather than a 500 or a duplicate row.
+    assert result.structural_flags == {"winner": True}
+    with Session(engine) as session:
+        rows = session.exec(
+            select(Evaluation).where(Evaluation.generation_id == generation_id)
+        ).all()
+        assert len(rows) == 1
+        assert rows[0].structural_flags == {"winner": True}
 
 
 # --- GET /turns/{id} ---------------------------------------------------------

@@ -105,6 +105,27 @@ export function AnswerCard({
     evaluation.faithfulness.claims.length > 0 &&
     !hasFlaggedClaims &&
     !hasStructuralFlags
+  // "Vérifié" (StatusPill) only ever means "the check ran and completed" —
+  // it says nothing about the verdict, so a verified-but-still-collapsed
+  // card (should_auto_expand false with evaluationStatus 'done') reads as
+  // contradictory/buggy without an explanation (user report,
+  // fix/answer-verification). should_auto_expand is false iff at least one
+  // of these two flags fired (src/generation/guardrail.py) — retrieval
+  // confidence used to be a third gate here too, but no longer is
+  // (`fix/answer-verification`'s "Dropped: retrieval confidence as an
+  // auto-expand gate", same doc): since generation became manual (Sprint
+  // 10), the user already sees this same tier pre-generation via
+  // ConfidenceGauge/`/confidence-preview` before ever clicking "Générer",
+  // so gating the post-generation display on it again no longer adds a
+  // check the user hasn't already had the chance to weigh.
+  const collapseReason =
+    evaluationStatus === 'done'
+      ? hasStructuralFlags
+        ? 'Un titre ou une date citée semble incorrect(e) : à relire avant de faire confiance à la réponse.'
+        : hasFlaggedClaims
+          ? 'Un passage surligné n’a pas été retrouvé tel quel dans les sources citées.'
+          : null
+      : null
   // Reading early via "Lire quand même" must not strand the evaluate control —
   // /evaluate is only ever triggered by this button now, so it has to stay
   // reachable after reveal too, not just in the collapsed overlay.
@@ -197,7 +218,7 @@ export function AnswerCard({
 
       {!expanded && (
         <div
-          className="absolute inset-0 flex flex-col items-center justify-center gap-3"
+          className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-8"
           style={{ background: 'rgba(250,246,238,0.4)' }}
         >
           <StatusPill
@@ -211,6 +232,15 @@ export function AnswerCard({
                     : 'pending'
             }
           />
+          {collapseReason && (
+            <p
+              className="max-w-xs text-center text-xs"
+              style={{ color: 'var(--gray-dark)' }}
+              data-testid="collapse-reason"
+            >
+              {collapseReason}
+            </p>
+          )}
           <div className="flex items-center gap-2">
             <button
               type="button"

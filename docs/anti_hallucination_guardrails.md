@@ -619,3 +619,136 @@ already was unaffected by `unknown_citations` itself (see this module's
 docstring for why: citation omission/presence isn't gated, but resolution
 correctness for citations that *are* present still feeds this new link
 behavior regardless).
+
+## `fix/answer-verification`: closing the resume-tracking gap `/evaluate` never got, plus a DB-level idempotency guarantee
+
+Real-usage reports of two symptoms — verification status appearing lost
+after navigating away and back, and the collapsed veil/"Lire quand même"
+prompt appearing for a turn that was already verified — were investigated
+together rather than assumed to be one bug or two, per standing project
+discipline (`docs/ROADMAP.md`). **Finding: one shared, confirmed root
+cause, but it is not the mount-logic hypothesis it might look like at
+first** (a hardcoded "always render collapsed/blurred on mount" default) —
+`AnswerCard.tsx`'s `expanded = revealed || evaluation?.should_auto_expand
+=== true` and the hydrate effect's `evaluationStatus: g.evaluation ? 'done'
+: 'idle'` (`useTurnController.ts`) already derive the right state from
+whatever `GET /turns/{id}` returns, immediately, with no intermediate
+defaulted-to-veiled render (confirmed by a dedicated fresh-mount regression
+test, `TurnCard.integration.test.tsx`'s "mounting an already-evaluated turn
+never shows the veil" — Problem 2, as reported, does not reproduce against
+an already-evaluated turn). **Also confirmed: not a Sprint 12 regression.**
+None of the Sprint 12 UI branches
+(`feat/sidebar-restructure`/`feat/chunk-neighbor-expansion`/
+`feat/answer-display-improvements`/`feat/clickable-citations`) touch
+`useTurnController.ts`'s hydrate effect, `AnswerCard.tsx`'s `expanded`
+derivation, or `/evaluate` (`git log --follow -p` on each file confirms
+this) — and `fix/turn-lifecycle-and-manual-generation` (Sprint 10) already
+shipped a dedicated regression test for exactly this "stays expanded/badged
+after navigate-away-and-back" scenario, which still passes unmodified
+(`docs/turn_lifecycle.md`).
+
+**The real, still-live gap**: `/evaluate` has been a fully manual,
+user-triggered action (the "Évaluer"/"Réessayer la vérification" button,
+`AnswerCard.tsx`) since a Sprint 8 (`feat/frontend`) commit — not the
+"frontend calls `/evaluate` automatically right after `/generate`" flow a
+naive reading of the two-separate-HTTP-calls design
+(`docs/backend_api.md`) might suggest, and not something this fix changes.
+A generation's `evaluations` row is written only once that manual call
+completes (`src/api/persistence.py`) — there is no persisted "evaluation in
+progress" state, only "row absent" vs. "row present". Sprint 10 already
+built exactly this kind of resume-tracking for `/generate`
+(`state/pendingGenerations.ts`, an `InFlightRegistry` keyed by `turn_id`,
+for the same reason: an in-app navigation unmounts `TurnCard`, but the
+network request it started keeps running) — but never built the equivalent
+for `/evaluate`, because at the time `/evaluate` was still believed to run
+automatically right after generation, under the redirect-timing race Sprint
+10 was fixing. Once a user clicks "Évaluer" and navigates away before it
+resolves, the remounted card has no way to tell "still running" apart from
+"never started" and falls back to `evaluationStatus: 'idle'` ("Non
+vérifié") — inviting a second click that fires a genuine duplicate
+`/evaluate` call for the same `generation_id`, with (until this fix) no
+DB-level guard against that leaving two `evaluations` rows.
+
+**Fix, frontend**: `state/pendingEvaluations.ts`, a second
+`InFlightRegistry` instance keyed by `generation_id` (mirroring
+`pendingGenerations.ts`'s shape exactly, just keyed differently — an
+evaluation is per-generation, not per-turn). `runEvaluationAt`
+(`useTurnController.ts`) registers its `api.evaluate` call under it; the
+hydrate effect, for each persisted generation lacking an evaluation row,
+checks the registry and — **only if a call is genuinely still in flight** —
+resumes "Vérification en cours" and reattaches to it. It deliberately does
+**not** re-issue `/evaluate` for every never-yet-verified past generation
+unconditionally: `/evaluate`'s manual-trigger design is a real product
+decision (Sprint 8), not an oversight, and auto-firing it on every reload
+of every old, never-manually-verified turn would silently override that
+decision — as well as paying for a judge call, and re-exposing this
+project's own documented judge-noise variance (Sprint 10's calibration,
+above), on turns nobody asked to verify.
+
+A related latent bug surfaced while building this: `InFlightRegistry.start`
+(`state/inFlightRegistry.ts`) left a failed entry parked at `status:
+'error'` forever, so a *second* `start()` call under the same key — exactly
+what clicking "Réessayer la vérification" does — replayed the same stale
+rejection instead of actually retrying. Unexercised before now (nothing
+read `pendingGenerations`'s `'error'` status), but `pendingEvaluations`'s
+retry button would have inherited it immediately. Fixed at the shared
+class: a failed `run()` now clears its entry, same as a succeeded one, so
+the next `start()` for that key genuinely retries
+(`state/inFlightRegistry.test.ts`).
+
+**Fix, backend — the reliability half.** `/evaluate` (`src/api/main.py`)
+already checked for an existing `Evaluation` row before recomputing, and
+`persistence.save_evaluation` already re-checked before inserting — but
+neither made that check-then-insert atomic, and FastAPI runs sync path
+operations in a thread pool, so two genuinely concurrent `/evaluate` calls
+for one `generation_id` really could both pass both checks before either
+committed. `evaluations.generation_id` now carries a DB-level unique
+constraint (`src/api/models.py`); `save_evaluation` catches the losing
+request's `IntegrityError` and returns the winner's row instead of a 500.
+An already-existing dev DB is retrofitted by `src/api/db.py`'s
+`_sync_unique_indexes` (deduping any pre-fix duplicate rows first, keeping
+the most recent per `generation_id`) — `create_all()` alone never adds a
+constraint to an already-created table, the same limitation
+`_sync_additive_columns` documents for columns. Full detail:
+[`docs/backend_api.md`](backend_api.md).
+
+**Follow-up (same branch): explaining, not just correctly rendering, the
+verified-but-collapsed state.** The fix above made
+`evaluationStatus: 'done'` + `should_auto_expand: false` render correctly
+(veil + "Vérifié" badge + "Lire quand même", per this module's own
+"user can always expand manually" design, above) — but a user report during
+review flagged that this *correct* state still reads as contradictory:
+"Vérifié" (StatusPill) means only "the check ran," not "the check passed,"
+and nothing on the card said which of the three `should_auto_expand` gates
+(`src/generation/guardrail.py`: retrieval confidence tier, an unsupported
+Layer 2 claim, a Layer 1 structural flag) actually failed. `AnswerCard.tsx`
+now shows a short explanatory line under the badge in this exact state
+(`collapseReason`), naming the specific reason — structural flag and
+unsupported claim are both readable directly off `EvaluateResponse`; the
+retrieval-confidence-tier case has to be inferred by elimination (neither
+of the other two fired), since the tier itself was deliberately dropped
+from `/evaluate`'s response by the retrieval-confidence-split correction,
+above, and isn't reintroduced by this fix. Structural takes priority when
+both a structural and a faithfulness flag fired, matching this module's own
+established severity ordering (a title/year fabrication is "a positive,
+specific claim, not an omission," per the `fullyEndorsed` gating logic
+already in `AnswerCard.tsx`).
+
+Test coverage: `tests/test_persistence.py::test_save_evaluation_concurrent_duplicate_insert_returns_winner_row`
+(the DB-level race, reproduced deterministically); `tests/test_api.py::test_evaluate_second_call_for_same_generation_id_reuses_existing_row`
+(request-level idempotency — a real judge call, counted, invoked exactly
+once across two `/evaluate` calls); `state/inFlightRegistry.test.ts` (dedup
++ the retry-after-failure fix); `TurnCard.integration.test.tsx`'s new
+cases — resuming an in-flight evaluation after navigate-away-and-back, a
+fresh mount of an already-`should_auto_expand: true`-evaluated turn (no
+veil/spinner flash, ever), and a fresh mount of an
+already-`should_auto_expand: false`-evaluated turn (immediate "Vérifié"
+badge plus its collapse-reason line, never "Non vérifié" — the veil and
+"Lire quand même" correctly still show in this case, per this module's own
+"user can always expand manually" design, not a bug); `AnswerCard.test.tsx`'s
+`collapseReason` cases (all three reasons individually, the
+structural-takes-priority case, absent once expanded, absent before
+evaluation actually completes). The existing live-flow fixtures
+(Q001/Q004/Q008/Q009/Q002, `tests/test_guardrail.py`) are untouched — no
+guardrail decision logic changed on this branch, only persistence, frontend
+resume-tracking, and this explanatory copy.

@@ -1010,6 +1010,43 @@ and a link; a citation inside a Layer 2 highlight span renders both the
 `<mark>` and the nested link; a multi-id bracket links only the known
 token.
 
+## Addendum — justified, indented source-text paragraphs (`fix/justified-answer-generation`)
+
+Despite the branch name (kept as-is — it's just the branch's original working
+title, retargeted after a scoping correction mid-task), this styles Screen
+4's chunk detail panel, not the generated answer: `routes/ChunkDetail.tsx`'s
+`focused-chunk-text` paragraph (`feat/chunk-neighbor-expansion`'s master-detail
+restructure above) — the one place a full, untruncated source-text paragraph
+is actually read as prose — now carries `text-justify indent-[1.5em]`:
+justified alignment and a standard ~1.5em first-line indent, matching a
+conventional printed-paragraph look.
+
+**Covers both retrieved and neighbor-origin chunks**, since this panel is the
+single shared detail view driven by `focusedChunk` regardless of which
+selector (the retrieval rail or the position filmstrip) set it — no
+origin-based branching needed, same discipline the origin tag next to it
+already follows.
+
+**Scoped to this one paragraph, not global.** `components/ChunkRail.tsx`'s
+own `chunk.text` preview (both the retrieved and neighbor rail rows) is
+unchanged — it's a 2-line `-webkit-line-clamp` teaser, not full prose, and
+was deliberately left out of this pass (a truncated 2-line preview doesn't
+read as the kind of paragraph a first-line indent is meant for). No other
+`text-align`/`text-indent` rule exists anywhere else in the app
+(`index.css`), so citations, the sidebar, and the generated-answer card
+(`AnswerCard.tsx`, `feat/answer-display-improvements`'s markdown rendering
+above) are all unaffected.
+
+Plain text, not markdown — `focusedChunk.text` renders via
+`whitespace-pre-wrap`, not `react-markdown`, so none of the answer card's
+compatibility concerns (Layer 2 highlight spans, `feat/clickable-citations`'
+inline links) apply here.
+
+Test coverage: `routes/ChunkDetail.test.tsx` — the focused-chunk-text
+paragraph carries both classes for a retrieved-origin chunk (initial
+URL-driven focus) and after switching focus to a neighbor-origin chunk via
+the filmstrip.
+
 ## Known gap, not a finished feature: dark mode and full responsive layout
 
 The design tokens are CSS custom properties (`frontend/src/index.css`), not

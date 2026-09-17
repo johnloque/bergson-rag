@@ -188,7 +188,7 @@ export function ChunkDetail() {
             >
               <p
                 data-testid="focused-chunk-text"
-                className="whitespace-pre-wrap text-[15px] leading-relaxed"
+                className="whitespace-pre-wrap text-justify indent-[1.5em] text-[15px] leading-relaxed"
                 style={{ color: 'var(--ink)' }}
               >
                 {focusedChunk.text || 'Texte indisponible pour ce passage (session précédente).'}

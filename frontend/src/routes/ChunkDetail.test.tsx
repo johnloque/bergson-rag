@@ -163,6 +163,30 @@ describe('ChunkDetail — master-detail', () => {
     expect(viaFilmstripText).not.toEqual(screen.getByTestId('focused-chunk-text').textContent)
   })
 
+  // `fix/justified-answer-generation` (retargeted after an ordering
+  // correction — this belongs on the source-text detail panel, not the
+  // generated-answer card): justified text + a first-line indent for the
+  // one place full source-paragraph text is actually read, for both a
+  // retrieved-origin and a neighbor-origin focused chunk.
+  it('renders the focused chunk text justified with a first-line indent, for both a retrieved and a neighbor chunk', async () => {
+    stubFetch()
+    const user = userEvent.setup()
+    renderChunkDetail('1907_EC_c1')
+
+    await waitFor(() =>
+      expect(screen.getByTestId('focused-chunk-text')).toHaveTextContent(RETRIEVED_C1.text),
+    )
+    expect(screen.getByTestId('focused-chunk-text').className).toContain('text-justify')
+    expect(screen.getByTestId('focused-chunk-text').className).toContain('indent-[1.5em]')
+
+    await waitFor(() => expect(screen.getByTestId('filmstrip-cell-next')).not.toBeDisabled())
+    await user.click(screen.getByTestId('filmstrip-cell-next'))
+
+    expect(screen.getByTestId('focused-chunk-text')).toHaveTextContent(NEIGHBOR_C3.text)
+    expect(screen.getByTestId('focused-chunk-text').className).toContain('text-justify')
+    expect(screen.getByTestId('focused-chunk-text').className).toContain('indent-[1.5em]')
+  })
+
   it('including a neighbor chunk from the detail panel appends it to the Screen 3 rail with a dashed border and the real citation', async () => {
     stubFetch()
     const user = userEvent.setup()

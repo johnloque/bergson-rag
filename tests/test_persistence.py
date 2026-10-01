@@ -244,6 +244,7 @@ def _fake_completion(captured: list, chunk_id: str = Q007_CHUNK_ID) -> object:
 # --- round trip: /generate -> /judge-chunk -> /generate --------------------
 
 
+@pytest.mark.slow
 @_qdrant_skip
 @_judge_skip
 def test_persisted_chunk_judgment_auto_loaded_into_regeneration_prompt(
@@ -285,6 +286,7 @@ def test_persisted_chunk_judgment_auto_loaded_into_regeneration_prompt(
     assert justification in prompt_content
 
 
+@pytest.mark.slow
 @_qdrant_skip
 @_judge_skip
 def test_generate_explicit_chunk_judgments_overrides_persisted_default(
@@ -321,6 +323,7 @@ def test_generate_explicit_chunk_judgments_overrides_persisted_default(
 # --- /generate: server-side retrieval confidence persistence ---------------
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_generate_persists_correct_retrieval_confidence_tier(
     client, qdrant_client, engine, monkeypatch
@@ -352,6 +355,7 @@ def test_generate_persists_correct_retrieval_confidence_tier(
 # --- /evaluate via generation_id, direct DB insertion -----------------------
 
 
+@pytest.mark.slow
 @_qdrant_skip
 @_judge_skip
 @pytest.mark.parametrize(
@@ -448,6 +452,7 @@ def test_save_evaluation_concurrent_duplicate_insert_returns_winner_row(engine, 
 # --- GET /turns/{id} ---------------------------------------------------------
 
 
+@pytest.mark.slow
 @_qdrant_skip
 @_judge_skip
 def test_get_turn_assembles_full_state_after_generate_evaluate_judge(
@@ -507,6 +512,7 @@ def test_get_turn_assembles_full_state_after_generate_evaluate_judge(
     }
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_regenerate_with_excluded_chunk_keeps_it_in_retrieved_chunks(
     client, qdrant_client, engine, monkeypatch
@@ -563,6 +569,8 @@ def test_get_turn_unknown_id_returns_404(client):
 # them back.
 
 
+@pytest.mark.slow
+@_qdrant_skip
 def test_get_turn_included_chunk_ids_defaults_to_null_until_set(client, engine):
     turn_id = _create_turn(engine, Q001_QUERY, retrieved_chunks=[(Q001_CHUNK_ID, 0.9)])
     body = client.get(f"/turns/{turn_id}").json()
@@ -570,6 +578,8 @@ def test_get_turn_included_chunk_ids_defaults_to_null_until_set(client, engine):
     assert body["neighbor_chunks"] == []
 
 
+@pytest.mark.slow
+@_qdrant_skip
 def test_set_included_chunks_persists_and_is_read_back_by_get_turn(client, engine):
     turn_id = _create_turn(
         engine,
@@ -584,6 +594,8 @@ def test_set_included_chunks_persists_and_is_read_back_by_get_turn(client, engin
     assert body["included_chunk_ids"] == [Q001_CHUNK_ID]
 
 
+@pytest.mark.slow
+@_qdrant_skip
 def test_set_included_chunks_replaces_wholesale(client, engine):
     turn_id = _create_turn(engine, Q001_QUERY, retrieved_chunks=[(Q001_CHUNK_ID, 0.9)])
     client.post(f"/turns/{turn_id}/included-chunks", json={"chunk_ids": [Q001_CHUNK_ID]})
@@ -598,6 +610,7 @@ def test_set_included_chunks_unknown_turn_id_returns_404(client):
     assert response.status_code == 404
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_set_neighbor_chunks_persists_and_is_resolved_by_get_turn(client, engine, qdrant_client):
     """The neighbor chunk was never part of `retrieved_chunks` — only its
@@ -621,6 +634,7 @@ def test_set_neighbor_chunks_persists_and_is_resolved_by_get_turn(client, engine
     assert neighbor["text"] == expected["text"]
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_set_neighbor_chunks_replaces_wholesale(client, engine):
     turn_id = _create_turn(engine, Q001_QUERY, retrieved_chunks=[(Q001_CHUNK_ID, 0.9)])

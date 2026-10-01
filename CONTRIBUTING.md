@@ -61,7 +61,11 @@ for a recruiter browsing the git history.
 
 ## Pre-merge checklist
 
-- [ ] Tests pass (once CI is in place, Sprint 1+)
+- [ ] CI passes (`.github/workflows/ci.yml`, runs automatically on every
+      push/PR — see `docs/ci_cd.md`); if retrieval/generation code
+      changed, also run the slow suite locally (`uv run pytest`, no
+      `-m` filter) since CI's fast job excludes `@pytest.mark.slow`
+      tests
 - [ ] If retrieval/generation is impacted: evaluation metrics attached to
       the PR
 - [ ] No secrets/API keys committed

@@ -44,7 +44,13 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=8.0",
-    "ruff>=0.6",
+    # Pinned to match .pre-commit-config.yaml's ruff-pre-commit rev exactly
+    # (not just floated >=0.6) -- an unbounded ruff here resolves to
+    # whatever's latest via `uv sync`, whose formatter output can drift from
+    # the pre-commit-pinned version for already-compliant files, causing
+    # `ruff format --check` (CI) to disagree with the pre-commit hook devs
+    # actually run locally. Bump both together when upgrading.
+    "ruff==0.6.9",
     "pre-commit>=3.8",
 ]
 
@@ -66,6 +72,9 @@ extend-immutable-calls = ["fastapi.Depends"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: requires a real model call and/or a live Qdrant collection — excluded from the fast CI workflow",
+]
 
 [tool.uv.sources]
 fr-core-news-lg = { url = "https://github.com/explosion/spacy-models/releases/download/fr_core_news_lg-3.8.0/fr_core_news_lg-3.8.0-py3-none-any.whl" }

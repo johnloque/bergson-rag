@@ -68,6 +68,7 @@ pytestmark = [
         reason=f"no reachable judge model ({DEFAULT_JUDGE_MODEL}) — start Ollama with the "
         "default model pulled, or set MISTRAL_API_KEY / BERGSON_LLM_FALLBACK_MODEL",
     ),
+    pytest.mark.slow,
 ]
 
 

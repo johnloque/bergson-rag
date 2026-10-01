@@ -241,6 +241,7 @@ def _load_chunk(client: QdrantClient, chunk_id: str, score: float = 1.0) -> Retr
 # --- Q001 / Q004: confirmed hallucination fixtures ----------------------
 
 
+@pytest.mark.slow
 @_judge_skip
 def test_q001_hallucination_flagged_and_blocks_auto_expand(client):
     """The correct gold chunk is the only evidence passed in (retrieval
@@ -257,6 +258,7 @@ def test_q001_hallucination_flagged_and_blocks_auto_expand(client):
     assert not should_auto_expand(evaluation)
 
 
+@pytest.mark.slow
 @_judge_skip
 def test_q004_hallucination_flagged_and_blocks_auto_expand(client):
     chunk = _load_chunk(client, Q004_CHUNK_ID)
@@ -273,6 +275,7 @@ def test_q004_hallucination_flagged_and_blocks_auto_expand(client):
 # --- Q008: confirmed faithful, generation is unaffected by evaluation ---
 
 
+@pytest.mark.slow
 @_llm_skip
 @_judge_skip
 def test_q008_answer_generated_and_returned_regardless_of_evaluation(client, reranker):
@@ -306,6 +309,7 @@ def test_q008_answer_generated_and_returned_regardless_of_evaluation(client, rer
 # --- Q009: persistent retrieval miss -------------------------------------
 
 
+@pytest.mark.slow
 @_llm_skip
 @_judge_skip
 def test_q009_persistent_retrieval_miss_gets_very_low_confidence_tier(
@@ -392,6 +396,7 @@ def test_should_auto_expand_still_blocks_on_layer2_regardless_of_confidence():
 # --- Q002: strong case ----------------------------------------------------
 
 
+@pytest.mark.slow
 @_llm_skip
 @_judge_skip
 def test_q002_strong_case_auto_expands(client):
@@ -408,6 +413,7 @@ def test_q002_strong_case_auto_expands(client):
 # --- Layer 1: structural citation check -----------------------------------
 
 
+@pytest.mark.slow
 @_judge_skip
 def test_layer1_unknown_citation_is_flagged_and_blocks_auto_expand(client):
     chunk = _load_chunk(client, Q001_CHUNK_ID)
@@ -427,6 +433,7 @@ def test_layer1_unknown_citation_is_flagged_and_blocks_auto_expand(client):
     assert not should_auto_expand(evaluation)
 
 
+@pytest.mark.slow
 def test_layer1_missing_citation_flagged_without_llm_call(client):
     """check_structure alone needs no LLM — confirms Layer 1 is independently
     testable and independently correct without exercising Layer 2 at all."""
@@ -605,6 +612,7 @@ def test_check_title_year_mismatch_validates_against_the_texts_own_year():
     assert mismatches[0].claimed_years == (1919,)
 
 
+@pytest.mark.slow
 @_llm_skip
 def test_q004_title_year_grounding_empirical_regeneration(client):
     """Empirical check, not a guarantee (docs/anti_hallucination_guardrails.md):
@@ -645,6 +653,7 @@ def test_q004_title_year_grounding_empirical_regeneration(client):
 # --- chunk_judgments: fixture shape and prompt content --------------------
 
 
+@pytest.mark.slow
 @_llm_skip
 def test_chunk_judgments_included_in_prompt(client):
     """A hand-constructed ChunkJudgment fixture — not from a real
@@ -668,6 +677,7 @@ def test_chunk_judgments_included_in_prompt(client):
 # --- Manual regeneration: same evaluation path as an initial generation ---
 
 
+@pytest.mark.slow
 @_llm_skip
 @_judge_skip
 def test_manual_regeneration_with_chunk_judgments_goes_through_same_evaluation(client):

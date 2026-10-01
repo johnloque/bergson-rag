@@ -36,10 +36,13 @@ def _qdrant_available() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(
-    not CHUNKS_DIR.exists() or not any(CHUNKS_DIR.glob("*.json")),
-    reason="processed chunks not found — run scripts/run_ingestion.py first",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        not CHUNKS_DIR.exists() or not any(CHUNKS_DIR.glob("*.json")),
+        reason="processed chunks not found — run scripts/run_ingestion.py first",
+    ),
+    pytest.mark.slow,
+]
 
 
 def _work_filter(work_id: str) -> models.Filter:

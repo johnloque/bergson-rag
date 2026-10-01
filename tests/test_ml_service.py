@@ -16,6 +16,8 @@ from fastapi.testclient import TestClient
 from src.indexing.embeddings import DENSE_DIM
 from src.ml_service.main import app
 
+pytestmark = pytest.mark.slow
+
 QUERY = "Que signifie la duree chez Bergson ?"
 RELEVANT_TEXT = (
     "La duree est le fondement de la vie interieure : elle est succession "

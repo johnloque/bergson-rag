@@ -36,11 +36,14 @@ def _collection_populated() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(
-    not _collection_populated(),
-    reason="Qdrant not reachable or `bergson_chunks` empty — run `docker compose up qdrant` "
-    "and scripts/build_index.py first",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        not _collection_populated(),
+        reason="Qdrant not reachable or `bergson_chunks` empty — run `docker compose up qdrant` "
+        "and scripts/build_index.py first",
+    ),
+    pytest.mark.slow,
+]
 
 
 @pytest.fixture(scope="module")

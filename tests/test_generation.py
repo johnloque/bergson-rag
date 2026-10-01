@@ -131,11 +131,14 @@ def _model_reachable(model: str) -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(
-    not _collection_populated(),
-    reason="Qdrant not reachable or `bergson_chunks` empty — run `docker compose up qdrant` "
-    "and scripts/build_index.py first",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        not _collection_populated(),
+        reason="Qdrant not reachable or `bergson_chunks` empty — run `docker compose up qdrant` "
+        "and scripts/build_index.py first",
+    ),
+    pytest.mark.slow,
+]
 
 _llm_skip = pytest.mark.skipif(
     not (_model_reachable(DEFAULT_MODEL) or _model_reachable(RESOLVED_FALLBACK_MODEL)),

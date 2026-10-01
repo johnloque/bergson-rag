@@ -20,6 +20,8 @@ import pytest
 from src.retrieval.hybrid import RetrievedChunk
 from src.retrieval.reranking import CrossEncoderReranker, rerank
 
+pytestmark = pytest.mark.slow
+
 
 def _chunk(chunk_id: str, score: float, text: str) -> RetrievedChunk:
     return RetrievedChunk(

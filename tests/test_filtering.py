@@ -207,6 +207,7 @@ Q002_QUERY = (
 Q002_GOLD_CHUNK_IDS = frozenset({"1907_EC_c25", "1907_EC_c398", "1934_PM_c16"})
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_no_filter_matches_unfiltered_hybrid_search(client, dense_embedder, sparse_embedder):
     """`work_ids` and `date_range` both absent must be exactly equivalent to
@@ -218,6 +219,7 @@ def test_no_filter_matches_unfiltered_hybrid_search(client, dense_embedder, spar
     assert [c.score for c in filtered] == [c.score for c in plain]
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_single_work_id_filter_restricts_to_that_work(client, dense_embedder, sparse_embedder):
     result = filtered_hybrid_search(
@@ -228,6 +230,7 @@ def test_single_work_id_filter_restricts_to_that_work(client, dense_embedder, sp
     assert {c.chunk_id for c in result} & Q002_GOLD_CHUNK_IDS
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_publication_date_range_excludes_later_works(client, dense_embedder, sparse_embedder):
     """A range covering 1907_EC (1907) but not 1934_PM (1934) must exclude
@@ -260,6 +263,7 @@ EFFORT_INTELLECTUEL_QUERY = (
 EFFORT_INTELLECTUEL_CHUNK_ID = "1919_ES_c153"  # "L'effort intellectuel", 1902
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_text_mode_range_covering_only_the_text_year_includes_it(
     client, dense_embedder, sparse_embedder
@@ -276,6 +280,7 @@ def test_text_mode_range_covering_only_the_text_year_includes_it(
     assert EFFORT_INTELLECTUEL_CHUNK_ID in {c.chunk_id for c in result}
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_text_mode_range_covering_only_work_year_excludes_the_earlier_text(
     client, dense_embedder, sparse_embedder
@@ -308,6 +313,7 @@ def test_text_mode_range_covering_only_work_year_excludes_the_earlier_text(
     assert EFFORT_INTELLECTUEL_CHUNK_ID in {c.chunk_id for c in publication_mode}
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_text_mode_excludes_a_different_dated_text_in_the_same_work(
     client, dense_embedder, sparse_embedder
@@ -337,6 +343,7 @@ def test_text_mode_excludes_a_different_dated_text_in_the_same_work(
         )
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_text_mode_preserves_requested_top_n_via_overfetch(client, dense_embedder, sparse_embedder):
     """Regression test for the recall-loss risk named in docs/ROADMAP.md:
@@ -361,6 +368,7 @@ def test_text_mode_preserves_requested_top_n_via_overfetch(client, dense_embedde
 # --- integration: "text" mode, non-anthology work — regression check --------
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_text_mode_matches_publication_mode_for_non_anthology_work(
     client, dense_embedder, sparse_embedder

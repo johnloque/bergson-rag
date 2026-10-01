@@ -291,6 +291,7 @@ def _insert_generation(
 # --- /retrieve --------------------------------------------------------------
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_retrieve_known_strong_query_returns_expected_chunk(client):
     response = client.post("/retrieve", json={"query": Q002_QUERY, "top_k": 5})
@@ -300,6 +301,7 @@ def test_retrieve_known_strong_query_returns_expected_chunk(client):
     assert chunk_ids & Q002_GOLD_CHUNK_IDS
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_retrieve_persists_turn_and_retrieved_chunks(client, engine):
     """docs/ROADMAP.md, Sprint 10 turn-lifecycle fix: /retrieve creates the
@@ -324,6 +326,7 @@ def test_retrieve_persists_turn_and_retrieved_chunks(client, engine):
         assert {r.chunk_id for r in rows} == {c["chunk_id"] for c in body["chunks"]}
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_retrieve_second_call_with_conversation_id_reuses_conversation(client, engine):
     first = client.post("/retrieve", json={"query": Q002_QUERY, "top_k": 3})
@@ -364,6 +367,7 @@ def test_retrieve_malformed_date_range_returns_422(client):
     assert response.status_code == 422
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_retrieve_applies_work_ids_and_date_range_filters(client):
     """docs/ROADMAP.md, Sprint 11: `/retrieve` threads `work_ids`/
@@ -386,6 +390,7 @@ def test_retrieve_applies_work_ids_and_date_range_filters(client):
     assert {c["work_id"] for c in body["chunks"]} == {"1907_EC"}
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_retrieve_echoes_and_persists_applied_filter(client):
     """docs/ROADMAP.md, Sprint 12 filter UI: `RetrieveResponse` and a later
@@ -433,6 +438,7 @@ def test_retrieve_echoes_and_persists_applied_filter(client):
 # --- /generate ---------------------------------------------------------------
 
 
+@pytest.mark.slow
 @_qdrant_skip
 @_llm_skip
 @pytest.mark.parametrize(
@@ -468,6 +474,7 @@ def test_generate_malformed_body_returns_422(client, engine):
     )
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_generate_unreachable_provider_returns_503(client, qdrant_client, engine, monkeypatch):
     def _raise(*args, **kwargs):
@@ -484,6 +491,7 @@ def test_generate_unreachable_provider_returns_503(client, qdrant_client, engine
     assert "mistral" in response.json()["detail"]
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_generate_unknown_turn_id_returns_404(client, qdrant_client):
     chunk = _load_chunk_input(qdrant_client, Q001_CHUNK_ID)
@@ -494,6 +502,7 @@ def test_generate_unknown_turn_id_returns_404(client, qdrant_client):
 # --- /confidence-preview -----------------------------------------------------
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_confidence_preview_matches_q009_persistent_retrieval_miss(
     client, qdrant_client, dense_embedder, sparse_embedder, reranker
@@ -525,6 +534,7 @@ def test_confidence_preview_malformed_body_returns_422(client):
     assert client.post("/confidence-preview", json={"chunks": [{"score": 0.5}]}).status_code == 422
 
 
+@pytest.mark.slow
 @_qdrant_skip
 @_llm_skip
 def test_confidence_preview_and_generate_persisted_tier_agree(client, qdrant_client, engine):
@@ -555,6 +565,7 @@ def test_confidence_preview_and_generate_persisted_tier_agree(client, qdrant_cli
 # --- /evaluate -----------------------------------------------------------
 
 
+@pytest.mark.slow
 @_qdrant_skip
 @_judge_skip
 @pytest.mark.parametrize(
@@ -585,6 +596,7 @@ def test_evaluate_flags_known_hallucination(
     assert body["should_auto_expand"] is False
 
 
+@pytest.mark.slow
 @_qdrant_skip
 @_llm_skip
 @_judge_skip
@@ -613,6 +625,7 @@ def test_evaluate_strong_case_auto_expands(client, qdrant_client, engine):
     assert response.json()["should_auto_expand"] is True
 
 
+@pytest.mark.slow
 @_qdrant_skip
 @_judge_skip
 def test_evaluate_response_omits_retrieval_confidence_tier(client, engine):
@@ -642,6 +655,7 @@ def test_evaluate_unknown_generation_id_returns_404(client):
     assert response.status_code == 404
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_evaluate_unreachable_provider_returns_503(client, engine, monkeypatch):
     """`generate_evaluation`'s only LLM call is the judge, made via
@@ -665,6 +679,7 @@ def test_evaluate_unreachable_provider_returns_503(client, engine, monkeypatch):
     assert "ollama_chat" in response.json()["detail"]
 
 
+@pytest.mark.slow
 @_qdrant_skip
 @_judge_skip
 def test_evaluate_second_call_for_same_generation_id_reuses_existing_row(client, engine):
@@ -716,6 +731,7 @@ def test_evaluate_second_call_for_same_generation_id_reuses_existing_row(client,
 # --- /judge-chunk ----------------------------------------------------------
 
 
+@pytest.mark.slow
 @_qdrant_skip
 @_judge_skip
 def test_judge_chunk_pertinent_for_matching_chunk(client, qdrant_client, engine):
@@ -730,6 +746,7 @@ def test_judge_chunk_pertinent_for_matching_chunk(client, qdrant_client, engine)
     assert body["justification"].strip()
 
 
+@pytest.mark.slow
 @_qdrant_skip
 @_judge_skip
 def test_judge_chunk_non_pertinent_for_unrelated_chunk(client, qdrant_client, engine):
@@ -808,6 +825,7 @@ NEIGHBOR_SECTION_FIRST_CHUNK_ID = "1934_PM_c25"
 NEIGHBOR_SECTION_FIRST_NEXT_ID = "1934_PM_c26"
 
 
+@pytest.mark.slow
 @_neighbor_skip
 def test_chunk_neighbors_mid_section_returns_both_directions(client):
     response = client.get(f"/chunks/{NEIGHBOR_MID_CHUNK_ID}/neighbors")
@@ -817,6 +835,7 @@ def test_chunk_neighbors_mid_section_returns_both_directions(client):
     assert body["next"]["chunk_id"] == NEIGHBOR_MID_NEXT_ID
 
 
+@pytest.mark.slow
 @_neighbor_skip
 def test_chunk_neighbors_at_section_end_has_no_next(client):
     """Last paragraph of a section: `next` resolves to a real chunk_id, but
@@ -828,6 +847,7 @@ def test_chunk_neighbors_at_section_end_has_no_next(client):
     assert body["next"] is None
 
 
+@pytest.mark.slow
 @_neighbor_skip
 def test_chunk_neighbors_at_section_start_has_no_previous(client):
     """First paragraph of a section: `previous` resolves to a real chunk_id
@@ -840,6 +860,7 @@ def test_chunk_neighbors_at_section_start_has_no_previous(client):
     assert body["next"]["chunk_id"] == NEIGHBOR_SECTION_FIRST_NEXT_ID
 
 
+@pytest.mark.slow
 @_qdrant_skip
 def test_chunk_neighbors_unknown_chunk_id_returns_404(client):
     response = client.get("/chunks/NOT_A_REAL_CHUNK_ID/neighbors")

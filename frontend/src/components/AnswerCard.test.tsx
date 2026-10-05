@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom'
 import { AnswerCard } from './AnswerCard'
@@ -15,8 +15,37 @@ function makeEvaluation(shouldAutoExpand: boolean): EvaluateResponse {
       title_year_mismatches: [],
       passed: true,
     },
-    faithfulness: { score: 1, model: 'judge', claims: [] },
+    faithfulness: { score: 1, model: 'judge', claims: [], segments: [] },
     should_auto_expand: shouldAutoExpand,
+  }
+}
+
+type SegmentFixture = {
+  text: string
+  claims: { statement: string; supported: boolean | null; reason: string | null }[]
+}
+
+// An evaluation whose segments are located in `answer` by their raw text,
+// the way the backend cuts them (src/generation/segmentation.py) — ids in
+// order, offsets into the raw markdown.
+function evaluationWithSegments(answer: string, fixtures: SegmentFixture[]): EvaluateResponse {
+  const segments = fixtures.map((f, id) => {
+    const start = answer.indexOf(f.text)
+    if (start === -1) throw new Error(`segment not in answer: ${f.text}`)
+    return { id, text: f.text, start, end: start + f.text.length }
+  })
+  const claims = fixtures.flatMap((f, id) => f.claims.map((c) => ({ ...c, segment_id: id })))
+  return {
+    structural: {
+      citations: [],
+      unknown_citations: [],
+      has_citation: true,
+      fabricated_titles: [],
+      title_year_mismatches: [],
+      passed: true,
+    },
+    faithfulness: { score: 1, model: 'judge', claims, segments },
+    should_auto_expand: claims.every((c) => c.supported === true),
   }
 }
 
@@ -113,7 +142,7 @@ describe('AnswerCard full-endorsement statement', () => {
       title_year_mismatches: [],
       passed: true,
     },
-      faithfulness: { score: claims.every((c) => c.supported) ? 1 : 0.5, model: 'judge', claims },
+      faithfulness: { score: claims.every((c) => c.supported) ? 1 : 0.5, model: 'judge', claims, segments: [] },
       should_auto_expand: claims.every((c) => c.supported),
     }
   }
@@ -123,8 +152,8 @@ describe('AnswerCard full-endorsement statement', () => {
       <AnswerCard
         answer="Une réponse fondée."
         evaluation={evaluationWithClaims([
-          { statement: 'A', supported: true, reason: 'ok', quote: null },
-          { statement: 'B', supported: true, reason: 'ok', quote: null },
+          { statement: 'A', supported: true, reason: 'ok', segment_id: null },
+          { statement: 'B', supported: true, reason: 'ok', segment_id: null },
         ])}
         evaluationStatus="done"
         revealed={true}
@@ -140,8 +169,8 @@ describe('AnswerCard full-endorsement statement', () => {
       <AnswerCard
         answer="Une réponse."
         evaluation={evaluationWithClaims([
-          { statement: 'A', supported: true, reason: 'ok', quote: null },
-          { statement: 'B', supported: false, reason: 'non étayé', quote: null },
+          { statement: 'A', supported: true, reason: 'ok', segment_id: null },
+          { statement: 'B', supported: false, reason: 'non étayé', segment_id: null },
         ])}
         evaluationStatus="done"
         revealed={true}
@@ -192,7 +221,8 @@ describe('AnswerCard full-endorsement statement', () => {
           faithfulness: {
             score: 1,
             model: 'judge',
-            claims: [{ statement: 'A', supported: true, reason: 'ok', quote: null }],
+            claims: [{ statement: 'A', supported: true, reason: 'ok', segment_id: null }],
+            segments: [],
           },
           should_auto_expand: false,
         }}
@@ -224,7 +254,8 @@ describe('AnswerCard full-endorsement statement', () => {
           faithfulness: {
             score: 1,
             model: 'judge',
-            claims: [{ statement: 'A', supported: true, reason: 'ok', quote: null }],
+            claims: [{ statement: 'A', supported: true, reason: 'ok', segment_id: null }],
+            segments: [],
           },
           should_auto_expand: false,
         }}
@@ -240,21 +271,6 @@ describe('AnswerCard full-endorsement statement', () => {
 })
 
 describe('AnswerCard markdown rendering', () => {
-  function evaluationWithClaims(claims: EvaluateResponse['faithfulness']['claims']): EvaluateResponse {
-    return {
-      structural: {
-        citations: [],
-        unknown_citations: [],
-        has_citation: true,
-        fabricated_titles: [],
-        title_year_mismatches: [],
-        passed: true,
-      },
-      faithfulness: { score: claims.every((c) => c.supported) ? 1 : 0.5, model: 'judge', claims },
-      should_auto_expand: true,
-    }
-  }
-
   it('renders markdown syntax (bold, list) as formatted elements, not raw text', () => {
     const { container } = render(
       <AnswerCard
@@ -274,16 +290,16 @@ describe('AnswerCard markdown rendering', () => {
     expect(screen.queryByText(/\*\*Bergson\*\*/)).not.toBeInTheDocument()
   })
 
-  // The specific regression case named in the task: a flagged claim's
-  // verbatim quote falling entirely inside a bolded run must still render
-  // both the <strong> formatting and the <mark> highlight, nested rather
-  // than one clobbering the other.
-  it('renders the faithfulness highlight inside a bolded phrase', () => {
+  // A checked sentence partly inside a bold run: the sentence span is split
+  // around the markdown formatting (lib/segmentPlugin.ts) rather than
+  // clobbering it, and stays a single keyboard stop.
+  it('colors a sentence partly inside a bolded phrase without breaking the bold', () => {
+    const answer = '**Bergson est né à Paris en 1859** selon sa biographie officielle.'
     const { container } = render(
       <AnswerCard
-        answer="**Bergson est né à Paris en 1859** selon sa biographie officielle."
-        evaluation={evaluationWithClaims([
-          { statement: 'x', supported: false, reason: 'non étayé', quote: 'né à Paris en 1859' },
+        answer={answer}
+        evaluation={evaluationWithSegments(answer, [
+          { text: answer, claims: [{ statement: 'x', supported: false, reason: 'non étayé' }] },
         ])}
         evaluationStatus="done"
         revealed={true}
@@ -291,20 +307,24 @@ describe('AnswerCard markdown rendering', () => {
       />,
     )
     const strong = container.querySelector('strong')
-    expect(strong).not.toBeNull()
-    const mark = strong!.querySelector('mark')
-    expect(mark?.textContent).toBe('né à Paris en 1859')
-    // The bold formatting survives around the highlighted span.
     expect(strong!.textContent).toBe('Bergson est né à Paris en 1859')
+    expect(strong!.querySelector('[data-segment-id="0"]')?.textContent).toBe('Bergson est né à Paris en 1859')
+    const runs = container.querySelectorAll('[data-segment-id="0"]')
+    expect(Array.from(runs, (r) => r.textContent).join('')).toBe(
+      'Bergson est né à Paris en 1859 selon sa biographie officielle.',
+    )
+    expect(container.querySelectorAll('[data-segment-id="0"][tabindex="0"]')).toHaveLength(1)
   })
 
-  // Same regression, inside a list item instead of a bold run.
-  it('renders the faithfulness highlight inside a markdown list item', () => {
+  it('colors each list item sentence by its own verdicts, and leaves claimless sentences plain', () => {
+    const answer = 'Deux points :\n\n- Bergson est né à Paris en 1859.\n- Il meurt en 1941.'
     const { container } = render(
       <AnswerCard
-        answer={'Deux points :\n\n- Bergson est né à Paris en 1859.\n- Il meurt en 1941.'}
-        evaluation={evaluationWithClaims([
-          { statement: 'x', supported: false, reason: 'non étayé', quote: 'né à Paris en 1859' },
+        answer={answer}
+        evaluation={evaluationWithSegments(answer, [
+          { text: 'Deux points :', claims: [] },
+          { text: 'Bergson est né à Paris en 1859.', claims: [{ statement: 'x', supported: false, reason: 'r' }] },
+          { text: 'Il meurt en 1941.', claims: [{ statement: 'y', supported: true, reason: 'r' }] },
         ])}
         evaluationStatus="done"
         revealed={true}
@@ -312,12 +332,28 @@ describe('AnswerCard markdown rendering', () => {
       />,
     )
     const items = container.querySelectorAll('li')
-    expect(items).toHaveLength(2)
-    const mark = items[0].querySelector('mark')
-    expect(mark?.textContent).toBe('né à Paris en 1859')
-    expect(items[0].textContent).toBe('Bergson est né à Paris en 1859.')
-    // The second item, with no flagged claim, has no highlight.
-    expect(items[1].querySelector('mark')).toBeNull()
+    expect(items[0].querySelector('[data-segment-status="unsupported"]')?.textContent).toBe(
+      'Bergson est né à Paris en 1859.',
+    )
+    expect(items[1].querySelector('[data-segment-status="supported"]')?.textContent).toBe('Il meurt en 1941.')
+    expect(container.querySelector('[data-segment-id="0"]')).toBeNull()
+  })
+
+  it("maps a list item's continuation line back to its sentence despite the stripped indent", () => {
+    const answer = '- Premier point\n  qui continue.'
+    const { container } = render(
+      <AnswerCard
+        answer={answer}
+        evaluation={evaluationWithSegments(answer, [
+          { text: 'Premier point\n  qui continue.', claims: [{ statement: 'x', supported: true, reason: 'r' }] },
+        ])}
+        evaluationStatus="done"
+        revealed={true}
+        onReveal={() => {}}
+      />,
+    )
+    expect(container.querySelector('li')!.textContent).toBe('Premier point\nqui continue.')
+    expect(container.querySelector('[data-segment-id="0"]')?.textContent).toBe('Premier point\nqui continue.')
   })
 })
 
@@ -380,7 +416,11 @@ describe('AnswerCard manual evaluation trigger', () => {
 // directly via `evaluation.structural.unknown_citations`, not recomputed.
 describe('AnswerCard citation links', () => {
   function evaluationWith(
-    opts: { unknownCitations?: string[]; claims?: EvaluateResponse['faithfulness']['claims'] } = {},
+    opts: {
+      unknownCitations?: string[]
+      claims?: EvaluateResponse['faithfulness']['claims']
+      segments?: EvaluateResponse['faithfulness']['segments']
+    } = {},
   ): EvaluateResponse {
     const claims = opts.claims ?? []
     return {
@@ -392,7 +432,7 @@ describe('AnswerCard citation links', () => {
         title_year_mismatches: [],
         passed: (opts.unknownCitations ?? []).length === 0,
       },
-      faithfulness: { score: 1, model: 'judge', claims },
+      faithfulness: { score: 1, model: 'judge', claims, segments: opts.segments ?? [] },
       should_auto_expand: true,
     }
   }
@@ -483,29 +523,27 @@ describe('AnswerCard citation links', () => {
     expect(strong!.textContent).toBe('Une affirmation [1907_EC_c5]')
   })
 
-  it('renders both the faithfulness highlight and the citation link when a flagged quote contains the citation', () => {
+  it('renders the citation link inside a colored sentence, and clicking it navigates without opening the popover', async () => {
+    const user = userEvent.setup()
+    const answer = 'Le texte affirme une chose surprenante [1907_EC_c5], à vérifier.'
     renderAtConversation(
-      'Le texte affirme une chose surprenante [1907_EC_c5], à vérifier.',
+      answer,
       evaluationWith({
-        claims: [
-          {
-            statement: 'x',
-            supported: false,
-            reason: 'non étayé',
-            quote: 'une chose surprenante [1907_EC_c5]',
-          },
-        ],
+        claims: [{ statement: 'x', supported: false, reason: 'non étayé', segment_id: 0 }],
+        segments: [{ id: 0, text: answer, start: 0, end: answer.length }],
       }),
     )
-    const mark = screen.getByTestId('answer-content').querySelector('mark')
-    expect(mark).not.toBeNull()
-    const link = mark!.querySelector('a')
-    expect(link).not.toBeNull()
+    const runs = screen.getByTestId('answer-content').querySelectorAll('[data-segment-id="0"]')
+    const link = Array.from(runs)
+      .map((r) => r.querySelector('a'))
+      .find(Boolean)
     expect(link!.textContent).toBe('1907_EC_c5')
-    // Highlight and link compose: the mark still contains the full flagged
-    // quote (bracket included), the link nests inside it and doesn't
-    // truncate or duplicate any of the surrounding highlighted text.
-    expect(mark!.textContent).toBe('une chose surprenante [1907_EC_c5]')
+    // Sentence and link compose: the sentence's runs still cover the whole
+    // text (bracket included), the link nests inside one of them.
+    expect(Array.from(runs, (r) => r.textContent).join('')).toBe(answer)
+    await user.click(link!)
+    expect(screen.queryByTestId('segment-popover')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('screen4')).toHaveTextContent('1/2/1907_EC_c5')
   })
 
   it('links each known chunk_id independently within a multi-id bracket', () => {
@@ -553,7 +591,7 @@ describe('AnswerCard collapse reason', () => {
         title_year_mismatches: overrides.titleYearMismatches ?? [],
         passed: true,
       },
-      faithfulness: { score: 1, model: 'judge', claims: overrides.claims ?? [] },
+      faithfulness: { score: 1, model: 'judge', claims: overrides.claims ?? [], segments: [] },
       should_auto_expand: false,
     }
   }
@@ -576,7 +614,7 @@ describe('AnswerCard collapse reason', () => {
       <AnswerCard
         answer="Une réponse."
         evaluation={evaluation({
-          claims: [{ statement: 'A', supported: false, reason: 'non étayé', quote: null }],
+          claims: [{ statement: 'A', supported: false, reason: 'non étayé', segment_id: null }],
         })}
         evaluationStatus="done"
         revealed={false}
@@ -592,7 +630,7 @@ describe('AnswerCard collapse reason', () => {
         answer="Une réponse."
         evaluation={evaluation({
           fabricatedTitles: ['Le comique de caractère'],
-          claims: [{ statement: 'A', supported: true, reason: 'ok', quote: null }],
+          claims: [{ statement: 'A', supported: true, reason: 'ok', segment_id: null }],
         })}
         evaluationStatus="done"
         revealed={false}
@@ -608,7 +646,7 @@ describe('AnswerCard collapse reason', () => {
         answer="Une réponse."
         evaluation={evaluation({
           fabricatedTitles: ['Le comique de caractère'],
-          claims: [{ statement: 'A', supported: false, reason: 'non étayé', quote: null }],
+          claims: [{ statement: 'A', supported: false, reason: 'non étayé', segment_id: null }],
         })}
         evaluationStatus="done"
         revealed={false}
@@ -645,5 +683,127 @@ describe('AnswerCard collapse reason', () => {
       expect(screen.queryByTestId('collapse-reason')).not.toBeInTheDocument()
       unmount()
     }
+  })
+})
+
+// Clicking a colored sentence opens the detail of its check: every claim
+// drawn from it, marked supported / unsupported / not evaluated, each
+// disclosing the judge's reason on click (components/SegmentPopover.tsx).
+describe('AnswerCard segment popover', () => {
+  const answer = 'Bergson oppose la durée au temps. Voici la suite. Il juge ce temps spatial.'
+  const evaluation = evaluationWithSegments(answer, [
+    {
+      text: 'Bergson oppose la durée au temps.',
+      claims: [
+        { statement: 'Bergson oppose la durée au temps.', supported: true, reason: 'Dit au chunk 1.' },
+        { statement: 'Bergson invente la durée en 1950.', supported: false, reason: 'Aucune date.' },
+      ],
+    },
+    { text: 'Voici la suite.', claims: [] },
+    {
+      text: 'Il juge ce temps spatial.',
+      claims: [{ statement: 'Bergson juge le temps spatial.', supported: true, reason: 'Dit au chunk 2.' }],
+    },
+  ])
+
+  function renderCard(ev: EvaluateResponse = evaluation) {
+    return render(
+      <AnswerCard answer={answer} evaluation={ev} evaluationStatus="done" revealed={true} onReveal={() => {}} />,
+    )
+  }
+
+  it('lists every claim of the clicked sentence with its status, reasons hidden until clicked', async () => {
+    const user = userEvent.setup()
+    renderCard()
+    await user.click(screen.getByRole('button', { name: 'Passage contenant une affirmation non étayée' }))
+    const popover = screen.getByTestId('segment-popover')
+    const claims = within(popover).getAllByTestId('segment-claim')
+    expect(claims).toHaveLength(2)
+    expect(within(claims[0]).getByRole('img', { name: 'Affirmation étayée' })).toBeInTheDocument()
+    expect(within(claims[1]).getByRole('img', { name: 'Affirmation non étayée' })).toBeInTheDocument()
+    expect(within(popover).queryByTestId('segment-claim-reason')).not.toBeInTheDocument()
+
+    await user.click(within(claims[1]).getByRole('button', { name: /Bergson invente la durée/ }))
+    expect(within(claims[1]).getByTestId('segment-claim-reason')).toHaveTextContent(
+      'Justification du juge : Aucune date.',
+    )
+    expect(within(claims[0]).queryByTestId('segment-claim-reason')).not.toBeInTheDocument()
+  })
+
+  it("shows a single claim's reason straight away", async () => {
+    const user = userEvent.setup()
+    renderCard()
+    await user.click(screen.getByRole('button', { name: 'Passage étayé par les sources citées' }))
+    expect(screen.getByTestId('segment-claim-reason')).toHaveTextContent('Dit au chunk 2.')
+  })
+
+  it('leaves a sentence with no claim uncolored and not clickable', () => {
+    const { container } = renderCard()
+    expect(container.querySelector('[data-segment-id="1"]')).toBeNull()
+    expect(screen.getAllByRole('button', { name: /^Passage/ })).toHaveLength(2)
+  })
+
+  it('marks a not-evaluated claim, without a reason to disclose, and keeps its sentence from turning green', async () => {
+    const user = userEvent.setup()
+    const partial = evaluationWithSegments('Une phrase.', [
+      {
+        text: 'Une phrase.',
+        claims: [
+          { statement: 'A', supported: true, reason: 'ok' },
+          { statement: 'B', supported: null, reason: null },
+        ],
+      },
+    ])
+    render(
+      <AnswerCard answer="Une phrase." evaluation={partial} evaluationStatus="done" revealed={true} onReveal={() => {}} />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Passage non entièrement vérifié' }))
+    const unevaluated = screen.getAllByTestId('segment-claim')[1]
+    expect(within(unevaluated).getByRole('img', { name: 'Affirmation non vérifiée' })).toBeInTheDocument()
+    expect(within(unevaluated).getByText('Vérification impossible pour cette affirmation.')).toBeInTheDocument()
+    expect(within(unevaluated).queryByRole('button')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Réponse intégralement confirmée par les passages cités.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('opens from the keyboard and closes on Escape, returning focus to the sentence', async () => {
+    const user = userEvent.setup()
+    renderCard()
+    const sentence = screen.getByRole('button', { name: 'Passage contenant une affirmation non étayée' })
+    sentence.focus()
+    await user.keyboard('{Enter}')
+    expect(screen.getByTestId('segment-popover')).toBeInTheDocument()
+    expect(sentence).toHaveAttribute('aria-expanded', 'true')
+    await user.keyboard('{Escape}')
+    expect(screen.queryByTestId('segment-popover')).not.toBeInTheDocument()
+    expect(sentence).toHaveFocus()
+  })
+
+  it('closes on a click outside, and toggles closed when the same sentence is clicked again', async () => {
+    const user = userEvent.setup()
+    renderCard()
+    const sentence = screen.getByRole('button', { name: 'Passage contenant une affirmation non étayée' })
+    await user.click(sentence)
+    await user.click(document.body)
+    expect(screen.queryByTestId('segment-popover')).not.toBeInTheDocument()
+    await user.click(sentence)
+    await user.click(sentence)
+    expect(screen.queryByTestId('segment-popover')).not.toBeInTheDocument()
+  })
+
+  it('shows the color legend only when sentences are colored', () => {
+    renderCard()
+    expect(screen.getByText(/Cliquez sur un passage pour voir le détail/)).toBeInTheDocument()
+  })
+
+  it('names unevaluated claims as the collapse reason when nothing else fired', () => {
+    const partial = evaluationWithSegments('Une phrase.', [
+      { text: 'Une phrase.', claims: [{ statement: 'B', supported: null, reason: null }] },
+    ])
+    render(
+      <AnswerCard answer="Une phrase." evaluation={partial} evaluationStatus="done" revealed={false} onReveal={() => {}} />,
+    )
+    expect(screen.getByTestId('collapse-reason')).toHaveTextContent('Certaines affirmations n’ont pas pu être vérifiées.')
   })
 })

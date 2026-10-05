@@ -69,7 +69,10 @@ All in `src/generation/`:
     (`FaithfulnessResult.claims`), not just the aggregate score, obtained by
     calling the metric's own two internal steps directly instead of
     `single_turn_score()` — the same two LLM calls, not a second pass —
-    so a guardrail can name *which* claim is unsupported.
+    so a guardrail can name *which* claim is unsupported. *(Since
+    `feat/segment-claims`, below: claims are extracted per answer
+    sentence and judged one NLI call per claim; the RAGAS metric itself
+    is no longer called.)*
   - **Retrieval confidence tier**, `signals.retrieval_confidence_tier` —
     imported directly from `src/generation/signals.py`, not reimplemented
     here: the exact same signal Sprint 5's `EvidenceSignals.is_confident`
@@ -200,7 +203,8 @@ On the frontend, the confidence gauge (`ConfidenceGauge.tsx`, unchanged
 visually — same 4-segment bar, `--blue` for the confident tiers,
 `--gray-dark` for the two weak tiers) moved from the expanded answer card
 to directly above the chunk rail (`ChunkRail.tsx`); the answer card now
-renders only the citation integrity flag and faithfulness highlighting.
+renders only the citation integrity flag and faithfulness highlighting
+(per-sentence coloring since `feat/segment-claims`, below).
 
 ## Test coverage
 
@@ -752,3 +756,131 @@ evaluation actually completes). The existing live-flow fixtures
 (Q001/Q004/Q008/Q009/Q002, `tests/test_guardrail.py`) are untouched — no
 guardrail decision logic changed on this branch, only persistence, frontend
 resume-tracking, and this explanatory copy.
+
+## `feat/segment-claims`: claims anchored to answer sentences, one NLI call per claim
+
+Motivation: the UI highlighted unsupported claims through a verbatim
+`quote` the judge was asked to copy from the answer
+(`_ground_quote_in_answer`). A quote is *generated* text, and the local 7B
+judge altered punctuation and apostrophes, paraphrased, or stitched
+non-contiguous fragments together (a resolved pronoun's antecedent lives in
+another sentence) — the quote then matched nothing, and the flagged passage
+silently went unhighlighted. The goal of this branch: tie every claim to a
+real span of the answer by construction, then color every sentence (not
+only the unsupported ones) by its claims' verdicts. Layer 2's role in
+`should_auto_expand` is unchanged; how its claims are produced, anchored
+and judged is not.
+
+### Segmentation by code, decomposition by the judge
+
+`src/generation/segmentation.py` cuts the answer into sentence segments —
+Markdown blocks first (paragraphs, list items, blockquotes; headings
+skipped), then sentences — with no LLM involved; segments are returned
+with their character offsets. A hand-written splitter, not pysbd or spaCy's
+sentencizer: both were tried against this project's answer shape and
+failed on common cases (`cf. p. 42`, `ch. III`, `…`, a `[chunk_id]`
+citation after the final period).
+
+The judge still decomposes and reformulates (pronoun-free atomic claims),
+but over the numbered segments, returning claims grouped under each
+segment's id (`SegmentClaimsPrompt`, `src/generation/faithfulness.py`). A
+segment yields zero to n claims; a claim belongs to exactly one segment.
+The attribution is trusted as-is (only nonexistent ids are dropped); an
+offline overlap check was considered and deferred until an evaluation shows
+misattributions are frequent enough to justify it.
+
+### Judge prompt languages
+
+The local judge answers in the prompt's language, not the answer's — even
+when told not to translate. With RAGAS's English extraction prompt, every
+claim of a French answer came back in English, which the UI now shows
+verbatim, so the extraction prompt is entirely in French. The NLI prompt
+was first fully translated too, and that degraded verdicts: a fabricated
+claim ("Bergson borrowed this image from Einstein in 1950") was marked
+supported while the judge's own French reason said the context contained
+nothing about it. Kept instead: RAGAS's English `NLIStatementPrompt`,
+asking for (and showing in its examples) French `reason`s only — the same
+fabricated claim is rejected again.
+
+### One NLI call per claim
+
+RAGAS's `Faithfulness` judges all claims in one call and returns verdicts
+that echo each statement's text; neither list position nor the echo is a
+guaranteed link back to the claim. Measured on 4 gold items (Q001, Q002,
+Q004, Q007; 30 claims; 5 real reranked chunks each, 13–20k characters),
+single-call vs. per-claim judging:
+
+- Echo matching never failed (30/30) — the theoretical risk didn't occur.
+- **Verdicts disagreed on 9 of 30 claims.** Checked against the chunks'
+  text, per-claim judging was right on 6, single-call on 3. Single-call
+  accepted 4 claims absent from the context (vs. 2), e.g. three Q007
+  claims about freedom and determinism (quoted from the *Essai* from
+  memory; none of "liberté", "déterministes", "étendue" occurs in the 5
+  chunks), all with the same boilerplate reason — one claim's verdict
+  bleeding into its neighbors', the contamination `chunk_judge.py` already
+  avoids by judging one chunk per call. Per-claim judging still produced
+  one invented reason ("explicitly stated") and one false rejection.
+- Latency: the shared prefix (instructions, examples, context) comes first,
+  so Ollama reuses its cache across calls; estimated overhead 0–20%
+  (single runs per item, order-dependent — not a precise figure).
+- One per-claim call returned unparseable output even after RAGAS's
+  retry: per-claim, that loses one claim instead of the whole check.
+
+`check_faithfulness` now runs one NLI call per claim and no longer calls
+the RAGAS metric; `score` is computed locally (supported / evaluated
+claims, NaN if none was evaluated). A claim whose NLI output can't be
+parsed gets `supported=None` ("not evaluated").
+
+### Guardrail changes
+
+- `EvaluationResult.unsupported_claims` counts only `supported is False`;
+  a new `has_unevaluated_claims` covers `None`.
+- `should_auto_expand` is now false if any claim is unevaluated, too — the
+  answer wasn't fully checked. The UI's "Réponse intégralement confirmée"
+  and `collapseReason` mirror this.
+
+### Bug found by the slow tests, fixed on this branch
+
+With a segment such as `une réponse [1907_EC_c5].`, the judge mistook the
+citation for a segment id (`"segment_id": 1907_EC_c5` — invalid JSON);
+RAGAS's fix-the-format retry then failed too (the judge answered without
+the `{"text": …}` envelope that retry expects), and `/evaluate` raised a
+500. Citations are now stripped from the segment text sent to the judge
+(`_text_for_judge`): they assert nothing, and the NLI step judges claims
+against the context anyway. The judge also invented a claim from the
+question for that near-empty segment — a reminder that extraction itself
+can hallucinate.
+
+### Latency
+
+1 + N judge calls per `/evaluate`. With 5 real chunks and 6–11 claims:
+~30–45s for extraction, ~60–120s for NLI. The "~8–9s" figure documented
+earlier applied to single-chunk evidence and a short answer.
+
+### Test coverage and known failures
+
+Fast: `tests/test_segmentation.py` (French abbreviations, ellipsis,
+citations, Markdown blocks, offsets), `tests/test_claim_anchoring.py`
+(anchoring, per-claim verdicts, unevaluated state, score, citation
+stripping), `tests/test_guardrail.py::test_should_auto_expand_blocks_on_unevaluated_claim`.
+Slow: `tests/test_faithfulness.py::test_check_faithfulness_anchors_every_claim_to_a_segment`.
+
+Slow-suite failures remaining on this branch were all reproduced on `main`
+with the same tests, so none is introduced here:
+
+- `tests/test_faithfulness.py` — the shared `generated_answer` fixture's
+  Ollama generation call hangs until litellm's 600s timeout under pytest
+  (it succeeds in ~20s outside pytest; a reachability-ping hypothesis was
+  tested and ruled out — cause not yet found). `generate_from_chunks` then
+  falls back to the hosted Mistral API, which returned 429. Its
+  `except Exception` hides the Ollama error; it surfaces only with
+  `BERGSON_LLM_FALLBACK_MODEL=""`.
+- `test_q002_strong_case_auto_expands`, `test_evaluate_strong_case_auto_expands`,
+  `test_retrieve_known_strong_query_returns_expected_chunk` — the local
+  Qdrant index no longer matches the gold chunk ids (e.g. `1907_EC_c9`
+  is about philosophical method, not the sugar image), the same drift
+  behind the 7 fast-suite failures in `test_paragraph_chunk_map.py` /
+  `test_run_eval.py`.
+- `test_judge_chunk_pertinent_for_matching_chunk`,
+  `test_judge_chunk_non_pertinent_for_unrelated_chunk` — `chunk_judge.py`
+  is untouched by this branch; cause not investigated.

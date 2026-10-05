@@ -132,12 +132,23 @@ export interface EvaluateRequest {
 
 export interface ClaimVerdictOut {
   statement: string
-  supported: boolean
-  reason: string
-  // Verbatim span of the answer this claim was grounded to, for highlighting
-  // (see lib/highlightMatching.ts); null when the judge's quote wasn't found
-  // verbatim in the answer.
-  quote: string | null
+  // null (with `reason`) when the judge's verdict for this claim couldn't be
+  // parsed: the claim was not evaluated (src/generation/faithfulness.py).
+  supported: boolean | null
+  reason: string | null
+  // `SegmentOut.id` of the answer sentence this claim was drawn from; null
+  // only on evaluations persisted before segments existed.
+  segment_id: number | null
+}
+
+// One sentence of the answer, cut deterministically by the backend
+// (src/generation/segmentation.py). `start`/`end` are character offsets
+// into the raw (markdown) answer string.
+export interface SegmentOut {
+  id: number
+  text: string
+  start: number
+  end: number
 }
 
 export interface TitleYearMismatchOut {
@@ -165,6 +176,9 @@ export interface FaithfulnessOut {
   score: number | null
   model: string
   claims: ClaimVerdictOut[]
+  // Every sentence of the answer, including those no claim was drawn from
+  // (left uncolored). Empty on evaluations persisted before segments existed.
+  segments: SegmentOut[]
 }
 
 export type RetrievalConfidenceTier = 'très faible' | 'faible' | 'moyenne' | 'élevée'

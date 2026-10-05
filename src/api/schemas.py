@@ -234,12 +234,26 @@ class EvaluateRequest(BaseModel):
 
 class ClaimVerdictOut(BaseModel):
     statement: str
-    supported: bool
-    reason: str
-    # Verbatim span of the answer this claim was grounded to (for UI
-    # highlighting, src/generation/faithfulness.py:_ground_quote_in_answer);
-    # None when the judge's quote couldn't be validated against the answer.
-    quote: str | None = None
+    # `supported`/`reason` are None when the judge's verdict for this claim
+    # couldn't be parsed — not evaluated (src/generation/faithfulness.py).
+    supported: bool | None
+    reason: str | None
+    # `SegmentOut.id` of the answer segment this claim was drawn from
+    # (src/generation/faithfulness.py). Defaulted, not required: evaluations
+    # persisted before segments existed (`evaluations.faithfulness_annotations`,
+    # src/api/models.py) carry a since-dropped `quote` field instead, and
+    # still deserialize via `_evaluation_row_to_response`.
+    segment_id: int | None = None
+
+
+class SegmentOut(BaseModel):
+    """Mirrors src.generation.segmentation.Segment: one sentence of the
+    answer, `start`/`end` being character offsets into it."""
+
+    id: int
+    text: str
+    start: int
+    end: int
 
 
 class TitleYearMismatchOut(BaseModel):
@@ -276,6 +290,10 @@ class FaithfulnessOut(BaseModel):
     score: float | None
     model: str
     claims: list[ClaimVerdictOut]
+    # Every segment of the answer, including those no claim was drawn from
+    # (shown as neutral). Defaulted for the same reason as
+    # `ClaimVerdictOut.segment_id`.
+    segments: list[SegmentOut] = []
 
 
 class EvaluateResponse(BaseModel):

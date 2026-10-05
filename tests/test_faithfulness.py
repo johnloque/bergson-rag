@@ -140,3 +140,15 @@ def test_check_faithfulness_accepts_prebuilt_judge_llm_for_reuse(q001_chunk, gen
     result = check_faithfulness(Q001_QUERY, generated_answer, [q001_chunk], judge_llm=judge_llm)
     assert result.model == DEFAULT_JUDGE_MODEL
     assert not math.isnan(result.score)
+
+
+def test_check_faithfulness_anchors_every_claim_to_a_segment(q001_chunk, generated_answer):
+    """Every claim points at a real segment of the answer, and segments are
+    returned (offsets into the answer) for the UI to color."""
+    result = check_faithfulness(Q001_QUERY, generated_answer, [q001_chunk])
+    assert result.segments
+    for segment in result.segments:
+        assert generated_answer[segment.start : segment.end] == segment.text
+    segment_ids = {segment.id for segment in result.segments}
+    assert result.claims
+    assert all(claim.segment_id in segment_ids for claim in result.claims)

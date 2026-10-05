@@ -73,7 +73,7 @@ describe('TurnCard integration', () => {
               title_year_mismatches: [],
               passed: true,
             },
-              faithfulness: { score: 1, model: 'judge', claims: [] },
+              faithfulness: { score: 1, model: 'judge', claims: [], segments: [] },
               should_auto_expand: false,
             }),
           )
@@ -209,7 +209,7 @@ describe('TurnCard full cycle survives a simulated navigate-away-and-back', () =
               title_year_mismatches: [],
               passed: true,
             },
-            faithfulness: { score: 1, model: 'judge', claims: [] },
+            faithfulness: { score: 1, model: 'judge', claims: [], segments: [] },
             should_auto_expand: true,
           })
         }
@@ -241,7 +241,7 @@ describe('TurnCard full cycle survives a simulated navigate-away-and-back', () =
                     title_year_mismatches: [],
                     passed: true,
                   },
-                  faithfulness: { score: 1, model: 'judge', claims: [] },
+                  faithfulness: { score: 1, model: 'judge', claims: [], segments: [] },
                   should_auto_expand: true,
                 },
               },
@@ -505,7 +505,7 @@ describe('TurnCard — resuming an in-flight evaluation after navigate-away-and-
         title_year_mismatches: [],
         passed: true,
       },
-      faithfulness: { score: 1, model: 'judge', claims: [] },
+      faithfulness: { score: 1, model: 'judge', claims: [], segments: [] },
       should_auto_expand: true,
     })
 
@@ -562,7 +562,7 @@ describe('TurnCard — mounting an already-evaluated turn never shows the veil',
                     model: 'judge',
                     claims: shouldAutoExpand
                       ? []
-                      : [{ statement: 'x', supported: false, reason: 'non étayé', quote: null }],
+                      : [{ statement: 'x', supported: false, reason: 'non étayé', segment_id: null }],
                   },
                   should_auto_expand: shouldAutoExpand,
                 },

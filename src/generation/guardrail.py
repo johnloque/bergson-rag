@@ -49,8 +49,9 @@ Three inputs feed `EvaluationResult`:
   never this one.
 
 `should_auto_expand` folds Layer 1 and Layer 2 into one boolean: no claim
-flagged unsupported (Layer 2), and no fabricated title / title-year
-mismatch (Layer 1, below). Layer 1's citation-resolution half
+flagged unsupported or left unevaluated (Layer 2 — a claim whose verdict
+couldn't be parsed means the answer wasn't fully checked), and no
+fabricated title / title-year mismatch (Layer 1, below). Layer 1's citation-resolution half
 (`StructuralCheck.unknown_citations`/`has_citation`) is carried on
 `EvaluationResult` for the caller (and Sprint 7's UI badge) but deliberately
 does not gate `should_auto_expand` on its own: the local generation model
@@ -490,11 +491,15 @@ class EvaluationResult:
 
     @property
     def unsupported_claims(self) -> tuple[ClaimVerdict, ...]:
-        return tuple(claim for claim in self.faithfulness.claims if not claim.supported)
+        return tuple(claim for claim in self.faithfulness.claims if claim.supported is False)
 
     @property
     def has_unsupported_claims(self) -> bool:
         return bool(self.unsupported_claims)
+
+    @property
+    def has_unevaluated_claims(self) -> bool:
+        return any(claim.supported is None for claim in self.faithfulness.claims)
 
 
 def generate_evaluation(
@@ -537,7 +542,8 @@ def generate_evaluation(
 
 
 def should_auto_expand(evaluation: EvaluationResult) -> bool:
-    """True only if no claim was flagged unsupported by Layer 2, AND Layer 1
+    """True only if no claim was flagged unsupported (or left unevaluated)
+    by Layer 2, AND Layer 1
     found no fabricated work title or title/year mismatch — see the module
     docstring for why Layer 1's citation-resolution half
     (`unknown_citations`/`has_citation`) isn't part of this gate while
@@ -554,4 +560,9 @@ def should_auto_expand(evaluation: EvaluationResult) -> bool:
     feeds this decision."""
     no_fabricated_titles = not evaluation.structural.fabricated_titles
     no_year_mismatches = not evaluation.structural.title_year_mismatches
-    return not evaluation.has_unsupported_claims and no_fabricated_titles and no_year_mismatches
+    return (
+        not evaluation.has_unsupported_claims
+        and not evaluation.has_unevaluated_claims
+        and no_fabricated_titles
+        and no_year_mismatches
+    )

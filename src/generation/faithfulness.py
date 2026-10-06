@@ -278,17 +278,17 @@ _NLI_SOURCE = load_prompt("faithfulness.nli_verifier")
 
 
 # Input model: RAGAS sends only its values (as JSON), never its schema, so
-# these descriptions never reach the judge — plain documentation, kept here.
+# nothing here reaches the judge — plain comments rather than
+# Field(description=...), which would look like prompt text. Prompt-facing
+# descriptions are the output models' below.
 class AnswerSegment(BaseModel):
-    segment_id: int = Field(description="The segment's number")
-    text: str = Field(description="The segment's text, one sentence of the answer")
+    segment_id: int  # the segment's number
+    text: str  # the segment's text, one sentence of the answer
 
 
 class SegmentedAnswerInput(BaseModel):
-    question: str = Field(description="The question to answer")
-    segments: list[AnswerSegment] = Field(
-        description="The answer, split into numbered segments, in order"
-    )
+    question: str  # the question to answer
+    segments: list[AnswerSegment]  # the answer, split into numbered segments, in order
 
 
 # Output models: RAGAS sends their JSON schema to the judge, descriptions

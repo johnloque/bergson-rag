@@ -153,9 +153,11 @@ SegmentedClaimsOutput:
 entry has no field, or a description was written in Python instead.
 
 The **input** model (`SegmentedAnswerInput`, `AnswerSegment`) is sent as
-plain JSON values, never as a schema, so its descriptions never reach the
-judge: they stay in Python as documentation and are not hashed (an edit
-there changes nothing the model sees). The NLI prompt's output schema is
+plain JSON values, never as a schema, so nothing about its fields reaches
+the judge: they are documented with plain Python comments, not
+`Field(description=...)`, so they don't pass for prompt text, and are not
+hashed (an edit there changes nothing the model sees). Should a RAGAS
+upgrade start sending the input schema, the golden snapshots would fail. The NLI prompt's output schema is
 RAGAS's own (`NLIStatementOutput`), covered by the library version.
 
 ## Loader API (`src/prompts/loader.py`)

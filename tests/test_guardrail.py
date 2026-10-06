@@ -385,11 +385,33 @@ def test_should_auto_expand_still_blocks_on_layer2_regardless_of_confidence():
     faithfulness = FaithfulnessResult(
         score=0.0,
         model="test",
-        claims=(ClaimVerdict(statement="x", supported=False, reason="non étayé", quote=None),),
+        claims=(ClaimVerdict(statement="x", supported=False, reason="non étayé", segment_id=0),),
     )
     evaluation = EvaluationResult(
         structural=structural, faithfulness=faithfulness, retrieval_confidence="élevée"
     )
+    assert not should_auto_expand(evaluation)
+
+
+def test_should_auto_expand_blocks_on_unevaluated_claim():
+    """A claim whose NLI verdict couldn't be parsed (`supported=None`,
+    src/generation/faithfulness.py) is neither supported nor unsupported:
+    it doesn't count as an unsupported claim, but the answer wasn't fully
+    checked, so it must not auto-expand either."""
+    structural = check_structure("Une réponse fondée sur les passages fournis.", [])
+    faithfulness = FaithfulnessResult(
+        score=1.0,
+        model="test",
+        claims=(
+            ClaimVerdict(statement="x", supported=True, reason="étayé", segment_id=0),
+            ClaimVerdict(statement="y", supported=None, reason=None, segment_id=1),
+        ),
+    )
+    evaluation = EvaluationResult(
+        structural=structural, faithfulness=faithfulness, retrieval_confidence="élevée"
+    )
+    assert not evaluation.has_unsupported_claims
+    assert evaluation.has_unevaluated_claims
     assert not should_auto_expand(evaluation)
 
 

@@ -64,7 +64,7 @@ describe('Conversation — draft turn stays on one controller instance', () => {
               title_year_mismatches: [],
               passed: true,
             },
-            faithfulness: { score: 1, model: 'judge', claims: [] },
+            faithfulness: { score: 1, model: 'judge', claims: [], segments: [] },
             should_auto_expand: false,
           })
         }

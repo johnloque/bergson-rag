@@ -10,16 +10,15 @@ end-to-end evaluation (RAGAS)"), designed for two consumers from the start:
 One implementation, not two: there is no separate hand-rolled "for the
 guardrail" faithfulness check. Both consumers call the same function.
 
-## Why this wraps `ragas.metrics.Faithfulness` via `LangchainLLMWrapper`,
-not `ragas.llms.llm_factory`
+## Why the judge LLM is a `LangchainLLMWrapper`, not `ragas.llms.llm_factory`
 
-`Faithfulness.single_turn_score(SingleTurnSample(...))` is a fully supported,
-non-batch entry point — RAGAS does not force a `Dataset`/`evaluate()` call
-for a single (query, answer, contexts) triple, so no custom claims-extraction
-reimplementation was needed here. But RAGAS 0.3.x ships two parallel LLM
-abstractions: the newer `llm_factory(..., provider="litellm")` returns an
-`InstructorLLM`, which legacy prompt-based metrics (`Faithfulness`,
-`LLMContextPrecisionWithReference`, `LLMContextRecall`) cannot use — they
+Both judging steps below run RAGAS `PydanticPrompt`s (the claim-extraction
+prompt is this module's own, the NLI prompt a variant of RAGAS's), and
+RAGAS 0.3.x ships two parallel LLM abstractions: the newer
+`llm_factory(..., provider="litellm")` returns an
+`InstructorLLM`, which `PydanticPrompt.generate` — and the legacy
+prompt-based metrics built on it (`Faithfulness`,
+`LLMContextPrecisionWithReference`, `LLMContextRecall`) — cannot use: they
 call `.agenerate_prompt(...)`, a method only `LangchainLLMWrapper` exposes
 (confirmed empirically: `InstructorLLM` raises `AttributeError` on it).
 `LangchainLLMWrapper` wrapping `langchain_litellm.ChatLiteLLM` (the actively
@@ -44,12 +43,13 @@ non-VertexAI user (upstream issue, unresolved as of this pin; see
 ## Latency (measured against this project's default judge, local Mistral
 7B via Ollama)
 
-A single `check_faithfulness` call costs ~2 LLM round trips internally
-(claim extraction, then per-claim entailment against the cited contexts) —
-observed ~8-9s end to end on this project's dev machine (single-chunk
-evidence; see `JUDGE_NUM_CTX` below for the multi-chunk case). Fine for a
-per-answer guardrail check (a few extra seconds after generation), not
-sub-second. Confirmed deterministic across repeated calls at
+A single `check_faithfulness` call costs 1 + N LLM round trips (claim
+extraction, then one entailment call per claim — see "One NLI call per
+claim" below). Measured on this project's dev machine with 5 real reranked
+chunks (13-20k characters of context) and 6-11 claims: ~30-45s for
+extraction, ~60-120s for the NLI calls (feat/segment-claims benchmark). The
+older "~8-9s" figure was for single-chunk evidence and a short answer. Fine
+for an on-demand check, far from sub-second. Confirmed deterministic across repeated calls at
 `temperature=0` on the same input (docs/ROADMAP.md eval determinism
 requirement) — see `eval/scripts/run_ragas_eval.py`'s own determinism check
 for the full-pipeline verification.
@@ -59,54 +59,85 @@ docs/ROADMAP.md Sprint 6): no threshold/`is_faithful` boolean, no refusal
 decision, no structural citation check (that's `check_structure` in
 `src/generation/guardrail.py`, Sprint 6's own module — deliberately kept out
 of this shared eval/guardrail module since it needs no LLM call at all).
-`check_faithfulness` does return the per-claim RAGAS verdicts (`claims`
-below) alongside the aggregate score, as of Sprint 6 — needed to flag which
+`check_faithfulness` does return the per-claim verdicts (`claims` below)
+alongside the aggregate score, as of Sprint 6 — needed to flag which
 claim is unsupported, not just that some are, for the anti-hallucination
 guardrail (`generate_evaluation`, `src/generation/guardrail.py`).
 
-## Getting per-claim verdicts without a second LLM call
+## One NLI call per claim
 
-`ragas.metrics.Faithfulness.single_turn_score(...)` only returns the
-aggregate float — it discards the per-claim verdicts computed along the way.
-Sprint 6 needs those verdicts, so `check_faithfulness` below calls the
-metric's own two internal async steps directly (`_create_statements`, then
-`_create_verdicts`) instead of going through `single_turn_score`. This is
-the exact same two LLM calls `single_turn_score` would make internally
-(claim extraction, then per-claim entailment) — not a second faithfulness
-pass — just with the intermediate verdicts kept instead of thrown away.
-Uses `ragas.async_utils.run`, the same sync-wrapper helper
-`single_turn_score` itself uses internally, to run these two async calls in
-this module's otherwise-sync API.
+RAGAS's own `Faithfulness` metric judges all claims in one NLI call and
+returns a list of verdicts, each echoing its statement's text. Neither the
+list position nor the echoed text is a guaranteed link back to the claim:
+a local judge can drop, merge or reorder items, or alter the echo. This
+module calls the NLI prompt once per claim instead, so each response is by
+construction the verdict for that claim — no matching step at all.
 
-## Grounding claims back to a verbatim quote, for UI highlighting
+Measured against single-call judging on 4 gold items (30 claims, 5 real
+reranked chunks each): the two disagreed on 9 verdicts, and checked against
+the chunks' text, per-claim judging was right on 6 of them. Single-call
+judging accepted 4 claims absent from the context (vs 2), with the same
+boilerplate reason repeated across neighboring claims — judging claims
+together lets one claim's verdict bleed into the next, the same
+contamination `src/generation/chunk_judge.py` avoids by judging one chunk
+per call. Cost: the long shared prefix (instructions, examples, context)
+comes first in the prompt, so Ollama reuses its cache across the N calls;
+estimated latency overhead 0-20%.
 
-The frontend (`AnswerCard.tsx`, via `annotateAnswer.tsx`) wants to highlight
-the exact unsupported span inside the *original* answer text. RAGAS's own
-`StatementGeneratorPrompt` (`ragas.metrics._faithfulness`) is unsuitable as
-the source for that span: its instruction explicitly tells the judge to
-rewrite each sentence into a pronoun-free, self-contained statement — by
-design not a verbatim substring of the answer (confirmed against real
-output: the extracted statement essentially never `indexOf`-matches the
-answer it was drawn from). Using it for highlighting silently produced no
-highlights at all.
+A claim whose NLI output can't be parsed (`RagasOutputParserException`,
+observed once in 30 calls) is kept with `supported=None` ("not evaluated")
+rather than failing the whole check; it is excluded from `score`.
 
-Fix: replace RAGAS's own statement-generation step with
-`_GROUNDED_STATEMENT_PROMPT` below, a `PydanticPrompt` that asks for the
-same atomic, pronoun-free statements *plus* a `quote` field the instruction
-requires to be copied character-for-character from the answer. The NLI
-entailment step (`metric._create_verdicts`) is untouched — it still judges
-the paraphrased `statement` text against the cited chunks, so the
-faithfulness score's meaning doesn't change. `quote` is then validated
-against the real answer text (`_ground_quote_in_answer`) — a local judge
-does not reliably honor "copy verbatim" — and dropped (not fabricated) when
-it doesn't actually occur in the answer, same best-effort philosophy the
-old frontend-only matching already documented.
+The NLI step does not use `ragas.metrics.Faithfulness` itself: the prompt is
+run directly, and `score` is computed here (supported / evaluated claims).
+
+## Anchoring claims to answer segments, for UI coloring
+
+The frontend colors every sentence of the answer by the verdicts of the
+claims drawn from it, so each claim must be tied back to the span of the
+answer it comes from. RAGAS's own `StatementGeneratorPrompt`
+(`ragas.metrics._faithfulness`) returns bare, pronoun-free reformulations
+with no link to their source sentence (it leaves sentence detection to the
+LLM and keeps no index).
+
+A previous version asked the judge to also copy a verbatim `quote` of the
+source span. It proved unreliable: a quote is *generated* text, so a local
+judge altered punctuation and apostrophes, paraphrased, or stitched
+non-contiguous fragments together (a resolved pronoun's antecedent comes
+from another sentence), and the quote then matched nothing in the answer.
+
+Current approach: the answer is cut into sentence segments by code
+(`src/generation/segmentation.py`, no LLM), and `_SEGMENT_CLAIMS_PROMPT`
+below asks the judge to decompose each numbered segment into claims,
+grouped under that segment's id. The anchor is *selected*, not generated, so
+it always designates a real span of the answer; the output shape guarantees
+one segment per claim. The attribution itself is trusted as-is (only ids
+that don't exist are dropped). The NLI step (`_NLI_PROMPT`) then judges
+each reformulated claim's text against the cited chunks.
+
+## Judge prompt languages
+
+The local 7B judge answers in the language of the prompt, not of the
+answer — even when told not to translate — and the UI shows both the claims
+and the verdict `reason`s verbatim to a French-speaking reader. So:
+
+- `_SEGMENT_CLAIMS_PROMPT` is entirely in French (instruction and example):
+  with an English prompt, every claim of a French answer came back
+  translated into English.
+- `_NLI_PROMPT` keeps RAGAS's own English `NLIStatementPrompt` (instruction
+  and examples) and only asks for, and shows, the `reason`s in French. A
+  fully French translation was tried first and degraded the verdicts
+  themselves: the judge marked a fabricated claim ("Bergson borrowed this
+  image from Einstein in 1950") as supported while its own French reason
+  said the context contained nothing about it — a verdict/reason mismatch
+  the English prompt didn't produce on the same input.
 """
 
 from __future__ import annotations
 
 import asyncio
 import atexit
+import re
 import threading
 from collections.abc import Coroutine, Sequence
 from dataclasses import dataclass
@@ -115,7 +146,7 @@ from typing import Any
 import litellm
 from langchain_litellm import ChatLiteLLM
 from pydantic import BaseModel, Field
-from ragas.dataset_schema import SingleTurnSample
+from ragas.exceptions import RagasOutputParserException
 
 # Imported from ragas.llms.base, not the public ragas.llms re-export: the
 # re-export wraps this class in a DeprecationHelper instance (steering
@@ -126,17 +157,21 @@ from ragas.dataset_schema import SingleTurnSample
 # LLMContextRecall cannot use (see module docstring); LangchainLLMWrapper
 # is the only working option for these metrics in ragas 0.3.9.
 from ragas.llms.base import LangchainLLMWrapper
-from ragas.metrics import Faithfulness
 
-# `StatementGeneratorInput` (question, answer) is reused as-is as the input
-# to our own grounded-statement prompt below — only the *output* shape needs
-# to change (see "Grounding claims back to a verbatim quote" above).
-# Imported from the private module since `ragas.metrics` doesn't re-export
-# it; it's a stable-shaped Pydantic model, not internal machinery.
-from ragas.metrics._faithfulness import StatementGeneratorInput
+# The NLI step's input/output models, reused as-is by `_NLI_PROMPT` below
+# (only the prompt's language changes). Imported from the private module
+# since `ragas.metrics` doesn't re-export them; they're stable-shaped
+# Pydantic models, not internal machinery.
+from ragas.metrics._faithfulness import (
+    NLIStatementInput,
+    NLIStatementOutput,
+    StatementFaithfulnessAnswer,
+)
 from ragas.prompt import PydanticPrompt
 
 from src.generation.generate import DEFAULT_MODEL
+from src.generation.prompt import CITATION_PATTERN
+from src.generation.segmentation import Segment, segment_answer
 from src.generation.signals import GenerationChunk
 
 # Same default model as generate_from_chunks (src/generation/generate.py) —
@@ -236,73 +271,90 @@ def build_judge_llm(
     )
 
 
-class GroundedStatement(BaseModel):
-    statement: str = Field(
-        description="A fully understandable, standalone statement extracted "
-        "from the answer, with no pronouns"
-    )
-    quote: str = Field(
-        description="The exact, character-for-character substring of the "
-        "answer that this statement was derived from — copied verbatim, "
-        "never paraphrased or summarized"
-    )
+class AnswerSegment(BaseModel):
+    segment_id: int = Field(description="The segment's number")
+    text: str = Field(description="The segment's text, one sentence of the answer")
 
 
-class GroundedStatementGeneratorOutput(BaseModel):
-    statements: list[GroundedStatement] = Field(
-        description="The generated statements, each paired with its verbatim source quote"
+class SegmentedAnswerInput(BaseModel):
+    question: str = Field(description="The question to answer")
+    segments: list[AnswerSegment] = Field(
+        description="The answer, split into numbered segments, in order"
     )
 
 
-class GroundedStatementGeneratorPrompt(
-    PydanticPrompt[StatementGeneratorInput, GroundedStatementGeneratorOutput]
-):
+class SegmentClaims(BaseModel):
+    segment_id: int = Field(description="The number of the segment these claims come from")
+    claims: list[str] = Field(
+        description="Fully understandable, standalone statements extracted from this "
+        "segment, with no pronouns; empty if the segment asserts nothing"
+    )
+
+
+class SegmentedClaimsOutput(BaseModel):
+    segments: list[SegmentClaims] = Field(
+        description="One entry per input segment, in order, each with its claims"
+    )
+
+
+class SegmentClaimsPrompt(PydanticPrompt[SegmentedAnswerInput, SegmentedClaimsOutput]):
     """Same decomposition RAGAS's own `StatementGeneratorPrompt` does
-    (`ragas.metrics._faithfulness`), plus a `quote` field per statement so
-    the UI can highlight the actual span in the answer — see this module's
-    docstring, "Grounding claims back to a verbatim quote"."""
+    (`ragas.metrics._faithfulness`), but over pre-cut, numbered segments,
+    with each claim grouped under the segment it comes from — see this
+    module's docstring, "Anchoring claims to answer segments"."""
 
+    # In French, like the example below: the local 7B judge was observed to
+    # answer in the language of the prompt rather than of the answer, even
+    # when told not to translate — and the UI shows claims verbatim.
     instruction = (
-        "Given a question and an answer, analyze the complexity of each sentence in the "
-        "answer. Break down each sentence into one or more fully understandable statements. "
-        "Ensure that no pronouns are used in any statement. For each statement, also give a "
-        "'quote': the exact substring of the answer, copied character-for-character, that the "
-        "statement was derived from. The quote must appear verbatim in the answer — do not "
-        "paraphrase, summarize, or alter it in any way. Format the outputs in JSON."
+        "À partir d'une question et d'une réponse découpée en segments numérotés, parcours "
+        "les segments dans l'ordre. Décompose chaque segment en une ou plusieurs affirmations "
+        "pleinement compréhensibles seules. Aucune affirmation ne doit contenir de pronom : "
+        "sers-toi des autres segments pour savoir à quoi renvoie un pronom. Une affirmation "
+        "ne reprend que le contenu de son propre segment, jamais celui d'un autre. Chaque "
+        "segment apparaît exactement une fois dans la sortie, sous son propre segment_id ; un "
+        "segment qui n'affirme rien reçoit une liste d'affirmations vide. Rédige toutes les "
+        "affirmations en français. Réponds au format JSON."
     )
-    input_model = StatementGeneratorInput
-    output_model = GroundedStatementGeneratorOutput
+    input_model = SegmentedAnswerInput
+    output_model = SegmentedClaimsOutput
+    # Not about Bergson, so no corpus content leaks into extraction.
     examples = [
         (
-            StatementGeneratorInput(
-                question="Who was Albert Einstein and what is he best known for?",
-                answer="He was a German-born theoretical physicist, widely acknowledged to be "
-                "one of the greatest and most influential physicists of all time. He was best "
-                "known for developing the theory of relativity, he also made important "
-                "contributions to the development of the theory of quantum mechanics.",
+            SegmentedAnswerInput(
+                question="Qui était René Descartes et pour quoi est-il connu ?",
+                segments=[
+                    AnswerSegment(segment_id=0, text="Voici un bref aperçu."),
+                    AnswerSegment(
+                        segment_id=1,
+                        text="Il était un philosophe et mathématicien français, souvent "
+                        "considéré comme le fondateur de la philosophie moderne.",
+                    ),
+                    AnswerSegment(
+                        segment_id=2,
+                        text="Il est surtout connu pour la formule « je pense, donc je suis », "
+                        "et il a aussi inventé la géométrie analytique.",
+                    ),
+                ],
             ),
-            GroundedStatementGeneratorOutput(
-                statements=[
-                    GroundedStatement(
-                        statement="Albert Einstein was a German-born theoretical physicist.",
-                        quote="He was a German-born theoretical physicist",
+            SegmentedClaimsOutput(
+                segments=[
+                    SegmentClaims(segment_id=0, claims=[]),
+                    SegmentClaims(
+                        segment_id=1,
+                        claims=[
+                            "René Descartes était un philosophe et mathématicien français.",
+                            "René Descartes est souvent considéré comme le fondateur de la "
+                            "philosophie moderne.",
+                        ],
                     ),
-                    GroundedStatement(
-                        statement="Albert Einstein is recognized as one of the greatest and "
-                        "most influential physicists of all time.",
-                        quote="widely acknowledged to be one of the greatest and most "
-                        "influential physicists of all time",
-                    ),
-                    GroundedStatement(
-                        statement="Albert Einstein was best known for developing the theory "
-                        "of relativity.",
-                        quote="He was best known for developing the theory of relativity",
-                    ),
-                    GroundedStatement(
-                        statement="Albert Einstein also made important contributions to the "
-                        "development of the theory of quantum mechanics.",
-                        quote="he also made important contributions to the development of "
-                        "the theory of quantum mechanics",
+                    SegmentClaims(
+                        segment_id=2,
+                        claims=[
+                            "René Descartes est surtout connu pour la formule « je pense, donc "
+                            "je suis ».",
+                            "René Descartes a inventé la géométrie analytique.",
+                        ],
                     ),
                 ]
             ),
@@ -310,52 +362,168 @@ class GroundedStatementGeneratorPrompt(
     ]
 
 
-_GROUNDED_STATEMENT_PROMPT = GroundedStatementGeneratorPrompt()
+_SEGMENT_CLAIMS_PROMPT = SegmentClaimsPrompt()
 
 
-def _ground_quote_in_answer(answer: str, quote: str) -> str | None:
-    """Validates that `quote` (as returned by `_GROUNDED_STATEMENT_PROMPT`)
-    actually occurs in `answer` — the judge is only asked to copy verbatim,
-    not guaranteed to. Tolerates a case mismatch (returning the answer's own
-    casing, so highlighting always matches what's on screen); anything else
-    (paraphrased or fabricated quote) is treated as ungrounded and dropped
-    rather than guessed at, same best-effort philosophy as the rest of this
-    module's claim handling."""
-    quote = quote.strip()
-    if not quote:
-        return None
-    if quote in answer:
-        return quote
-    idx = answer.lower().find(quote.lower())
-    if idx == -1:
-        return None
-    return answer[idx : idx + len(quote)]
+class FrenchReasonNLIStatementPrompt(PydanticPrompt[NLIStatementInput, NLIStatementOutput]):
+    """RAGAS's own `NLIStatementPrompt` (`ragas.metrics._faithfulness`) —
+    same instruction, same examples, same models — except that the verdict
+    `reason`s are asked for, and shown in the examples, in French (see this
+    module's docstring, "Judge prompt languages")."""
+
+    # Kept exactly as benchmarked (feat/segment-claims), including "Copy each
+    # statement word-by-word" — the echo itself is no longer relied on, since
+    # each call judges a single claim (see "One NLI call per claim").
+    instruction = (
+        "Your task is to judge the faithfulness of a series of statements based on a given "
+        "context. For each statement you must return verdict as 1 if the statement can be "
+        "directly inferred based on the context or 0 if the statement can not be directly "
+        "inferred based on the context. Copy each statement word-by-word, and always write "
+        "the reason in French."
+    )
+    input_model = NLIStatementInput
+    output_model = NLIStatementOutput
+    examples = [
+        (
+            NLIStatementInput(
+                context="John is a student at XYZ University. He is pursuing a degree in "
+                "Computer Science. He is enrolled in several courses this semester, including "
+                "Data Structures, Algorithms, and Database Management. John is a diligent "
+                "student and spends a significant amount of time studying and completing "
+                "assignments. He often stays late in the library to work on his projects.",
+                statements=[
+                    "John is majoring in Biology.",
+                    "John is taking a course on Artificial Intelligence.",
+                    "John is a dedicated student.",
+                    "John has a part-time job.",
+                ],
+            ),
+            NLIStatementOutput(
+                statements=[
+                    StatementFaithfulnessAnswer(
+                        statement="John is majoring in Biology.",
+                        reason="Le contexte indique explicitement que John étudie "
+                        "l'informatique. Rien ne laisse penser qu'il étudie la biologie.",
+                        verdict=0,
+                    ),
+                    StatementFaithfulnessAnswer(
+                        statement="John is taking a course on Artificial Intelligence.",
+                        reason="Le contexte énumère les cours que suit John, et "
+                        "l'intelligence artificielle n'en fait pas partie. On ne peut donc pas "
+                        "en déduire qu'il suit un cours d'IA.",
+                        verdict=0,
+                    ),
+                    StatementFaithfulnessAnswer(
+                        statement="John is a dedicated student.",
+                        reason="Le contexte indique qu'il consacre beaucoup de temps à "
+                        "étudier et à faire ses devoirs, et qu'il reste souvent tard à la "
+                        "bibliothèque pour ses projets, ce qui témoigne de son application.",
+                        verdict=1,
+                    ),
+                    StatementFaithfulnessAnswer(
+                        statement="John has a part-time job.",
+                        reason="Le contexte ne donne aucune information sur un emploi à "
+                        "temps partiel de John.",
+                        verdict=0,
+                    ),
+                ]
+            ),
+        ),
+        (
+            NLIStatementInput(
+                context="Photosynthesis is a process used by plants, algae, and certain "
+                "bacteria to convert light energy into chemical energy.",
+                statements=["Albert Einstein was a genius."],
+            ),
+            NLIStatementOutput(
+                statements=[
+                    StatementFaithfulnessAnswer(
+                        statement="Albert Einstein was a genius.",
+                        reason="Le contexte et l'affirmation n'ont aucun rapport.",
+                        verdict=0,
+                    )
+                ]
+            ),
+        ),
+    ]
+
+
+_NLI_PROMPT = FrenchReasonNLIStatementPrompt()
+
+
+def _text_for_judge(segment: Segment) -> str:
+    """The segment's text without its `[chunk_id]` citations. They assert
+    nothing, and the judge was observed to mistake one for a segment id —
+    `"segment_id": 1907_EC_c5`, invalid JSON that RAGAS's own fix-the-format
+    retry then failed to recover, failing the whole check."""
+    text = CITATION_PATTERN.sub("", segment.text)
+    return re.sub(r"\s+([.,])", r"\1", re.sub(r"\s+", " ", text)).strip()
+
+
+def _anchor_claims(
+    segments: Sequence[Segment], output: SegmentedClaimsOutput
+) -> list[tuple[int, str]]:
+    """(segment_id, claim) pairs from the judge's grouped output, in order.
+    The judge's attribution is trusted; only ids that designate no real
+    segment, and blank claims, are dropped."""
+    valid_ids = {segment.id for segment in segments}
+    return [
+        (group.segment_id, claim.strip())
+        for group in output.segments
+        if group.segment_id in valid_ids
+        for claim in group.claims
+        if claim.strip()
+    ]
 
 
 @dataclass(frozen=True)
 class ClaimVerdict:
-    """One RAGAS-extracted claim from the scored answer, with its entailment
-    verdict against `chunks`. `reason` is RAGAS's own judge-generated
-    explanation for the verdict, not post-hoc computed. `quote` is the
-    verbatim span of `answer` this claim was grounded to (for UI
-    highlighting) — `None` when the judge's quote couldn't be validated
-    against the answer text (`_ground_quote_in_answer`)."""
+    """One claim extracted from the scored answer, with its entailment
+    verdict against `chunks`. `reason` is the judge's own explanation for
+    the verdict (`_NLI_PROMPT`), not post-hoc computed. `supported` and
+    `reason` are `None` when the claim couldn't be evaluated (unparseable
+    NLI output). `segment_id` is the answer segment
+    (`FaithfulnessResult.segments`) the claim was drawn from."""
 
     statement: str
-    supported: bool
-    reason: str
-    quote: str | None = None
+    supported: bool | None
+    reason: str | None
+    segment_id: int
+
+
+def _claim_verdict(segment_id: int, claim: str, output: NLIStatementOutput | None) -> ClaimVerdict:
+    """`output` is the NLI response for this one claim alone. Anything but
+    exactly one verdict (or no response at all) leaves it not evaluated."""
+    if output is None or len(output.statements) != 1:
+        return ClaimVerdict(statement=claim, supported=None, reason=None, segment_id=segment_id)
+    answer = output.statements[0]
+    return ClaimVerdict(
+        statement=claim,
+        supported=bool(answer.verdict),
+        reason=answer.reason,
+        segment_id=segment_id,
+    )
+
+
+def _score(claims: Sequence[ClaimVerdict]) -> float:
+    """Fraction of evaluated claims that are supported; NaN if none was."""
+    evaluated = [claim.supported for claim in claims if claim.supported is not None]
+    return sum(evaluated) / len(evaluated) if evaluated else float("nan")
 
 
 @dataclass(frozen=True)
 class FaithfulnessResult:
-    # Fraction of extracted claims entailed by `chunks`; NaN if the answer
-    # yielded no claims.
+    # Fraction of evaluated claims entailed by `chunks`; NaN if the answer
+    # yielded no claims, or none could be evaluated.
     score: float
     model: str  # judge model used (LiteLLM model string)
     # Per-claim breakdown behind `score`; empty iff the answer yielded no
     # claims (score is NaN in that case too).
     claims: tuple[ClaimVerdict, ...] = ()
+    # The answer's sentence segments (src/generation/segmentation.py) that
+    # `claims` are anchored to. Returned even when no claim was extracted,
+    # so every segment can still be shown (as neutral).
+    segments: tuple[Segment, ...] = ()
 
 
 def check_faithfulness(
@@ -379,46 +547,40 @@ def check_faithfulness(
     labels the returned result — it is not read back off a caller-supplied
     `judge_llm`, so pass the matching string when you supply one.
     """
+    segments = segment_answer(answer)
+    if not segments:
+        return FaithfulnessResult(score=float("nan"), model=model)
+
     llm = judge_llm if judge_llm is not None else build_judge_llm(model)
-    sample = SingleTurnSample(
-        user_input=query,
-        response=answer,
-        retrieved_contexts=[chunk.text for chunk in chunks],
-    )
-    metric = Faithfulness(llm=llm)
-    row = sample.to_dict()
+    context = "\n".join(chunk.text for chunk in chunks)
 
-    async def _score() -> Any:
-        grounded = await _GROUNDED_STATEMENT_PROMPT.generate(
-            llm=llm, data=StatementGeneratorInput(question=query, answer=answer)
-        )
-        if not grounded.statements:
+    async def _judge(claim: str) -> NLIStatementOutput | None:
+        try:
+            return await _NLI_PROMPT.generate(
+                llm=llm, data=NLIStatementInput(context=context, statements=[claim])
+            )
+        except RagasOutputParserException:
             return None
-        statement_texts = [s.statement for s in grounded.statements]
-        verdicts = await metric._create_verdicts(row, statement_texts, None)
-        return grounded, verdicts
 
-    result = _run_on_background_loop(_score())
-    if result is None:
-        return FaithfulnessResult(score=float("nan"), model=model, claims=())
-    grounded, verdicts = result
-
-    score = metric._compute_score(verdicts)
-    # NLI verdicts echo back the exact statement text they were given
-    # (`StatementFaithfulnessAnswer.statement`, "the original statement,
-    # word-by-word") — matched by that text back to the quote extracted
-    # alongside it, rather than assumed positional, since a local judge
-    # isn't guaranteed to preserve order/count between the two LLM calls.
-    quote_by_statement = {s.statement: s.quote for s in grounded.statements}
-    claims = tuple(
-        ClaimVerdict(
-            statement=v.statement,
-            supported=bool(v.verdict),
-            reason=v.reason,
-            quote=_ground_quote_in_answer(answer, quote_by_statement[v.statement])
-            if v.statement in quote_by_statement
-            else None,
+    async def _run() -> tuple[ClaimVerdict, ...]:
+        output = await _SEGMENT_CLAIMS_PROMPT.generate(
+            llm=llm,
+            data=SegmentedAnswerInput(
+                question=query,
+                segments=[
+                    AnswerSegment(segment_id=s.id, text=_text_for_judge(s)) for s in segments
+                ],
+            ),
         )
-        for v in verdicts.statements
-    )
-    return FaithfulnessResult(score=score, model=model, claims=claims)
+        # Sequential on purpose: the judge (local Ollama) serves one request
+        # at a time anyway, and in-order calls keep the shared prompt prefix
+        # in its cache.
+        return tuple(
+            [
+                _claim_verdict(segment_id, claim, await _judge(claim))
+                for segment_id, claim in _anchor_claims(segments, output)
+            ]
+        )
+
+    claims = _run_on_background_loop(_run())
+    return FaithfulnessResult(score=_score(claims), model=model, claims=claims, segments=segments)

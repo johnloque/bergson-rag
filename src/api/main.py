@@ -143,6 +143,7 @@ from src.api.schemas import (
     RetrievedChunkOut,
     RetrieveRequest,
     RetrieveResponse,
+    SegmentOut,
     SetChunkIdsRequest,
     SetChunkIdsResponse,
     StructuralCheckOut,
@@ -341,9 +342,16 @@ def _evaluation_result_to_response(evaluation: EvaluationResult) -> EvaluateResp
             model=evaluation.faithfulness.model,
             claims=[
                 ClaimVerdictOut(
-                    statement=c.statement, supported=c.supported, reason=c.reason, quote=c.quote
+                    statement=c.statement,
+                    supported=c.supported,
+                    reason=c.reason,
+                    segment_id=c.segment_id,
                 )
                 for c in evaluation.faithfulness.claims
+            ],
+            segments=[
+                SegmentOut(id=s.id, text=s.text, start=s.start, end=s.end)
+                for s in evaluation.faithfulness.segments
             ],
         ),
         should_auto_expand=should_auto_expand(evaluation),

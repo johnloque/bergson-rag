@@ -28,9 +28,14 @@ dependencies = [
     # a name only ever pulled in transitively isn't a dependency this
     # project's own pyproject.toml can rely on staying resolved.
     "httpx==0.28.1",
+    # Same reasoning: already resolved transitively (litellm, ragas), now
+    # imported directly by src/prompts/loader.py (refactor/prompts-to-files)
+    # to render prompts/ templates and parse their YAML headers/examples.
+    "jinja2==3.1.6",
     "langchain-community==0.3.30",
     "langchain-litellm==0.7.0",
     "litellm==1.97.0",
+    "pyyaml==6.0.3",
     "qdrant-client==1.19.0",
     "ragas==0.3.9",
     "sentence-transformers==5.7.0",

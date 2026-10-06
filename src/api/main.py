@@ -95,8 +95,12 @@ as 404s directly from `src/api/persistence.py` (FastAPI's own
 
 from __future__ import annotations
 
+import json
+import logging
 import math
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -150,11 +154,13 @@ from src.api.schemas import (
     TitleYearMismatchOut,
     TurnDetailResponse,
 )
-from src.generation.chunk_judge import judge_chunk
+from src.generation.chunk_judge import judge_chunk, judge_chunk_prompts_used
+from src.generation.faithfulness import faithfulness_prompts_used
 from src.generation.generate import generate_from_chunks
 from src.generation.guardrail import EvaluationResult, generate_evaluation, should_auto_expand
 from src.generation.signals import retrieval_confidence_tier
 from src.paragraph_chunk_map import parse_paragraph_id, resolve_chunk_ids
+from src.prompts.loader import get_prompt_manifest
 from src.retrieval.filtering import DateRangeFilter, filtered_hybrid_search
 from src.retrieval.reranking import DEFAULT_RERANK_CANDIDATES, rerank
 
@@ -172,7 +178,21 @@ FRONTEND_DEV_ORIGIN = "http://localhost:5173"
 # FRONTEND_DEV_ORIGIN.
 _EXTRA_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
 
-app = FastAPI(title="bergson-rag API")
+# uvicorn's own logger: the only one its default log config gives a handler,
+# so an INFO record here actually reaches the server log.
+logger = logging.getLogger("uvicorn.error")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Logs which prompt versions this process serves (docs/prompts.md) —
+    the per-record `prompts_used` columns say which ones each answer,
+    evaluation and chunk judgment actually used."""
+    logger.info("Prompt manifest: %s", json.dumps(get_prompt_manifest(), sort_keys=True))
+    yield
+
+
+app = FastAPI(title="bergson-rag API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -308,6 +328,7 @@ def generate(body: GenerateRequest, session: Session = Depends(get_session)) -> 
         answer=result.answer,
         retrieval_confidence_tier=confidence_tier,
         chunk_judgments_used=chunk_judgments,
+        prompts_used=result.prompts_used,
     )
     return GenerateResponse(
         answer=result.answer,
@@ -413,6 +434,7 @@ def evaluate(body: EvaluateRequest, session: Session = Depends(get_session)) -> 
         structural_flags=response.structural.model_dump(),
         faithfulness_annotations=response.faithfulness.model_dump(),
         should_auto_expand=response.should_auto_expand,
+        prompts_used=faithfulness_prompts_used(),
     )
     return response
 
@@ -434,6 +456,7 @@ def judge_chunk_endpoint(
         label=judgment["label"],
         justification=judgment["justification"],
         model=body.model,
+        prompts_used=judge_chunk_prompts_used(),
     )
     return JudgeChunkResponse(label=judgment["label"], justification=judgment["justification"])
 

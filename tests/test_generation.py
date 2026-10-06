@@ -49,21 +49,21 @@ from src.generation.generate import (
     fetch_dense_vectors,
     generate_from_chunks,
 )
-from src.generation.prompt import (
-    CAUTION_INSTRUCTION,
-    CITATION_INSTRUCTION,
-    CONVERGENT_INSTRUCTION,
-    DIVERGENT_INSTRUCTION,
-    INTERPRETIVE_FRAMING_INSTRUCTION,
-    MONO_WORK_INSTRUCTION,
-    build_prompt,
-)
+from src.generation.prompt import build_prompt
 from src.generation.signals import compute_signals
 from src.indexing.embeddings import DenseEmbedder, SparseEmbedder
 from src.indexing.qdrant_index import COLLECTION_NAME, PAYLOAD_FIELDS, point_id_for
 from src.retrieval.hybrid import RetrievedChunk, hybrid_search
 from src.retrieval.reranking import CrossEncoderReranker, rerank
 from src.works import WORKS
+from tests.prompt_markers import (
+    CAUTION_INSTRUCTION,
+    CITATION_INSTRUCTION,
+    CONVERGENT_INSTRUCTION,
+    DIVERGENT_INSTRUCTION,
+    INTERPRETIVE_FRAMING_INSTRUCTION,
+    MONO_WORK_INSTRUCTION,
+)
 
 QDRANT_URL = "http://localhost:6333"
 REPO_ROOT = Path(__file__).resolve().parent.parent

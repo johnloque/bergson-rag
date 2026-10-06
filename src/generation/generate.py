@@ -50,7 +50,7 @@ from litellm import ModelResponse
 from qdrant_client import QdrantClient
 
 from src.generation.chunk_judgment import ChunkJudgment
-from src.generation.prompt import SYSTEM_PROMPT, build_prompt
+from src.generation.prompt import SYSTEM_PROMPT, build_prompt, generation_prompts_used
 from src.generation.signals import EvidenceSignals, GenerationChunk, compute_signals
 from src.indexing.qdrant_index import COLLECTION_NAME, DENSE_VECTOR_NAME, point_id_for
 
@@ -65,6 +65,9 @@ class GenerationResult:
     model: str
     prompt: str
     signals: EvidenceSignals
+    # Which prompt versions produced this answer (src/prompts/loader.py),
+    # persisted as `generations.prompts_used`.
+    prompts_used: dict[str, dict[str, Any]]
 
 
 def fetch_dense_vectors(client: QdrantClient, chunk_ids: list[str]) -> dict[str, list[float]]:
@@ -145,7 +148,7 @@ def generate_from_chunks(
     signals = compute_signals(chunks, dense_vectors)
     prompt = build_prompt(query, chunks, signals, chunk_judgments)
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": SYSTEM_PROMPT.render()},
         {"role": "user", "content": prompt},
     ]
 
@@ -171,4 +174,5 @@ def generate_from_chunks(
         model=used_model,
         prompt=prompt,
         signals=signals,
+        prompts_used=generation_prompts_used(),
     )

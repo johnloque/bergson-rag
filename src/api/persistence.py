@@ -149,6 +149,7 @@ def upsert_chunk_judgment(
     label: str,
     justification: str,
     model: str,
+    prompts_used: dict | None = None,
 ) -> ChunkJudgmentRow:
     """A chunk judged twice in the same turn overwrites, never accumulates
     duplicate rows (docs/ROADMAP.md's `chunk_judgments` schema note)."""
@@ -161,6 +162,7 @@ def upsert_chunk_judgment(
     row.label = label
     row.justification = justification
     row.model = model
+    row.prompts_used = prompts_used
     session.add(row)
     session.commit()
     session.refresh(row)
@@ -175,6 +177,7 @@ def save_generation(
     answer: str,
     retrieval_confidence_tier: str,
     chunk_judgments_used: dict[str, ChunkJudgment] | None,
+    prompts_used: dict | None = None,
 ) -> Generation:
     """404s if `turn_id` no longer exists — re-checked here (not just at
     `get_turn_or_404`, the start of `/generate`) because the conversation may
@@ -198,6 +201,7 @@ def save_generation(
         answer=answer,
         retrieval_confidence_tier=retrieval_confidence_tier,
         chunk_judgments_used=chunk_judgments_used,
+        prompts_used=prompts_used,
     )
     session.add(generation)
     session.commit()
@@ -223,6 +227,7 @@ def save_evaluation(
     structural_flags: dict,
     faithfulness_annotations: dict,
     should_auto_expand: bool,
+    prompts_used: dict | None = None,
 ) -> Evaluation:
     """404s if `generation_id` no longer exists — same rationale as
     `save_generation`'s check: the conversation may have been deleted
@@ -251,6 +256,7 @@ def save_evaluation(
     evaluation.structural_flags = structural_flags
     evaluation.faithfulness_annotations = faithfulness_annotations
     evaluation.should_auto_expand = should_auto_expand
+    evaluation.prompts_used = prompts_used
     session.add(evaluation)
     try:
         session.commit()

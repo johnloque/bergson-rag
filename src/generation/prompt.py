@@ -1,7 +1,8 @@
 """The evidence-conditioned generation prompt (docs/ROADMAP.md, Sprint 5).
 
-One template, dynamically conditioned on `EvidenceSignals` — not
-branch-specific separate templates. `build_prompt` always includes the
+One template (`prompts/generation/answer.md`, refactor/prompts-to-files),
+dynamically conditioned on `EvidenceSignals` — not branch-specific separate
+templates. The rendered prompt always includes the
 mandatory citation and interpretive-framing instructions, then appends
 exactly one work-structure instruction and one convergence instruction
 (chosen by the corresponding signal), and optionally an epistemic-caution
@@ -30,7 +31,8 @@ for both fabrication shapes found in calibration (an invented title, and a
 real title attached to the wrong year, e.g. Q004's "1934" for the real 1907
 work "L'évolution créatrice"). Giving the model the correct values directly
 removes the need to recall them at all; it does not replace `work_id`,
-which the citation format (`CITATION_INSTRUCTION` below) and Layer 1
+which the citation format (the citation instruction in
+`prompts/generation/answer.md`) and Layer 1
 (`src/generation/guardrail.py`) both still key on. This is the primary
 mitigation for that failure mode — `check_title_year_mismatch`
 (`src/generation/guardrail.py`) remains the safety net for whatever still
@@ -40,7 +42,7 @@ project.
 ## Text-level grounding (Sprint 11, `feat/backend-reference-data`)
 
 For a chunk whose paragraphs fall inside one of 1919_ES's or 1934_PM's
-individually-dated texts (`src.works.TEXTS`), `_format_chunk`'s header also
+individually-dated texts (`src.works.TEXTS`), the chunk's evidence header also
 shows that text's own real title and year, alongside (not instead of) the
 work-level title/year above — e.g. a chunk from 1919_ES's "L'effort
 intellectuel" article shows both `L'énergie spirituelle (1919)` (the
@@ -58,124 +60,55 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 from src.generation.chunk_judgment import ChunkJudgment
 from src.generation.signals import EvidenceSignals, GenerationChunk
+from src.prompts.loader import load_prompt, prompts_used
 from src.works import resolve_paragraph_metadata, work_label
 
-SYSTEM_PROMPT = (
-    "Tu es un assistant qui répond à des questions sur la philosophie de Henri Bergson "
-    "en te fondant strictement sur les extraits sources fournis. N'utilise aucune "
-    "connaissance de Bergson extérieure à ces extraits."
-)
+# Prompt wording lives in prompts/generation/ (docs/prompts.md), branching
+# included: answer.md is one Jinja2 template, so one hash identifies the
+# whole evidence-conditioned prompt. This module only shapes its input data.
+SYSTEM_PROMPT = load_prompt("generation.system")
+ANSWER_PROMPT = load_prompt("generation.answer")
 
-CITATION_INSTRUCTION = (
-    "Cite systématiquement tes affirmations en indiquant le chunk_id du passage source "
-    "entre crochets (ex. [1907_EC_c5]) : chaque affirmation doit être rattachée à un "
-    "passage précis."
-)
-
-# The `[chunk_id]` bracket format CITATION_INSTRUCTION above asks the model
-# to produce — defined once here, since this module is what teaches the
-# model the format. `src/generation/guardrail.py`'s `check_structure`
-# (Layer 1, no LLM call) imports this rather than hardcoding a second copy
-# of the same pattern: the two modules must agree on exactly one citation
-# format, and a shared symbol is what keeps them agreeing on it.
+# The `[chunk_id]` bracket format the citation instruction
+# (prompts/generation/answer.md) asks the model to produce — defined once
+# here, since this module is what feeds the model that instruction.
+# `src/generation/guardrail.py`'s `check_structure` (Layer 1, no LLM call)
+# imports this rather than hardcoding a second copy of the same pattern: the
+# two modules must agree on exactly one citation format, and a shared symbol
+# is what keeps them agreeing on it.
 CITATION_PATTERN = re.compile(r"\[([^\[\]]+)\]")
 
-INTERPRETIVE_FRAMING_INSTRUCTION = (
-    "Présente ta réponse comme une synthèse interprétative à vérifier auprès des "
-    "passages cités, pas comme une conclusion définitive et arrêtée."
-)
 
-MONO_WORK_INSTRUCTION = (
-    "Tous les extraits proviennent d'une seule œuvre : présente la réponse de façon "
-    "continue, sans avoir besoin de distinguer les sources par œuvre."
-)
-
-CONVERGENT_INSTRUCTION = (
-    "Les passages convergent : tu peux les synthétiser directement en une réponse unifiée."
-)
-
-DIVERGENT_INSTRUCTION = (
-    "Les passages ne convergent pas clairement : présente-les séparément plutôt que "
-    "de les fondre dans un récit unique, et ne présente jamais la réponse comme un "
-    "consensus si les passages ne s'accordent pas clairement entre eux."
-)
-
-CAUTION_INSTRUCTION = (
-    "Le meilleur score de pertinence attribué par le reranker à cette sélection de "
-    "passages reste modéré : formule la réponse avec une prudence épistémique "
-    "appropriée."
-)
-
-CHUNK_JUDGMENT_INSTRUCTION = (
-    "Certains extraits sont accompagnés d'un jugement de pertinence préalable "
-    "(étiquette et justification) : prends-le en compte comme signal supplémentaire "
-    "sur la pertinence du passage, sans t'y limiter."
-)
+def generation_prompts_used() -> dict[str, dict[str, Any]]:
+    """`prompts_used` record for one `generate_from_chunks` call."""
+    return prompts_used(SYSTEM_PROMPT, ANSWER_PROMPT)
 
 
-def _work_ref(work_id: str) -> str:
-    """`"{work_id} — {title} ({year})"` — `work_id` is kept alongside the
-    title/year (not replaced by it): the citation format and Layer 1
-    (`src/generation/guardrail.py`) both still key on `work_id`."""
-    return f"{work_id} — {work_label(work_id)}"
-
-
-def _multi_work_instruction(works: tuple[str, ...]) -> str:
-    work_refs = ", ".join(_work_ref(work) for work in works)
-    return (
-        f"Les extraits proviennent de {len(works)} œuvres distinctes ({work_refs}) : "
-        "regroupe le contexte par œuvre et attribue explicitement chaque affirmation à "
-        "l'œuvre dont elle provient."
-    )
-
-
-def _page_range(page_start: dict, page_end: dict) -> str:
-    start, end = page_start["display"], page_end["display"]
-    return start if start == end else f"{start}-{end}"
-
-
-def _chunk_text_note(chunk: GenerationChunk) -> str:
-    """`", texte « {title} » ({year})"` when `chunk` falls inside an
-    individually-dated text (Sprint 11, `feat/backend-reference-data`) —
-    `""` otherwise. See this module's docstring ("Text-level grounding")
-    for why `chunk.paragraph_ids[0]` is representative of the whole chunk."""
+def _chunk_data(chunk: GenerationChunk, judgment: ChunkJudgment | None) -> dict[str, Any]:
+    """Template input for one evidence block. `text_title`/`text_year` are set
+    when `chunk` falls inside an individually-dated text (Sprint 11,
+    `feat/backend-reference-data`) — see this module's docstring
+    ("Text-level grounding") for why `chunk.paragraph_ids[0]` is
+    representative of the whole chunk."""
     metadata = resolve_paragraph_metadata(chunk.work_id, chunk.paragraph_ids[0])
-    if metadata.text_title is None:
-        return ""
-    return f", texte « {metadata.text_title} » ({metadata.text_year})"
-
-
-def _format_chunk(chunk: GenerationChunk, judgment: ChunkJudgment | None) -> str:
-    pages = _page_range(chunk.page_start, chunk.page_end)
-    header = (
-        f"[{chunk.chunk_id}] ({_work_ref(chunk.work_id)}{_chunk_text_note(chunk)}, "
-        f"{chunk.section_path}, p. {pages})"
-    )
-    block = f"{header}\n{chunk.text}"
-    if judgment is not None:
-        block += f"\n(Jugement de pertinence : {judgment['label']} — {judgment['justification']})"
-    return block
-
-
-def _format_evidence(
-    chunks: Sequence[GenerationChunk],
-    works: tuple[str, ...],
-    chunk_judgments: Mapping[str, ChunkJudgment],
-) -> str:
-    def format_one(chunk: GenerationChunk) -> str:
-        return _format_chunk(chunk, chunk_judgments.get(chunk.chunk_id))
-
-    if len(works) <= 1:
-        return "\n\n".join(format_one(chunk) for chunk in chunks)
-    blocks = []
-    for work in works:
-        work_chunks = [chunk for chunk in chunks if chunk.work_id == work]
-        body = "\n\n".join(format_one(chunk) for chunk in work_chunks)
-        blocks.append(f"=== {_work_ref(work)} ===\n{body}")
-    return "\n\n".join(blocks)
+    return {
+        "chunk_id": chunk.chunk_id,
+        "work_id": chunk.work_id,
+        # Shown alongside work_id, never instead of it: the citation format
+        # and Layer 1 (src/generation/guardrail.py) both key on work_id.
+        "work_label": work_label(chunk.work_id),
+        "text_title": metadata.text_title,
+        "text_year": metadata.text_year,
+        "section_path": chunk.section_path,
+        "page_start": chunk.page_start["display"],
+        "page_end": chunk.page_end["display"],
+        "text": chunk.text,
+        "judgment": judgment,
+    }
 
 
 def build_prompt(
@@ -185,21 +118,11 @@ def build_prompt(
     chunk_judgments: Mapping[str, ChunkJudgment] | None = None,
 ) -> str:
     chunk_judgments = chunk_judgments or {}
-    instructions = [CITATION_INSTRUCTION, INTERPRETIVE_FRAMING_INSTRUCTION]
-    instructions.append(
-        _multi_work_instruction(signals.works) if signals.is_multi_work else MONO_WORK_INSTRUCTION
-    )
-    instructions.append(CONVERGENT_INSTRUCTION if signals.is_convergent else DIVERGENT_INSTRUCTION)
-    if not signals.is_confident:
-        instructions.append(CAUTION_INSTRUCTION)
-    if any(chunk.chunk_id in chunk_judgments for chunk in chunks):
-        instructions.append(CHUNK_JUDGMENT_INSTRUCTION)
-
-    instructions_block = "\n".join(f"- {instruction}" for instruction in instructions)
-    evidence_block = _format_evidence(chunks, signals.works, chunk_judgments)
-
-    return (
-        f"CONSIGNES :\n{instructions_block}\n\n"
-        f"EXTRAITS SOURCES :\n{evidence_block}\n\n"
-        f"QUESTION :\n{query}"
+    return ANSWER_PROMPT.render(
+        query=query,
+        chunks=[_chunk_data(chunk, chunk_judgments.get(chunk.chunk_id)) for chunk in chunks],
+        works=[{"id": work, "label": work_label(work)} for work in signals.works],
+        is_multi_work=signals.is_multi_work,
+        is_convergent=signals.is_convergent,
+        is_confident=signals.is_confident,
     )

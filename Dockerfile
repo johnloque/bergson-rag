@@ -33,6 +33,9 @@ COPY pyproject.toml uv.lock README.md LICENSE ./
 RUN uv sync --frozen --no-install-project --no-dev
 
 COPY src/ src/
+# Every LLM prompt (docs/prompts.md). src/prompts/loader.py resolves it
+# relative to src/, so it must sit next to it: /app/prompts.
+COPY prompts/ prompts/
 RUN uv sync --frozen --no-dev
 
 EXPOSE 8000

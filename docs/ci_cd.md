@@ -62,7 +62,10 @@ itself).
 **What doesn't:** pure logic with no model/Qdrant dependency — XML
 parsing (`tests/test_ingestion.py`), RRF fusion math and other hand-built
 `RetrievedChunk` fixtures, prompt-construction string assertions
-(`tests/test_prompt.py`), `resolve_paragraph_metadata`/
+(`tests/test_prompt.py`), golden prompt snapshots, the prompt loader and
+`prompts_used` columns (`tests/test_prompt_snapshots.py`,
+`tests/test_prompt_loader.py`, `tests/test_prompts_used.py`, LLMs mocked —
+see `docs/prompts.md`), `resolve_paragraph_metadata`/
 `should_auto_expand` gating logic, citation/title-fabrication regex
 checks, gold-dataset CSV parsing. These run in both the fast suite and
 the full suite, unconditionally (modulo their own, pre-existing

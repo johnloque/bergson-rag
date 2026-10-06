@@ -162,17 +162,14 @@ from ragas.llms.base import LangchainLLMWrapper
 # (only the prompt's language changes). Imported from the private module
 # since `ragas.metrics` doesn't re-export them; they're stable-shaped
 # Pydantic models, not internal machinery.
-from ragas.metrics._faithfulness import (
-    NLIStatementInput,
-    NLIStatementOutput,
-    StatementFaithfulnessAnswer,
-)
+from ragas.metrics._faithfulness import NLIStatementInput, NLIStatementOutput
 from ragas.prompt import PydanticPrompt
 
 from src.generation.generate import DEFAULT_MODEL
 from src.generation.prompt import CITATION_PATTERN
 from src.generation.segmentation import Segment, segment_answer
 from src.generation.signals import GenerationChunk
+from src.prompts.loader import load_examples, load_prompt, prompts_used
 
 # Same default model as generate_from_chunks (src/generation/generate.py) —
 # local Mistral via Ollama, cost-free by default (docs/ROADMAP.md).
@@ -297,69 +294,24 @@ class SegmentedClaimsOutput(BaseModel):
     )
 
 
+_SEGMENT_CLAIMS_SOURCE = load_prompt("faithfulness.segment_claims")
+_NLI_SOURCE = load_prompt("faithfulness.nli_verifier")
+
+
 class SegmentClaimsPrompt(PydanticPrompt[SegmentedAnswerInput, SegmentedClaimsOutput]):
     """Same decomposition RAGAS's own `StatementGeneratorPrompt` does
     (`ragas.metrics._faithfulness`), but over pre-cut, numbered segments,
     with each claim grouped under the segment it comes from — see this
     module's docstring, "Anchoring claims to answer segments"."""
 
-    # In French, like the example below: the local 7B judge was observed to
-    # answer in the language of the prompt rather than of the answer, even
-    # when told not to translate — and the UI shows claims verbatim.
-    instruction = (
-        "À partir d'une question et d'une réponse découpée en segments numérotés, parcours "
-        "les segments dans l'ordre. Décompose chaque segment en une ou plusieurs affirmations "
-        "pleinement compréhensibles seules. Aucune affirmation ne doit contenir de pronom : "
-        "sers-toi des autres segments pour savoir à quoi renvoie un pronom. Une affirmation "
-        "ne reprend que le contenu de son propre segment, jamais celui d'un autre. Chaque "
-        "segment apparaît exactement une fois dans la sortie, sous son propre segment_id ; un "
-        "segment qui n'affirme rien reçoit une liste d'affirmations vide. Rédige toutes les "
-        "affirmations en français. Réponds au format JSON."
-    )
+    # Instruction and examples are in French: the local 7B judge was observed
+    # to answer in the language of the prompt rather than of the answer, even
+    # when told not to translate — and the UI shows claims verbatim. Wording
+    # lives in prompts/faithfulness/segment_claims{.md,.examples.yaml}.
+    instruction = _SEGMENT_CLAIMS_SOURCE.render()
     input_model = SegmentedAnswerInput
     output_model = SegmentedClaimsOutput
-    # Not about Bergson, so no corpus content leaks into extraction.
-    examples = [
-        (
-            SegmentedAnswerInput(
-                question="Qui était René Descartes et pour quoi est-il connu ?",
-                segments=[
-                    AnswerSegment(segment_id=0, text="Voici un bref aperçu."),
-                    AnswerSegment(
-                        segment_id=1,
-                        text="Il était un philosophe et mathématicien français, souvent "
-                        "considéré comme le fondateur de la philosophie moderne.",
-                    ),
-                    AnswerSegment(
-                        segment_id=2,
-                        text="Il est surtout connu pour la formule « je pense, donc je suis », "
-                        "et il a aussi inventé la géométrie analytique.",
-                    ),
-                ],
-            ),
-            SegmentedClaimsOutput(
-                segments=[
-                    SegmentClaims(segment_id=0, claims=[]),
-                    SegmentClaims(
-                        segment_id=1,
-                        claims=[
-                            "René Descartes était un philosophe et mathématicien français.",
-                            "René Descartes est souvent considéré comme le fondateur de la "
-                            "philosophie moderne.",
-                        ],
-                    ),
-                    SegmentClaims(
-                        segment_id=2,
-                        claims=[
-                            "René Descartes est surtout connu pour la formule « je pense, donc "
-                            "je suis ».",
-                            "René Descartes a inventé la géométrie analytique.",
-                        ],
-                    ),
-                ]
-            ),
-        )
-    ]
+    examples = load_examples(_SEGMENT_CLAIMS_SOURCE, SegmentedAnswerInput, SegmentedClaimsOutput)
 
 
 _SEGMENT_CLAIMS_PROMPT = SegmentClaimsPrompt()
@@ -371,84 +323,22 @@ class FrenchReasonNLIStatementPrompt(PydanticPrompt[NLIStatementInput, NLIStatem
     `reason`s are asked for, and shown in the examples, in French (see this
     module's docstring, "Judge prompt languages")."""
 
-    # Kept exactly as benchmarked (feat/segment-claims), including "Copy each
+    # Wording in prompts/faithfulness/nli_verifier{.md,.examples.yaml}, kept
+    # exactly as benchmarked (feat/segment-claims), including "Copy each
     # statement word-by-word" — the echo itself is no longer relied on, since
     # each call judges a single claim (see "One NLI call per claim").
-    instruction = (
-        "Your task is to judge the faithfulness of a series of statements based on a given "
-        "context. For each statement you must return verdict as 1 if the statement can be "
-        "directly inferred based on the context or 0 if the statement can not be directly "
-        "inferred based on the context. Copy each statement word-by-word, and always write "
-        "the reason in French."
-    )
+    instruction = _NLI_SOURCE.render()
     input_model = NLIStatementInput
     output_model = NLIStatementOutput
-    examples = [
-        (
-            NLIStatementInput(
-                context="John is a student at XYZ University. He is pursuing a degree in "
-                "Computer Science. He is enrolled in several courses this semester, including "
-                "Data Structures, Algorithms, and Database Management. John is a diligent "
-                "student and spends a significant amount of time studying and completing "
-                "assignments. He often stays late in the library to work on his projects.",
-                statements=[
-                    "John is majoring in Biology.",
-                    "John is taking a course on Artificial Intelligence.",
-                    "John is a dedicated student.",
-                    "John has a part-time job.",
-                ],
-            ),
-            NLIStatementOutput(
-                statements=[
-                    StatementFaithfulnessAnswer(
-                        statement="John is majoring in Biology.",
-                        reason="Le contexte indique explicitement que John étudie "
-                        "l'informatique. Rien ne laisse penser qu'il étudie la biologie.",
-                        verdict=0,
-                    ),
-                    StatementFaithfulnessAnswer(
-                        statement="John is taking a course on Artificial Intelligence.",
-                        reason="Le contexte énumère les cours que suit John, et "
-                        "l'intelligence artificielle n'en fait pas partie. On ne peut donc pas "
-                        "en déduire qu'il suit un cours d'IA.",
-                        verdict=0,
-                    ),
-                    StatementFaithfulnessAnswer(
-                        statement="John is a dedicated student.",
-                        reason="Le contexte indique qu'il consacre beaucoup de temps à "
-                        "étudier et à faire ses devoirs, et qu'il reste souvent tard à la "
-                        "bibliothèque pour ses projets, ce qui témoigne de son application.",
-                        verdict=1,
-                    ),
-                    StatementFaithfulnessAnswer(
-                        statement="John has a part-time job.",
-                        reason="Le contexte ne donne aucune information sur un emploi à "
-                        "temps partiel de John.",
-                        verdict=0,
-                    ),
-                ]
-            ),
-        ),
-        (
-            NLIStatementInput(
-                context="Photosynthesis is a process used by plants, algae, and certain "
-                "bacteria to convert light energy into chemical energy.",
-                statements=["Albert Einstein was a genius."],
-            ),
-            NLIStatementOutput(
-                statements=[
-                    StatementFaithfulnessAnswer(
-                        statement="Albert Einstein was a genius.",
-                        reason="Le contexte et l'affirmation n'ont aucun rapport.",
-                        verdict=0,
-                    )
-                ]
-            ),
-        ),
-    ]
+    examples = load_examples(_NLI_SOURCE, NLIStatementInput, NLIStatementOutput)
 
 
 _NLI_PROMPT = FrenchReasonNLIStatementPrompt()
+
+
+def faithfulness_prompts_used() -> dict[str, dict[str, Any]]:
+    """`prompts_used` record for one `check_faithfulness` call."""
+    return prompts_used(_SEGMENT_CLAIMS_SOURCE, _NLI_SOURCE)
 
 
 def _text_for_judge(segment: Segment) -> str:

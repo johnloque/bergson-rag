@@ -1,0 +1,25 @@
+# Few-shot examples for faithfulness.segment_claims (segment_claims.md).
+# Hand-editable. Each entry is validated at load time against
+# SegmentedAnswerInput / SegmentedClaimsOutput (src/generation/faithfulness.py).
+# Deliberately not about Bergson, so no corpus content leaks into extraction.
+- input:
+    question: Qui était René Descartes et pour quoi est-il connu ?
+    segments:
+    - segment_id: 0
+      text: Voici un bref aperçu.
+    - segment_id: 1
+      text: Il était un philosophe et mathématicien français, souvent considéré comme le fondateur de la philosophie moderne.
+    - segment_id: 2
+      text: Il est surtout connu pour la formule « je pense, donc je suis », et il a aussi inventé la géométrie analytique.
+  output:
+    segments:
+    - segment_id: 0
+      claims: []
+    - segment_id: 1
+      claims:
+      - René Descartes était un philosophe et mathématicien français.
+      - René Descartes est souvent considéré comme le fondateur de la philosophie moderne.
+    - segment_id: 2
+      claims:
+      - René Descartes est surtout connu pour la formule « je pense, donc je suis ».
+      - René Descartes a inventé la géométrie analytique.

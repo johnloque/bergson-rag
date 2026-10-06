@@ -12,14 +12,19 @@ from pathlib import Path
 
 import jinja2
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from src.generation.faithfulness import SegmentedAnswerInput, SegmentedClaimsOutput
+from src.generation.faithfulness import (
+    SegmentClaims,
+    SegmentedAnswerInput,
+    SegmentedClaimsOutput,
+)
 from src.prompts import loader
 from src.prompts.loader import (
     PromptError,
     get_prompt_manifest,
     load_examples,
+    load_field_descriptions,
     load_prompt,
 )
 
@@ -182,6 +187,77 @@ def test_real_segment_claims_examples_report_nested_field(prompts_dir, monkeypat
     )
     with pytest.raises(PromptError, match=r"field 'segments\.0\.segment_id'"):
         load_examples(prompt, SegmentedAnswerInput, SegmentedClaimsOutput)
+
+
+# --- output-schema field descriptions ---------------------------------------
+
+
+def _schema_prompt(prompts_dir: Path, schema_yaml: str):
+    header = "---\nid: demo.judge\nversion: v1\ndescription: d\nvariables: []\n"
+    _write(prompts_dir, "judge.md", header + "schema: judge.schema.yaml\n---\nJuge.\n")
+    _write(prompts_dir, "judge.schema.yaml", schema_yaml)
+    loader._load_default.cache_clear()
+    return load_prompt("demo.judge")
+
+
+def _described_out(descriptions):
+    class _Out(BaseModel):
+        verdict: int = Field(description=descriptions.get("_Out", "verdict"))
+
+    return _Out
+
+
+def test_schema_file_is_part_of_the_hash(prompts_dir):
+    first = _schema_prompt(prompts_dir, "_Out:\n  verdict: 1 if supported\n").hash
+    assert _schema_prompt(prompts_dir, "_Out:\n  verdict: 1 if entailed\n").hash != first
+
+
+def test_models_read_their_descriptions_from_the_schema_file(prompts_dir):
+    prompt = _schema_prompt(prompts_dir, "_Out:\n  verdict: 1 if supported\n")
+    descriptions = load_field_descriptions(prompt)
+    out_model = _described_out(descriptions)
+    descriptions.check(out_model)
+    assert out_model.model_json_schema()["properties"]["verdict"]["description"] == (
+        "1 if supported"
+    )
+
+
+def test_missing_description_is_reported_by_name(prompts_dir):
+    descriptions = load_field_descriptions(_schema_prompt(prompts_dir, "_Out: {}\n"))
+    with pytest.raises(PromptError, match=r"judge.schema.yaml: no description for _Out.verdict"):
+        _described_out(descriptions)
+
+
+def test_stale_description_entry_is_reported(prompts_dir):
+    descriptions = load_field_descriptions(
+        _schema_prompt(prompts_dir, "_Out:\n  verdict: v\n  reason: r\n")
+    )
+    with pytest.raises(PromptError, match=r"_Out has descriptions for no field: \['reason'\]"):
+        descriptions.check(_described_out(descriptions))
+
+
+def test_description_hardcoded_in_python_is_reported(prompts_dir):
+    descriptions = load_field_descriptions(_schema_prompt(prompts_dir, "_Out:\n  verdict: v\n"))
+
+    class _Out(BaseModel):
+        verdict: int = Field(description="written in Python")
+
+    with pytest.raises(PromptError, match="_Out.verdict's description is not the one from"):
+        descriptions.check(_Out)
+
+
+def test_empty_description_is_rejected(prompts_dir):
+    with pytest.raises(PromptError, match=r"_Out.verdict: empty or non-text description"):
+        load_field_descriptions(_schema_prompt(prompts_dir, "_Out:\n  verdict: ''\n"))
+
+
+def test_real_segment_claims_output_schema_comes_from_its_file():
+    descriptions = load_field_descriptions(load_prompt("faithfulness.segment_claims"))
+    descriptions.check(SegmentClaims, SegmentedClaimsOutput)
+    schema = SegmentedClaimsOutput.model_json_schema()
+    assert schema["properties"]["segments"]["description"] == descriptions.get(
+        "SegmentedClaimsOutput", "segments"
+    )
 
 
 # --- overrides --------------------------------------------------------------

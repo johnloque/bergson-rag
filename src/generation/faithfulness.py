@@ -169,7 +169,12 @@ from src.generation.generate import DEFAULT_MODEL
 from src.generation.prompt import CITATION_PATTERN
 from src.generation.segmentation import Segment, segment_answer
 from src.generation.signals import GenerationChunk
-from src.prompts.loader import load_examples, load_prompt, prompts_used
+from src.prompts.loader import (
+    load_examples,
+    load_field_descriptions,
+    load_prompt,
+    prompts_used,
+)
 
 # Same default model as generate_from_chunks (src/generation/generate.py) —
 # local Mistral via Ollama, cost-free by default (docs/ROADMAP.md).
@@ -268,6 +273,12 @@ def build_judge_llm(
     )
 
 
+_SEGMENT_CLAIMS_SOURCE = load_prompt("faithfulness.segment_claims")
+_NLI_SOURCE = load_prompt("faithfulness.nli_verifier")
+
+
+# Input model: RAGAS sends only its values (as JSON), never its schema, so
+# these descriptions never reach the judge — plain documentation, kept here.
 class AnswerSegment(BaseModel):
     segment_id: int = Field(description="The segment's number")
     text: str = Field(description="The segment's text, one sentence of the answer")
@@ -280,22 +291,24 @@ class SegmentedAnswerInput(BaseModel):
     )
 
 
+# Output models: RAGAS sends their JSON schema to the judge, descriptions
+# included — prompt text, read from prompts/faithfulness/segment_claims.schema.yaml
+# and part of the prompt's hash (docs/prompts.md).
+_OUTPUT_DESCRIPTIONS = load_field_descriptions(_SEGMENT_CLAIMS_SOURCE)
+
+
 class SegmentClaims(BaseModel):
-    segment_id: int = Field(description="The number of the segment these claims come from")
-    claims: list[str] = Field(
-        description="Fully understandable, standalone statements extracted from this "
-        "segment, with no pronouns; empty if the segment asserts nothing"
-    )
+    segment_id: int = Field(description=_OUTPUT_DESCRIPTIONS.get("SegmentClaims", "segment_id"))
+    claims: list[str] = Field(description=_OUTPUT_DESCRIPTIONS.get("SegmentClaims", "claims"))
 
 
 class SegmentedClaimsOutput(BaseModel):
     segments: list[SegmentClaims] = Field(
-        description="One entry per input segment, in order, each with its claims"
+        description=_OUTPUT_DESCRIPTIONS.get("SegmentedClaimsOutput", "segments")
     )
 
 
-_SEGMENT_CLAIMS_SOURCE = load_prompt("faithfulness.segment_claims")
-_NLI_SOURCE = load_prompt("faithfulness.nli_verifier")
+_OUTPUT_DESCRIPTIONS.check(SegmentClaims, SegmentedClaimsOutput)
 
 
 class SegmentClaimsPrompt(PydanticPrompt[SegmentedAnswerInput, SegmentedClaimsOutput]):

@@ -13,6 +13,7 @@ the header must match the path). A YAML front-matter header, then the body:
     description: One line.
     variables: [query, chunks]
     examples: [answer.examples.yaml]   # optional, files next to this one
+    schema: answer.schema.yaml          # optional, see "Output schema"
     library: ragas                      # optional, see "Library dependency"
     ---
     <body: the exact prompt text, a Jinja2 template>
@@ -23,13 +24,23 @@ part of the output). `variables` must list exactly the template's free
 variables — checked at load time, so a header and its template can't drift
 apart.
 
+## Output schema
+
+A RAGAS `PydanticPrompt` sends its output model's JSON schema to the LLM,
+field descriptions included — prompt text, so it lives here too. The
+`schema` file maps each output model to its fields' descriptions
+(`load_field_descriptions`); the Python models read their descriptions
+from it, and are checked against it (no field undescribed, no entry
+without a field).
+
 ## Hash
 
-`sha256` over the body, then each examples file in header order, all with
-line endings normalized to LF, joined with a NUL byte (so a one-file prompt's
-hash is just `sha256` of its body). The header is excluded: editing a
-description or version label doesn't make a "new" prompt. The template is
-hashed, not the rendered text, which varies with every input.
+`sha256` over the body, then each examples file in header order, then the
+schema file, all with line endings normalized to LF, joined with a NUL byte
+(so a one-file prompt's hash is just `sha256` of its body). The header is
+excluded: editing a description or version label doesn't make a "new"
+prompt. The template is hashed, not the rendered text, which varies with
+every input.
 
 ## Library dependency
 
@@ -45,7 +56,7 @@ from __future__ import annotations
 import hashlib
 import importlib.metadata
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -60,7 +71,7 @@ from pydantic import BaseModel, ValidationError
 # next to src/).
 PROMPTS_DIR = Path(__file__).resolve().parents[2] / "prompts"
 
-_HEADER_KEYS = {"id", "version", "description", "variables", "examples", "library"}
+_HEADER_KEYS = {"id", "version", "description", "variables", "examples", "schema", "library"}
 _REQUIRED_HEADER_KEYS = {"id", "version", "description", "variables"}
 
 _ENV = jinja2.Environment(
@@ -112,6 +123,7 @@ class Prompt:
     hash: str
     custom: bool
     examples_paths: tuple[Path, ...] = ()
+    schema_path: Path | None = None
     library: str | None = None  # e.g. "ragas==0.3.9"
     _template: jinja2.Template = field(repr=False, compare=False, default=None)  # type: ignore[assignment]
 
@@ -127,6 +139,11 @@ class Prompt:
         if self.library is not None:
             entry["library"] = self.library
         return entry
+
+    @property
+    def extra_paths(self) -> tuple[Path, ...]:
+        """Files hashed after the body, in hash order."""
+        return (*self.examples_paths, *((self.schema_path,) if self.schema_path else ()))
 
 
 def prompts_used(*prompts: Prompt) -> dict[str, dict[str, Any]]:
@@ -191,26 +208,29 @@ def _load_default(prompt_id: str) -> Prompt:
 
     variables = tuple(_as_list(header["variables"]))
     examples_paths = tuple(path.parent / name for name in _as_list(header.get("examples")))
-    for examples_path in examples_paths:
-        if not examples_path.is_file():
-            raise PromptError(f"{path}: examples file {examples_path} not found")
+    schema_path = path.parent / header["schema"] if header.get("schema") else None
+    for extra_path in (*examples_paths, *((schema_path,) if schema_path else ())):
+        if not extra_path.is_file():
+            raise PromptError(f"{path}: file {extra_path} not found")
     library = header.get("library")
-    return Prompt(
+    prompt = Prompt(
         id=prompt_id,
         version=str(header["version"]),
         description=str(header["description"]),
         variables=variables,
         text=body,
-        hash=_hash(body, examples_paths),
+        hash="",
         custom=False,
         examples_paths=examples_paths,
+        schema_path=schema_path,
         library=_library_version(library) if library else None,
         _template=_compile(prompt_id, body, variables),
     )
+    return replace(prompt, hash=_hash(body, prompt.extra_paths))
 
 
-def _hash(body: str, examples_paths: Sequence[Path]) -> str:
-    return compute_hash([body, *(p.read_text(encoding="utf-8") for p in examples_paths)])
+def _hash(body: str, extra_paths: Sequence[Path]) -> str:
+    return compute_hash([body, *(p.read_text(encoding="utf-8") for p in extra_paths)])
 
 
 def load_prompt(prompt_id: str, override_text: str | None = None) -> Prompt:
@@ -219,22 +239,17 @@ def load_prompt(prompt_id: str, override_text: str | None = None) -> Prompt:
     `override_text` replaces the body (e.g. a user-edited prompt from a
     future settings panel): the result is marked `custom=True`, hashed over
     the override, and nothing is ever written to `prompts/`. The header
-    (version, variables, examples) stays the default file's — an override
-    must use the same template variables."""
+    (version, variables, examples, schema) stays the default file's — an
+    override must use the same template variables."""
     default = _load_default(prompt_id)
     if override_text is None:
         return default
     body = normalize_newlines(override_text)
-    return Prompt(
-        id=default.id,
-        version=default.version,
-        description=default.description,
-        variables=default.variables,
+    return replace(
+        default,
         text=body,
-        hash=_hash(body, default.examples_paths),
+        hash=_hash(body, default.extra_paths),
         custom=True,
-        examples_paths=default.examples_paths,
-        library=default.library,
         _template=_compile(prompt_id, body, default.variables),
     )
 
@@ -296,3 +311,68 @@ def load_examples[InputT: BaseModel, OutputT: BaseModel](
                     ) from None
             examples.append((parsed[0], parsed[1]))  # type: ignore[arg-type]
     return examples
+
+
+@dataclass(frozen=True)
+class FieldDescriptions:
+    """A prompt's output-schema field descriptions (its `schema` file):
+    `{model name: {field name: description}}`. Read field by field while the
+    models are being defined (`get`), then checked against the finished
+    models (`check`)."""
+
+    path: Path
+    descriptions: dict[str, dict[str, str]]
+
+    def get(self, model: str, field_name: str) -> str:
+        try:
+            return self.descriptions[model][field_name]
+        except KeyError:
+            message = f"{self.path.name}: no description for {model}.{field_name}"
+            raise PromptError(message) from None
+
+    def check(self, *models: type[BaseModel]) -> None:
+        """Each of `models` has exactly the fields its entry describes, and
+        the file describes no other model — so no description is missing,
+        stale, or hand-written in Python instead of read from this file."""
+        names = {model.__name__ for model in models}
+        unknown_models = self.descriptions.keys() - names
+        if unknown_models:
+            raise PromptError(f"{self.path.name}: no such output model {sorted(unknown_models)}")
+        for model in models:
+            described = self.descriptions.get(model.__name__, {})
+            fields = model.model_fields
+            for problem, names_ in (
+                ("fields without a description", fields.keys() - described.keys()),
+                ("descriptions for no field", described.keys() - fields.keys()),
+            ):
+                if names_:
+                    raise PromptError(
+                        f"{self.path.name}: {model.__name__} has {problem}: {sorted(names_)}"
+                    )
+            for name, info in fields.items():
+                if info.description != described[name]:
+                    raise PromptError(
+                        f"{self.path.name}: {model.__name__}.{name}'s description is not the "
+                        "one from this file"
+                    )
+
+
+def load_field_descriptions(prompt: Prompt) -> FieldDescriptions:
+    """`prompt`'s `schema` file, shape-checked (hand-edited, like examples)."""
+    path = prompt.schema_path
+    if path is None:
+        raise PromptError(f"{prompt.id}: header declares no schema file")
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as error:
+        raise PromptError(f"{path}: invalid YAML: {error}") from None
+    if not isinstance(data, dict):
+        raise PromptError(f"{path.name}: expected a mapping of model name to fields")
+    for model, fields in data.items():
+        if not isinstance(fields, dict):
+            raise PromptError(f"{path.name}: {model}: expected a mapping of field to description")
+        for field_name, description in fields.items():
+            if not isinstance(description, str) or not description.strip():
+                message = f"{path.name}: {model}.{field_name}: empty or non-text description"
+                raise PromptError(message)
+    return FieldDescriptions(path=path, descriptions=data)

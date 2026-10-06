@@ -25,6 +25,7 @@ prompts/
 └── faithfulness/
     ├── segment_claims.md                faithfulness.segment_claims
     ├── segment_claims.examples.yaml
+    ├── segment_claims.schema.yaml       output-schema field descriptions
     ├── nli_verifier.md                  faithfulness.nli_verifier
     └── nli_verifier.examples.yaml
 ```
@@ -102,9 +103,9 @@ field 'statements.0.verdict': Input should be a valid integer
 
 ## Hash
 
-`sha256` over, in order, the body and then each examples file listed in
-the header, each with line endings normalized to LF, joined with a NUL
-byte. For a single-file prompt that is simply `sha256` of the body.
+`sha256` over, in order, the body, each examples file listed in the
+header, then the schema file if any, each with line endings normalized to
+LF, joined with a NUL byte. For a single-file prompt that is simply `sha256` of the body.
 
 - **LF normalization**: development happens on macOS, the app runs on Linux
   (CI, VPS); a CRLF checkout must not produce a "different" prompt.
@@ -130,10 +131,32 @@ RAGAS prompts used without any override are out of this project's
 schemas, and, in `eval/scripts/run_ragas_eval.py` only,
 `ContextPrecisionPrompt` and `ContextRecallClassificationPrompt`.
 
-One more input the model sees but no file holds: the `Field(description=...)`
-strings of this project's faithfulness models, which reach the prompt
-through that JSON schema. They are schema, so they stay in Python; the
-golden snapshots fail if they change.
+### Output-schema field descriptions
+
+RAGAS tells the judge what JSON to answer with by pasting the **output**
+model's JSON schema into the prompt — field descriptions included. Those
+descriptions are therefore prompt text, and live in a `schema` file next to
+the prompt: `faithfulness/segment_claims.schema.yaml`, declared in the
+header (`schema: ...`) and hashed with it.
+
+```yaml
+SegmentClaims:
+  segment_id: The number of the segment these claims come from
+  claims: Fully understandable, standalone statements ...
+SegmentedClaimsOutput:
+  segments: One entry per input segment, in order, each with its claims
+```
+
+`src/generation/faithfulness.py` defines the output models with
+`Field(description=descriptions.get(model, field))`, then
+`descriptions.check(...)` fails the import if a field has no entry, an
+entry has no field, or a description was written in Python instead.
+
+The **input** model (`SegmentedAnswerInput`, `AnswerSegment`) is sent as
+plain JSON values, never as a schema, so its descriptions never reach the
+judge: they stay in Python as documentation and are not hashed (an edit
+there changes nothing the model sees). The NLI prompt's output schema is
+RAGAS's own (`NLIStatementOutput`), covered by the library version.
 
 ## Loader API (`src/prompts/loader.py`)
 

@@ -1,0 +1,70 @@
+À partir d'une question et d'une réponse découpée en segments numérotés, parcours les segments dans l'ordre. Décompose chaque segment en une ou plusieurs affirmations pleinement compréhensibles seules. Aucune affirmation ne doit contenir de pronom : sers-toi des autres segments pour savoir à quoi renvoie un pronom. Une affirmation ne reprend que le contenu de son propre segment, jamais celui d'un autre. Chaque segment apparaît exactement une fois dans la sortie, sous son propre segment_id ; un segment qui n'affirme rien reçoit une liste d'affirmations vide. Rédige toutes les affirmations en français. Réponds au format JSON.
+Please return the output in a JSON format that complies with the following schema as specified in JSON Schema:
+{"$defs": {"SegmentClaims": {"properties": {"segment_id": {"description": "The number of the segment these claims come from", "title": "Segment Id", "type": "integer"}, "claims": {"description": "Fully understandable, standalone statements extracted from this segment, with no pronouns; empty if the segment asserts nothing", "items": {"type": "string"}, "title": "Claims", "type": "array"}}, "required": ["segment_id", "claims"], "title": "SegmentClaims", "type": "object"}}, "properties": {"segments": {"description": "One entry per input segment, in order, each with its claims", "items": {"$ref": "#/$defs/SegmentClaims"}, "title": "Segments", "type": "array"}}, "required": ["segments"], "title": "SegmentedClaimsOutput", "type": "object"}Do not use single quotes in your response but double quotes,properly escaped with a backslash.
+
+--------EXAMPLES-----------
+Example 1
+Input: {
+    "question": "Qui était René Descartes et pour quoi est-il connu ?",
+    "segments": [
+        {
+            "segment_id": 0,
+            "text": "Voici un bref aperçu."
+        },
+        {
+            "segment_id": 1,
+            "text": "Il était un philosophe et mathématicien français, souvent considéré comme le fondateur de la philosophie moderne."
+        },
+        {
+            "segment_id": 2,
+            "text": "Il est surtout connu pour la formule « je pense, donc je suis », et il a aussi inventé la géométrie analytique."
+        }
+    ]
+}
+Output: {
+    "segments": [
+        {
+            "segment_id": 0,
+            "claims": []
+        },
+        {
+            "segment_id": 1,
+            "claims": [
+                "René Descartes était un philosophe et mathématicien français.",
+                "René Descartes est souvent considéré comme le fondateur de la philosophie moderne."
+            ]
+        },
+        {
+            "segment_id": 2,
+            "claims": [
+                "René Descartes est surtout connu pour la formule « je pense, donc je suis ».",
+                "René Descartes a inventé la géométrie analytique."
+            ]
+        }
+    ]
+}
+-----------------------------
+
+Now perform the same with the following input
+input: {
+    "question": "Quelle thèse Bergson explique-t-il à travers l'image de la fonte d'un morceau de sucre dans un verre d'eau ?",
+    "segments": [
+        {
+            "segment_id": 0,
+            "text": "Dans l'œuvre de Henri Bergson, l'image de la fonte d'un morceau de sucre dans un verre d'eau est utilisée pour expliquer la thèse selon laquelle la durée est une création continue de formes nouvelles et non pas un simple déroulement de temps."
+        },
+        {
+            "segment_id": 1,
+            "text": "Bergson souligne que lorsque l'on attend que le sucre fonde, il y a une durée psychologique déterminée qui s'impose, indiquant que la succession dans la durée a une valeur et une réalité absolues pour la conscience."
+        },
+        {
+            "segment_id": 2,
+            "text": "Il affirme que cette durée ne peut être réduite à un nombre, comme le temps dans le monde matériel, mais plutôt est un absolu qui s'y crée sans cesse."
+        },
+        {
+            "segment_id": 3,
+            "text": "Il suggère que l'univers lui-même, dans son ensemble, ne peut être considéré comme un système entièrement calculable, mais plutôt comme un tout concret qui prend sans cesse des formes nouvelles et originales, comme nos états de conscience."
+        }
+    ]
+}
+Output: 

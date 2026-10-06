@@ -1,0 +1,12 @@
+CONSIGNES :
+- Cite systématiquement tes affirmations en indiquant le chunk_id du passage source entre crochets (ex. [1907_EC_c5]) : chaque affirmation doit être rattachée à un passage précis.
+- Présente ta réponse comme une synthèse interprétative à vérifier auprès des passages cités, pas comme une conclusion définitive et arrêtée.
+- Tous les extraits proviennent d'une seule œuvre : présente la réponse de façon continue, sans avoir besoin de distinguer les sources par œuvre.
+- Les passages convergent : tu peux les synthétiser directement en une réponse unifiée.
+
+EXTRAITS SOURCES :
+[1907_EC_c13] (1907_EC — L'Évolution créatrice (1907), body/De l'évolution de la vie. Mécanisme et finalité, p. 1-2)
+Je parle en effet de chacun de mes états comme s'il formait un bloc. Je dis bien que je change, mais le change. ment m'a l'air de résider dans le passage d'un état à l'état suivant : de chaque état, pris à part, j'aime à croire qu'il reste ce qu'il est pendant tout le temps qu'il se produit. Pourtant, un léger effort d'attention me révèlerait qu'il n'y a pas d'affection, pas de représentation, pas de volition qui ne se modifie à tout moment , si un état d'âme cessait de varier, sa durée cesserait de couler. Prenons le plus stable des états internes, la perception visuelle d'un objet extérieur immobile. L'objet a beau rester le même, j'ai beau le regarder du même côté, sous le même angle, au même jour : la vision que j'ai n'en diffère pas moins de celle que je viens d'avoir, quand ce ne serait que parce qu'elle a vieilli d'un instant. Ma mémoire est là, qui pousse quelque chose de ce passé dans ce présent, Mon état d'âme, en avançant sur la route du temps, s'enfle continuellement de la durée qu'il ramasse ; il fait, pour ainsi dire, boule de neige avec lui-même. A plus forte raison en est-il ainsi des états plus profondément intérieurs, sensations, affections, désirs, etc., qui ne correspondent pas, comme une simple perception visuelle, à un objet extérieur invariable. Mais il est commode de ne pas faire attention à ce changement ininterrompu, et de ne le remarquer que lorsqu'il devient assez gros pour imprimer au corps une nouvelle attitude, à l'attention une direction nouvelle. A ce moment précis on trouve qu'on a changé d'état. La vérité est qu'on change sans cesse, et que l'état lui-même est déjà du changement.
+
+QUESTION :
+Quel usage Bergson fait-il de l'image de la boule de neige pour illustrer la perception du changement ?

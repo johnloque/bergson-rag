@@ -1,0 +1,66 @@
+Your task is to judge the faithfulness of a series of statements based on a given context. For each statement you must return verdict as 1 if the statement can be directly inferred based on the context or 0 if the statement can not be directly inferred based on the context. Copy each statement word-by-word, and always write the reason in French.
+Please return the output in a JSON format that complies with the following schema as specified in JSON Schema:
+{"$defs": {"StatementFaithfulnessAnswer": {"properties": {"statement": {"description": "the original statement, word-by-word", "title": "Statement", "type": "string"}, "reason": {"description": "the reason of the verdict", "title": "Reason", "type": "string"}, "verdict": {"description": "the verdict(0/1) of the faithfulness.", "title": "Verdict", "type": "integer"}}, "required": ["statement", "reason", "verdict"], "title": "StatementFaithfulnessAnswer", "type": "object"}}, "properties": {"statements": {"items": {"$ref": "#/$defs/StatementFaithfulnessAnswer"}, "title": "Statements", "type": "array"}}, "required": ["statements"], "title": "NLIStatementOutput", "type": "object"}Do not use single quotes in your response but double quotes,properly escaped with a backslash.
+
+--------EXAMPLES-----------
+Example 1
+Input: {
+    "context": "John is a student at XYZ University. He is pursuing a degree in Computer Science. He is enrolled in several courses this semester, including Data Structures, Algorithms, and Database Management. John is a diligent student and spends a significant amount of time studying and completing assignments. He often stays late in the library to work on his projects.",
+    "statements": [
+        "John is majoring in Biology.",
+        "John is taking a course on Artificial Intelligence.",
+        "John is a dedicated student.",
+        "John has a part-time job."
+    ]
+}
+Output: {
+    "statements": [
+        {
+            "statement": "John is majoring in Biology.",
+            "reason": "Le contexte indique explicitement que John étudie l'informatique. Rien ne laisse penser qu'il étudie la biologie.",
+            "verdict": 0
+        },
+        {
+            "statement": "John is taking a course on Artificial Intelligence.",
+            "reason": "Le contexte énumère les cours que suit John, et l'intelligence artificielle n'en fait pas partie. On ne peut donc pas en déduire qu'il suit un cours d'IA.",
+            "verdict": 0
+        },
+        {
+            "statement": "John is a dedicated student.",
+            "reason": "Le contexte indique qu'il consacre beaucoup de temps à étudier et à faire ses devoirs, et qu'il reste souvent tard à la bibliothèque pour ses projets, ce qui témoigne de son application.",
+            "verdict": 1
+        },
+        {
+            "statement": "John has a part-time job.",
+            "reason": "Le contexte ne donne aucune information sur un emploi à temps partiel de John.",
+            "verdict": 0
+        }
+    ]
+}
+
+Example 2
+Input: {
+    "context": "Photosynthesis is a process used by plants, algae, and certain bacteria to convert light energy into chemical energy.",
+    "statements": [
+        "Albert Einstein was a genius."
+    ]
+}
+Output: {
+    "statements": [
+        {
+            "statement": "Albert Einstein was a genius.",
+            "reason": "Le contexte et l'affirmation n'ont aucun rapport.",
+            "verdict": 0
+        }
+    ]
+}
+-----------------------------
+
+Now perform the same with the following input
+input: {
+    "context": "Je parle en effet de chacun de mes états comme s'il formait un bloc. Je dis bien que je change, mais le change. ment m'a l'air de résider dans le passage d'un état à l'état suivant : de chaque état, pris à part, j'aime à croire qu'il reste ce qu'il est pendant tout le temps qu'il se produit. Pourtant, un léger effort d'attention me révèlerait qu'il n'y a pas d'affection, pas de représentation, pas de volition qui ne se modifie à tout moment , si un état d'âme cessait de varier, sa durée cesserait de couler. Prenons le plus stable des états internes, la perception visuelle d'un objet extérieur immobile. L'objet a beau rester le même, j'ai beau le regarder du même côté, sous le même angle, au même jour : la vision que j'ai n'en diffère pas moins de celle que je viens d'avoir, quand ce ne serait que parce qu'elle a vieilli d'un instant. Ma mémoire est là, qui pousse quelque chose de ce passé dans ce présent, Mon état d'âme, en avançant sur la route du temps, s'enfle continuellement de la durée qu'il ramasse ; il fait, pour ainsi dire, boule de neige avec lui-même. A plus forte raison en est-il ainsi des états plus profondément intérieurs, sensations, affections, désirs, etc., qui ne correspondent pas, comme une simple perception visuelle, à un objet extérieur invariable. Mais il est commode de ne pas faire attention à ce changement ininterrompu, et de ne le remarquer que lorsqu'il devient assez gros pour imprimer au corps une nouvelle attitude, à l'attention une direction nouvelle. A ce moment précis on trouve qu'on a changé d'état. La vérité est qu'on change sans cesse, et que l'état lui-même est déjà du changement.",
+    "statements": [
+        "Bergson utilise l'image de la boule de neige pour illustrer la perception du changement en soulignant que chaque état psychologique, même le plus stable, est en fait en constante évolution."
+    ]
+}
+Output: 

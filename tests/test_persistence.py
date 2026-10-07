@@ -37,9 +37,9 @@ from src.api.main import app
 from src.api.models import Conversation, Evaluation, Generation, RetrievedChunkRow, Turn
 from src.api.schemas import ChunkInput
 from src.generation.faithfulness import DEFAULT_JUDGE_MODEL
-from src.generation.prompt import CHUNK_JUDGMENT_INSTRUCTION
 from src.generation.signals import retrieval_confidence_tier
 from src.indexing.qdrant_index import COLLECTION_NAME, point_id_for
+from tests.prompt_markers import CHUNK_JUDGMENT_INSTRUCTION
 
 QDRANT_URL = "http://localhost:6333"
 

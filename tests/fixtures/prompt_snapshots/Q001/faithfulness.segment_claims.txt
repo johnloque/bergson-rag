@@ -1,0 +1,66 @@
+À partir d'une question et d'une réponse découpée en segments numérotés, parcours les segments dans l'ordre. Décompose chaque segment en une ou plusieurs affirmations pleinement compréhensibles seules. Aucune affirmation ne doit contenir de pronom : sers-toi des autres segments pour savoir à quoi renvoie un pronom. Une affirmation ne reprend que le contenu de son propre segment, jamais celui d'un autre. Chaque segment apparaît exactement une fois dans la sortie, sous son propre segment_id ; un segment qui n'affirme rien reçoit une liste d'affirmations vide. Rédige toutes les affirmations en français. Réponds au format JSON.
+Please return the output in a JSON format that complies with the following schema as specified in JSON Schema:
+{"$defs": {"SegmentClaims": {"properties": {"segment_id": {"description": "The number of the segment these claims come from", "title": "Segment Id", "type": "integer"}, "claims": {"description": "Fully understandable, standalone statements extracted from this segment, with no pronouns; empty if the segment asserts nothing", "items": {"type": "string"}, "title": "Claims", "type": "array"}}, "required": ["segment_id", "claims"], "title": "SegmentClaims", "type": "object"}}, "properties": {"segments": {"description": "One entry per input segment, in order, each with its claims", "items": {"$ref": "#/$defs/SegmentClaims"}, "title": "Segments", "type": "array"}}, "required": ["segments"], "title": "SegmentedClaimsOutput", "type": "object"}Do not use single quotes in your response but double quotes,properly escaped with a backslash.
+
+--------EXAMPLES-----------
+Example 1
+Input: {
+    "question": "Qui était René Descartes et pour quoi est-il connu ?",
+    "segments": [
+        {
+            "segment_id": 0,
+            "text": "Voici un bref aperçu."
+        },
+        {
+            "segment_id": 1,
+            "text": "Il était un philosophe et mathématicien français, souvent considéré comme le fondateur de la philosophie moderne."
+        },
+        {
+            "segment_id": 2,
+            "text": "Il est surtout connu pour la formule « je pense, donc je suis », et il a aussi inventé la géométrie analytique."
+        }
+    ]
+}
+Output: {
+    "segments": [
+        {
+            "segment_id": 0,
+            "claims": []
+        },
+        {
+            "segment_id": 1,
+            "claims": [
+                "René Descartes était un philosophe et mathématicien français.",
+                "René Descartes est souvent considéré comme le fondateur de la philosophie moderne."
+            ]
+        },
+        {
+            "segment_id": 2,
+            "claims": [
+                "René Descartes est surtout connu pour la formule « je pense, donc je suis ».",
+                "René Descartes a inventé la géométrie analytique."
+            ]
+        }
+    ]
+}
+-----------------------------
+
+Now perform the same with the following input
+input: {
+    "question": "Quel usage Bergson fait-il de l'image de la boule de neige pour illustrer la perception du changement ?",
+    "segments": [
+        {
+            "segment_id": 0,
+            "text": "Bergson utilise l'image de la boule de neige pour illustrer la perception du changement en soulignant que chaque état psychologique, même le plus stable, est en fait en constante évolution."
+        },
+        {
+            "segment_id": 1,
+            "text": "Selon lui, chaque état psychologique accumule de la durée, se gonfle comme une boule de neige, et ne reste pas le même tout au long de son existence."
+        },
+        {
+            "segment_id": 2,
+            "text": "Cette image met en évidence que le changement est intrinsèque à chaque état psychologique, et que l'illusion de la permanence d'un état vient de notre tendance à négliger l'incessante variation de chaque état."
+        }
+    ]
+}
+Output: 

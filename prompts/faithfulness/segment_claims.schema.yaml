@@ -1,0 +1,11 @@
+# Output-schema field descriptions for faithfulness.segment_claims
+# (segment_claims.md). RAGAS sends the output model's JSON schema to the
+# judge, these descriptions included, so they are prompt text.
+# Hand-editable. Checked at load time against SegmentClaims /
+# SegmentedClaimsOutput (src/generation/faithfulness.py): every field
+# described, nothing else.
+SegmentClaims:
+  segment_id: The number of the segment these claims come from
+  claims: Fully understandable, standalone statements extracted from this segment, with no pronouns; empty if the segment asserts nothing
+SegmentedClaimsOutput:
+  segments: One entry per input segment, in order, each with its claims

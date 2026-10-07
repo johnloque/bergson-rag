@@ -61,6 +61,7 @@ from litellm import ModelResponse
 from src.generation.chunk_judgment import ChunkJudgment, ChunkJudgmentLabel
 from src.generation.faithfulness import DEFAULT_JUDGE_MODEL, JUDGE_NUM_CTX, JUDGE_TEMPERATURE
 from src.generation.signals import GenerationChunk
+from src.prompts.loader import load_prompt, prompts_used
 
 # Mirrors src/generation/faithfulness.py's own _OLLAMA_PROVIDERS check (not
 # imported — that name is private to that module) for the same reason:
@@ -70,36 +71,18 @@ _OLLAMA_PROVIDERS = ("ollama", "ollama_chat")
 
 _VALID_LABELS: frozenset[str] = frozenset({"pertinent", "partiellement pertinent", "non pertinent"})
 
-_SYSTEM_PROMPT = (
-    "Tu es un assistant qui évalue la pertinence d'un extrait de texte par rapport à une "
-    "question, dans le cadre d'un corpus sur la philosophie de Henri Bergson. Tu réponds "
-    "strictement au format JSON demandé, sans aucun texte hors de cet objet JSON."
-)
-
-_INSTRUCTIONS = (
-    "Évalue si l'extrait ci-dessous permet de répondre à la question posée. Attribue une "
-    'étiquette parmi exactement ces trois valeurs : "pertinent", "partiellement pertinent", '
-    '"non pertinent". Rédige une justification de 2 à 4 phrases qui s\'appuie sur le contenu '
-    "concret de l'extrait (une idée, une image ou un terme qui s'y trouve réellement) — jamais "
-    "une formule générique qui vaudrait pour n'importe quel extrait. Réponds uniquement avec un "
-    'objet JSON de la forme {"label": "...", "justification": "..."}, sans texte avant ni après.'
-)
-
-_RETRY_INSTRUCTION = (
-    "Ta réponse précédente n'était pas un objet JSON valide de la forme "
-    '{"label": "...", "justification": "..."}. Réponds à nouveau, uniquement avec cet objet '
-    "JSON, sans aucun texte avant ou après."
-)
+# Prompt wording lives in prompts/judge_chunk/ (docs/prompts.md).
+_SYSTEM_PROMPT = load_prompt("judge_chunk.system")
+_RELEVANCE_PROMPT = load_prompt("judge_chunk.relevance")
+_RETRY_PROMPT = load_prompt("judge_chunk.retry")
 
 _JSON_OBJECT_PATTERN = re.compile(r"\{.*\}", re.DOTALL)
 
 
-def _build_prompt(query: str, chunk: GenerationChunk) -> str:
-    return (
-        f"{_INSTRUCTIONS}\n\n"
-        f"QUESTION :\n{query}\n\n"
-        f"EXTRAIT [{chunk.chunk_id}] ({chunk.work_id}) :\n{chunk.text}"
-    )
+def judge_chunk_prompts_used() -> dict[str, dict[str, Any]]:
+    """`prompts_used` record for one `judge_chunk` call: every prompt it may
+    send, the retry message included whether or not a retry happened."""
+    return prompts_used(_SYSTEM_PROMPT, _RELEVANCE_PROMPT, _RETRY_PROMPT)
 
 
 def _parse_response(content: str) -> ChunkJudgment:
@@ -132,8 +115,8 @@ def judge_chunk(
     )
 
     messages = [
-        {"role": "system", "content": _SYSTEM_PROMPT},
-        {"role": "user", "content": _build_prompt(query, chunk)},
+        {"role": "system", "content": _SYSTEM_PROMPT.render()},
+        {"role": "user", "content": _RELEVANCE_PROMPT.render(query=query, chunk=chunk)},
     ]
 
     last_error: ValueError | None = None
@@ -153,7 +136,7 @@ def judge_chunk(
             messages = [
                 *messages,
                 {"role": "assistant", "content": content},
-                {"role": "user", "content": _RETRY_INSTRUCTION},
+                {"role": "user", "content": _RETRY_PROMPT.render()},
             ]
     assert last_error is not None
     raise last_error

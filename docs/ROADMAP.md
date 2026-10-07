@@ -403,6 +403,9 @@ gold-dataset-volume threshold already established for this class of
 decision throughout the project (stems vs. lemmas, cross-encoder vs.
 multi-vector — see Sprint 2 and Sprint 4's deferred notes) — unchanged
 principle, just a fuller list of candidates now queued behind it.
+Prompt variants are compared through versioned, hashed files under
+`prompts/`, each answer/evaluation/judgment recording which versions
+produced it: [`docs/prompts.md`](prompts.md).
 
 ### Sprint 15 — Portfolio polish
 Complete README, "Known limitations & scope" section finalized,

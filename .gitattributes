@@ -1,0 +1,3 @@
+# Golden prompt snapshots (tests/test_prompt_snapshots.py) are compared
+# byte-for-byte: never let git rewrite their line endings on checkout.
+tests/fixtures/prompt_snapshots/** -text

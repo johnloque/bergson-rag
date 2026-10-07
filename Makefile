@@ -1,4 +1,4 @@
-.PHONY: fetch-data build-index setup-ollama setup-ml-service run run-with-ollama quickstart test-connectivity test-frontend-arg smoke-test
+.PHONY: fetch-data build-index setup-ollama setup-ml-service run run-with-ollama quickstart test-connectivity test-frontend-arg test-container-prompts smoke-test
 
 # Fetches the paragraph-level XML corpus (scripts/fetch_corpus.sh). First
 # step, no other dependency.
@@ -82,6 +82,11 @@ test-connectivity:
 
 test-frontend-arg:
 	./scripts/test_frontend_arg.sh
+
+# Builds the api image itself (no running stack needed): checks the loader
+# finds prompts/ inside it (docs/prompts.md).
+test-container-prompts:
+	./scripts/test_container_prompts.sh
 
 smoke-test:
 	uv run python scripts/smoke_test.py

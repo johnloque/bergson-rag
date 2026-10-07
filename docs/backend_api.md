@@ -36,17 +36,23 @@ Schema (`src/api/models.py`):
   against that turn, not accumulated, since a regeneration may curate a
   different chunk selection than the initial call.
 - `generations(id, turn_id, model, chunk_ids, answer, chunk_judgments_used,
-  created_at)`
+  prompts_used, created_at)`
 - `evaluations(id, generation_id, structural_flags, faithfulness_annotations,
-  should_auto_expand, created_at)` — `generation_id` carries a unique
+  should_auto_expand, prompts_used, created_at)` — `generation_id` carries a unique
   constraint (`fix/answer-verification`; see "`/evaluate` idempotency"
   below). `retrieval_confidence_tier` lives on `generations` instead (moved
   there by the retrieval-confidence-split correction, below), not on this
   row.
 - `chunk_judgments(turn_id, chunk_id, label, justification, model,
-  created_at)` — composite primary key `(turn_id, chunk_id)`, upsert
+  prompts_used, created_at)` — composite primary key `(turn_id, chunk_id)`, upsert
   semantics: a chunk judged twice in the same turn overwrites, never
   accumulates duplicate rows.
+
+`prompts_used` (nullable JSON, `refactor/prompts-to-files`): which prompt
+versions the row's LLM calls used, `{prompt_id: {version, hash, custom}}`.
+NULL on rows written before that branch — never backfilled. Added to an
+existing `data/app.db` at startup by `_sync_additive_columns`
+(`src/api/db.py`). See [`docs/prompts.md`](prompts.md).
 
 ### Accepted limitation: chunk text is not snapshotted
 

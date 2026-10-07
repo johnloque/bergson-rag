@@ -1,0 +1,278 @@
+{
+  "Q001": {
+    "signals": {
+      "works": [
+        "1907_EC"
+      ],
+      "convergence": null,
+      "is_convergent": true,
+      "is_confident": true
+    },
+    "chunks": [
+      {
+        "rerank_score": 0.68,
+        "rrf_score": 0.03,
+        "work_id": "1907_EC",
+        "chunk_id": "1907_EC_c13",
+        "section_id": "1907_EC_s3",
+        "section_path": "body/De l'évolution de la vie. Mécanisme et finalité",
+        "paragraph_ids": [
+          "1907_EC_p13"
+        ],
+        "page_start": {
+          "number": 1,
+          "display": "1"
+        },
+        "page_end": {
+          "number": 2,
+          "display": "2"
+        },
+        "text": "Je parle en effet de chacun de mes états comme s'il formait un bloc. Je dis bien que je change, mais le change. ment m'a l'air de résider dans le passage d'un état à l'état suivant : de chaque état, pris à part, j'aime à croire qu'il reste ce qu'il est pendant tout le temps qu'il se produit. Pourtant, un léger effort d'attention me révèlerait qu'il n'y a pas d'affection, pas de représentation, pas de volition qui ne se modifie à tout moment , si un état d'âme cessait de varier, sa durée cesserait de couler. Prenons le plus stable des états internes, la perception visuelle d'un objet extérieur immobile. L'objet a beau rester le même, j'ai beau le regarder du même côté, sous le même angle, au même jour : la vision que j'ai n'en diffère pas moins de celle que je viens d'avoir, quand ce ne serait que parce qu'elle a vieilli d'un instant. Ma mémoire est là, qui pousse quelque chose de ce passé dans ce présent, Mon état d'âme, en avançant sur la route du temps, s'enfle continuellement de la durée qu'il ramasse ; il fait, pour ainsi dire, boule de neige avec lui-même. A plus forte raison en est-il ainsi des états plus profondément intérieurs, sensations, affections, désirs, etc., qui ne correspondent pas, comme une simple perception visuelle, à un objet extérieur invariable. Mais il est commode de ne pas faire attention à ce changement ininterrompu, et de ne le remarquer que lorsqu'il devient assez gros pour imprimer au corps une nouvelle attitude, à l'attention une direction nouvelle. A ce moment précis on trouve qu'on a changé d'état. La vérité est qu'on change sans cesse, et que l'état lui-même est déjà du changement."
+      }
+    ],
+    "chunk_judgments": null,
+    "query": "Quel usage Bergson fait-il de l'image de la boule de neige pour illustrer la perception du changement ?",
+    "answer": " Bergson utilise l'image de la boule de neige pour illustrer la perception du changement en soulignant que chaque état psychologique, même le plus stable, est en fait en constante évolution. Selon lui, chaque état psychologique accumule de la durée, se gonfle comme une boule de neige, et ne reste pas le même tout au long de son existence. Cette image met en évidence que le changement est intrinsèque à chaque état psychologique, et que l'illusion de la permanence d'un état vient de notre tendance à négliger l'incessante variation de chaque état."
+  },
+  "Q002": {
+    "signals": {
+      "works": [
+        "1907_EC",
+        "1934_PM"
+      ],
+      "convergence": 0.61,
+      "is_convergent": true,
+      "is_confident": true
+    },
+    "chunks": [
+      {
+        "rerank_score": 0.52,
+        "rrf_score": 0.03,
+        "work_id": "1907_EC",
+        "chunk_id": "1907_EC_c25",
+        "section_id": "1907_EC_s3",
+        "section_path": "body/De l'évolution de la vie. Mécanisme et finalité",
+        "paragraph_ids": [
+          "1907_EC_p25"
+        ],
+        "page_start": {
+          "number": 10,
+          "display": "10"
+        },
+        "page_end": {
+          "number": 10,
+          "display": "10"
+        },
+        "text": "Pourtant la succession est un fait incontestable, même dans le monde matériel. Nos raisonnements sur les systèmes isolés ont beau impliquer que l'histoire passée, présente et future de chacun d'eux serait dépliable tout d'un coup, en éventail ; cette histoire ne s'en déroule pas moins au fur et à mesure, comme si elle occupait une durée analogue à la nôtre. Si je veux me préparer un verre d'eau sucrée, j'ai beau faire, je dois attendre que le sucre fonde. Ce petit fait est gros d'enseignements. Car le temps que j'ai à attendre n'est plus ce temps mathématique qui s'appliquerait aussi bien le long de l'histoire entière du monde matériel, lors même qu'elle serait étalée tout d'un coup dans l'espace. Il coïncide avec mon impatience, c'est-à-dire avec une certaine portion de ma durée à moi, qui n'est pas allongeable ni rétrécissable à volonté. Ce n'est plus du pensé, c'est du vécu. Ce n'est plus une relation, c'est de l'absolu. Qu'est-ce à dire, sinon que le verre d'eau, le sucre, et le processus de dissolution du sucre dans l'eau sont sans doute des abstractions, et que le Tout dans lequel ils ont été découpés par mes sens et mon entendement progresse peut-être à la manière d'une conscience ?"
+      },
+      {
+        "rerank_score": 0.47,
+        "rrf_score": 0.03,
+        "work_id": "1934_PM",
+        "chunk_id": "1934_PM_c16",
+        "section_id": "1934_PM_s2",
+        "section_path": "body/Introduction (première partie)",
+        "paragraph_ids": [
+          "1934_PM_p16"
+        ],
+        "page_start": {
+          "number": 18,
+          "display": "18"
+        },
+        "page_end": {
+          "number": 19,
+          "display": "19"
+        },
+        "text": "Il est vrai qu'à côté des consciences qui vivent cette durée irrétrécissable et inextensible, il y a des systèmes matériels sur lesquels le temps ne fait que glisser. Des phénomènes qui s'y succèdent on peut réellement dire qu'ils sont le déroulement d'un éventail, ou mieux d'un film cinématographique. Calculables par avance, ils préexistaient, sous forme de possibles, à leur réalisation. Tels sont les systèmes qu'étudient l'astronomie, la physique et la chimie. L'univers matériel, dans son ensemble, forme-t-il un système de ce genre ? Quand notre science le suppose, elle entend simplement par là qu'elle laissera de côté, dans l'univers, tout ce qui n'est pas calculable. Mais le philosophe, qui ne veut rien laisser de côté, est bien obligé de constater que les états de notre monde matériel sont contemporains de l'histoire de notre conscience. Comme celle-ci dure, il faut que ceux-là se relient de quelque façon à la durée réelle. En théorie, le film sur lequel sont dessinés les états successifs d'un système entièrement calculable pourrait se dérouler avec n'importe quelle vitesse sans que rien y fût changé. En fait, cette vitesse est déterminée, puisque le déroulement du film correspond à une certaine durée de notre vie intérieure, - à celle-là et non pas à un autre. Le film qui se déroule est donc vraisemblablement attaché à de la conscience qui dure, et qui en règle le mouvement. Quand on veut préparer un verre d'eau sucrée, avons-nous dit, force est bien d'attendre que le sucre fonde. Cette nécessité d'attendre est le fait significatif. Elle exprime que, si l'on peut découper dans l'univers des systèmes pour lesquels le temps n'est qu'une abstraction, une relation, un nombre, l'univers lui-même est autre chose. Si nous pouvions l'embrasser dans son ensemble, inorganique mais entretissu d'êtres organisés, nous le verrions prendre sans cesse des formes aussi neuves, aussi originales, aussi imprévisibles que nos états de conscience."
+      },
+      {
+        "rerank_score": 0.41,
+        "rrf_score": 0.03,
+        "work_id": "1907_EC",
+        "chunk_id": "1907_EC_c398",
+        "section_id": "1907_EC_s6",
+        "section_path": "body/Le mécanisme cinématographique de la pensée et l'illusion mécanistique. Coup d'œil sur l'histoire des systèmes. Le devenir réel et le faux évolutionisme",
+        "paragraph_ids": [
+          "1907_EC_p398"
+        ],
+        "page_start": {
+          "number": 366,
+          "display": "366"
+        },
+        "page_end": {
+          "number": 367,
+          "display": "367"
+        },
+        "text": "Pourtant la succession existe, j'en ai conscience, c'est un fait. Quand un processus physique s'accomplit sous mes yeux, il ne dépend pas de ma perception ni de mon inclination de l'accélérer ou de le ralentir. Ce qui importe au physicien, c'est le nombre d'unités de durée que le processus remplit : il n'a pas à s'inquiéter des unités elles-mêmes, et c'est pourquoi les états successifs du monde pourraient être déployés d'un seul coup dans l'espace sans que sa science en fût changée et sans qu'il cessât de parler du temps. Mais pour nous, êtres conscients, ce sont les unités qui importent, car nous ne comptons pas des extrémités d'intervalle, nous sentons et vivons les intervalles eux-mêmes. Or, nous avons conscience de ces intervalles comme d'intervalles déterminés. J'en reviens toujours à mon verre d'eau sucrée : pourquoi dois-je attendre que le sucre fonde ? Si la durée du phénomène est relative pour le physicien, en ce qu'elle se réduit à un certain nombre d'unités de temps et que les unités elles-mêmes sont ce qu'on voudra, cette durée est un absolu pour ma conscience, car elle coïncide avec un certain degré d'impatience qui est, lui, rigoureusement déterminé. D'où vient cette détermination ? Qu'est-ce qui m'oblige à attendre et à attendre pendant une certaine longueur de durée psychologique qui s'impose, sur laquelle je ne puis rien ? Si la succession, en tant que distincte de la simple juxtaposition, n'a pas d'efficace réelle, si le temps n'est pas une espèce de force, pourquoi l'univers déroule-t-il ses états successifs avec une vitesse qui, au regard de ma conscience, est un véritable absolu ? pourquoi avec cette vitesse déterminée plutôt qu'avec n'importe quelle autre ? pourquoi pas avec une vitesse infinie ? D'où vient, en d'autres termes, que tout n'est pas donné d'un seul coup, comme sur la bande du cinématographe ? Plus j'approfondis ce point, plus il m'apparaît que, si l’avenir est condamné à succéder au présent au lieu d'être donné à côté de lui, c'est qu'il n'est pas tout à fait déterminé au moment présent, et que, si le temps occupé par cette succession est autre chose qu'un nombre, s'il a, pour la conscience qui y est installée, une valeur et une réalité absolues, c'est qu'il s'y crée sans cesse, non pas sans doute dans tel ou tel système artificiellement isolé, comme un verre d'eau sucrée, mais dans le tout concret avec lequel ce système fait corps, de l'imprévisible et du nouveau. Cette durée peut n'être pas le fait de la matière même, mais celle de la Vie qui en remonte le cours : les deux mouvements n'en sont pas moins solidaires l'un de l'autre. La durée de l'univers ne doit donc faire qu'un avec la latitude de création qui y peut trouver place."
+      }
+    ],
+    "chunk_judgments": null,
+    "query": "Quelle thèse Bergson explique-t-il à travers l'image de la fonte d'un morceau de sucre dans un verre d'eau ?",
+    "answer": " Dans l'œuvre de Henri Bergson, l'image de la fonte d'un morceau de sucre dans un verre d'eau est utilisée pour expliquer la thèse selon laquelle la durée est une création continue de formes nouvelles et non pas un simple déroulement de temps. Bergson souligne que lorsque l'on attend que le sucre fonde, il y a une durée psychologique déterminée qui s'impose, indiquant que la succession dans la durée a une valeur et une réalité absolues pour la conscience. Il affirme que cette durée ne peut être réduite à un nombre, comme le temps dans le monde matériel, mais plutôt est un absolu qui s'y crée sans cesse. Il suggère que l'univers lui-même, dans son ensemble, ne peut être considéré comme un système entièrement calculable, mais plutôt comme un tout concret qui prend sans cesse des formes nouvelles et originales, comme nos états de conscience."
+  },
+  "Q007": {
+    "signals": {
+      "works": [
+        "1888_EDIC",
+        "1934_PM"
+      ],
+      "convergence": 0.48,
+      "is_convergent": false,
+      "is_confident": true
+    },
+    "chunks": [
+      {
+        "rerank_score": 0.62,
+        "rrf_score": 0.03,
+        "work_id": "1934_PM",
+        "chunk_id": "1934_PM_c45",
+        "section_id": "1934_PM_s3",
+        "section_path": "body/Introduction (deuxième partie)",
+        "paragraph_ids": [
+          "1934_PM_p45"
+        ],
+        "page_start": {
+          "number": 61,
+          "display": "61"
+        },
+        "page_end": {
+          "number": 64,
+          "display": "64"
+        },
+        "text": "Déjà elle nous affranchit de certaines servitudes spéculatives quand elle pose le problème de l'esprit en termes d'esprit et non plus de matière, quand, d'une manière générale, elle nous dispense d'employer les concepts à un travail pour lequel la plupart ne sont pas faits. Ces concepts sont inclus dans les mots. Ils ont, le plus souvent, été élaborés par l'organisme social en vue d'un objet qui n'a rien de métaphysique. Pour les former, la société a découpé le réel selon ses besoins. Pourquoi la philosophie accepteraitelle une division qui a toutes chances de ne pas correspondre aux articulations du réel ? Elle l'accepte pourtant d'ordinaire. Elle subit le problème tel qu'il est posé par le langage. Elle se condamne donc par avance à recevoir une solution toute faite ou, en mettant les choses au mieux, à simplement choisir entre les deux ou trois solutions, seules possibles, qui sont coéternelles à cette position du problème. Autant vaudrait dire que toute vérité est déjà virtuellement connue, que le modèle en est déposé dans les cartons administratifs de la cité, et que la philosophie est un jeu de puzzle où il s'agit de reconstituer, avec des pièces que la société nous fournit, le dessin qu'elle ne veut pas nous montrer. Autant vaudrait assigner au philosophe le rôle et l'attitude de l'écolier, qui cherche la solution en se disant qu'un coup d'œil indiscret la lui montrerait, notée en regard de l'énoncé, dans le cahier du maître. Mais la vérité est qu'il s'agit, en philosophie et même ailleurs, de trouver le problème et par conséquent de le poser, plus encore que de le résoudre. Car un problème spéculatif est résolu dès qu'il est bien posé. J'entends, par là que la solution en existe alors aussitôt, bien qu'elle puisse rester cachée et, pour ainsi dire, couverte : il ne reste plus qu'à la découvrir. Mais poser le problème n'est pas simplement découvrir, c'est inventer. La découverte porte sur ce qui existe déjà, actuellement ou virtuellement ; elle était donc sûre de venir tôt ou tard. L'invention donne l'être à ce qui n'était pas, elle aurait pu ne venir jamais. Déjà en mathématiques, à plus forte raison en métaphysique, l'effort d'invention consiste le plus souvent à susciter le problème, à créer les termes en lesquels il se posera. Position et solution du problème sont bien près ici de s'équivaloir : les vrais grands problèmes ne sont posés que lorsqu'ils sont résolus. Mais beaucoup de petits problèmes sont dans le même cas. J'ouvre un traité élémentaire de philosophie. Un des premiers chapitres traite du plaisir et de la douleur. On y pose à l'élève une question telle que celle-ci : \" Le plaisir est-il ou n'est-il pas le bonheur ? \" Mais il faudrait d'abord savoir si plaisir et bonheur sont des genres correspondant à un sectionnement naturel des choses. À la rigueur, la phrase pourrait signifier simplement : \" Vu le sens habituel des termes plaisir et bonheur, doit-on dire que le bonheur soit une suite de plaisirs ? \" Alors, c'est une question de lexique qui se pose ; on ne la résoudra qu'on cherchant comment les mots \" plaisir \" et \" bonheur \" ont été employés par les écrivains qui ont le mieux manié la langue. On aura d'ailleurs travaillé utilement ; on aura mieux défini deux termes usuels, c'est-à-dire deux habitudes sociales. Mais si l'on prétend faire davantage, saisir des réalités et non pas mettre au point des conventions, pourquoi veut-on que des termes peut-être artificiels (on ne sait s'ils le sont ou s'ils ne le sont pas, puisqu'on n'a pas encore étudié l'objet) posent un problème qui concerne la nature même des choses ? Supposez qu'en examinant les états groupés sous le nom de plaisir on ne leur découvre rien de commun, sinon d'être des états que l'homme recherche : l'humanité aura classé ces choses très différentes dans un même genre, parce qu'elle leur trouvait le même intérêt pratique et réagissait à toutes de la même manière. Supposez, d'autre part, qu'on aboutisse à un résultat analogue en analysant l'idée de bonheur. Aussitôt le problème s'évanouit, ou plutôt se dissout en problèmes tout nouveaux dont nous ne pourrons rien savoir et dont nous ne posséderons même pas les termes avant d'avoir étudié en elle-même l'activité humaine sur laquelle la société avait pris du dehors, pour former les idées générales de plaisir et de bonheur, des vues peut-être artificielles. Encore faudra-t-il s'être assuré d'abord que le concept d'\" activité humaine \" répond lui-même à une division naturelle. Dans cette désarticulation du réel selon ses tendances propres gît la difficulté principale, dès qu'on a quitté le domaine de la matière pour celui de l'esprit."
+      },
+      {
+        "rerank_score": 0.55,
+        "rrf_score": 0.03,
+        "work_id": "1888_EDIC",
+        "chunk_id": "1888_EDIC_c1",
+        "section_id": "1888_EDIC_s1",
+        "section_path": "front/Avant-propos",
+        "paragraph_ids": [
+          "1888_EDIC_p1"
+        ],
+        "page_start": {
+          "number": null,
+          "display": "avant la p. 1"
+        },
+        "page_end": {
+          "number": null,
+          "display": "avant la p. 1"
+        },
+        "text": "Nous nous exprimons nécessairement par des mots, et nous pensons le plus souvent dans l'espace. En d'autres termes, le langage exige que nous établissions entre nos idées les mêmes distinctions nettes et précises, la même discontinuité qu'entre les objets matériels. Cette assimilation est utile dans la vie pratique, et nécessaire dans la plupart des sciences. Mais on pourrait se demander si les difficultés insurmontables que certains problèmes philosophiques soulèvent ne viendraient pas de ce qu'on s'obstine à juxtaposer dans l'espace les phénomènes qui n'occupent point d'espace, et si, en faisant abstraction des grossières images autour desquelles le combat se livre, on n'y mettrait pas parfois un terme. Quand une traduction illégitime de l'inétendu en étendu, de la qualité en quantité, a installé la contradiction au cœur même de la question posée est-il étonnant que la contradiction se retrouve dans les solutions qu'on en donne?"
+      },
+      {
+        "rerank_score": 0.44,
+        "rrf_score": 0.03,
+        "work_id": "1934_PM",
+        "chunk_id": "1934_PM_c60",
+        "section_id": "1934_PM_s3",
+        "section_path": "body/Introduction (deuxième partie)",
+        "paragraph_ids": [
+          "1934_PM_p60"
+        ],
+        "page_start": {
+          "number": 85,
+          "display": "85"
+        },
+        "page_end": {
+          "number": 88,
+          "display": "88"
+        },
+        "text": "À vrai dire, la philosophie est tout près d'en venir là. Le changement s'est déjà fait sur certains points. Si nos vues furent généralement jugées paradoxales quand elles parurent, quelques-unes sont aujourd'hui banales ; d'autres sont en passe de le devenir. Reconnaissons qu'elles ne pouvaient être acceptées d'abord. Il eût fallu s'arracher à des habitudes profondément enracinées, véritables prolongements de la nature. Toutes les manières de parler, de penser, de percevoir impliquent en effet que l'immobilité et l'immutabilité sont de droit, que le mouvement et le changement viennent se surajouter, comme des accidents, à des choses qui par elles-mêmes ne se meuvent pas, et en elles-mêmes ne changent pas. La représentation du changement est celle de qualités ou d'états qui se succéderaient dans une substance. Chacune des qualités, chacun des états serait du stable, le changement étant fait de leur succession : quant à la substance, dont le rôle est de supporter les états et les qualités qui se succèdent, elle serait la stabilité même. Telle est la logique immanente à nos langues, et formulée une fois pour toutes par Aristote : l'intelligence a pour essence de juger, et le jugement s'opère par l'attribution d'un prédicat à un sujet. Le sujet, par cela seul qu'on le nomme, est défini comme invariable ; la variation résidera dans la diversité des états qu'on affirmera de lui tour à tour. En procédant ainsi par apposition d'un prédicat à un sujet, du stable au stable, nous suivons la pente de notre intelligence, nous nous conformons aux exigences de notre langage, et, pour tout dire, nous obéissons à la nature. Car la nature a prédestiné l'homme à la vie sociale ; elle a voulu le travail en commun : et ce travail sera possible si nous faisons passer d'un côté la stabilité absolument définitive du sujet, de l'autre les stabilités provisoirement définitives des qualités et des états, qui se trouveront être des attributs. En énonçant le sujet, nous adossons notre communication à une connaissance que nos interlocuteurs possèdent déjà, puisque la substance est censée invariable ; ils savent désormais sur quel point diriger leur attention ; viendra alors l'information que nous voulons leur donner, dans l'attente de laquelle nous les placions en introduisant la substance, et que leur apporte l'attribut. Mais ce n'est pas seulement en nous façonnant pour la vie sociale, en nous laissant toute latitude pour l'organisation de la société, en rendant ainsi nécessaire le langage, que la nature nous a prédestinés à voir dans le changement et le mouvement des accidents, à ériger l'immutabilité et l'immobilité en essences ou substances, en supports. Il faut ajouter que notre perception procède elle-même selon cette philosophie. Elle découpe, dans la continuité de l'étendue, des corps choisis précisément de telle manière qu'ils puissent être traités comme invariables pendant qu'on les considère. Quand la variation est trop forte pour ne pas frapper, on dit que l'état auquel on avait affaire a cédé la place à un autre, lequel ne variera pas davantage. Ici encore c'est la nature, préparatrice de l'action individuelle et sociale, qui a tracé les grandes lignes de notre langage et de notre pensée, sans les faire d'ailleurs coïncider ensemble, et en laissant aussi une large place à la contingence et à la variabilité. Il suffira, pour s'en convaincre, de comparer à notre durée ce qu'on pourrait appeler la durée des choses : deux rythmes bien différents, calculés de telle manière que dans le plus court intervalle perceptible de notre temps tiennent des trillions d'oscillations ou plus généralement d'événements extérieurs qui se répètent : cette immense histoire, que nous mettrions des centaines de siècles à dérouler, nous l'appréhendons dans une synthèse indivisible. Ainsi la perception, la pensée, le langage, toutes les activités individuelles ou sociales de l'esprit conspirent à nous mettre en présence d'objets que nous pouvons tenir pour invariables et immobiles pendant que nous les considérons, comme aussi en présence de personnes, y compris la nôtre, qui deviendront à nos yeux des objets et, par là même, des substances invariables. Comment déraciner une inclination aussi profonde ? Comment amener l'esprit humain à renverser le sens de son opération habituelle, à partir du changement et du mouvement, envisagés comme la réalité même, et à ne plus voir dans les arrêts ou les états que des instantanés pris sur du mouvant ? Il fallait lui montrer que, si la marche habituelle de la pensée est pratiquement utile, commode pour la conversation, la coopération, l'action, elle conduit à des problèmes philosophiques qui sont et qui resteront insolubles, étant posés à l'envers. C'est précisément parce qu'on les voyait insolubles, et parce qu'ils n'apparaissaient pas comme mal posés, que l'on concluait à la relativité de toute connaissance et à l'impossibilité d'atteindre l'absolu. Le succès du positivisme et du kantisme, attitudes d'esprit à peu près générales quand nous commencions à philosopher, venait principalement de là. À l'attitude humiliée on devait renoncer peu à peu, à mesure qu'on apercevrait la vraie cause des antinomies irréductibles. Celles-ci étaient de fabrication humaine. Elles ne venaient pas du fond des choses, mais d'un transport automatique, à la spéculation, des habitudes contractées dans l'action. Ce qu'un laisser-aller de l'intelligence avait fait, un effort de l'intelligence pouvait le défaire. Et ce serait pour l'esprit humain une libération."
+      },
+      {
+        "rerank_score": 0.38,
+        "rrf_score": 0.03,
+        "work_id": "1934_PM",
+        "chunk_id": "1934_PM_c68",
+        "section_id": "1934_PM_s3",
+        "section_path": "body/Introduction (deuxième partie)",
+        "paragraph_ids": [
+          "1934_PM_p68"
+        ],
+        "page_start": {
+          "number": 99,
+          "display": "99"
+        },
+        "page_end": {
+          "number": 103,
+          "display": "103"
+        },
+        "text": "Rien de précis, au contraire, dans la conversation, qui est la source ordinaire de la \" critique \". D'où viennent les idées qui s'y échangent ? Quelle est la portée des mots ? Il ne faut pas croire que la vie sociale soit une habitude acquise et transmise. L'homme est organisé pour la cité comme la fourmi pour la fourmilière, avec cette différence pourtant que la fourmi possède les moyens tout faits d'atteindre le but, tandis que nous apportons ce qu'il faut pour les réinventer et par conséquent pour en varier la forme. Chaque mot de notre langue a donc beau être conventionnel, le langage n'est pas une convention, et il est aussi naturel à l'homme de parler que de marcher. Or, quelle est la fonction primitive du langage ? C'est d'établir une communication en vue d'une coopération. Le langage transmet des ordres ou des avertissements. Il prescrit ou il décrit. Dans le premier cas, c'est l'appel à l'action immédiate ; dans le second, c'est le signalement de la chose ou de quelqu'une de ses propriétés, en vue de l'action future. Mais, dans un cas comme dans l'autre, la fonction est industrielle, commerciale, militaire, toujours sociale. Les choses que le langage décrit ont été découpées dans le réel par la perception humaine en vue du travail humain. Les propriétés qu'il signale sont les appels de la chose à une activité humaine. Le mot sera donc le même, comme nous le disions, quand la démarche suggérée sera la même, et notre esprit attribuera à des choses diverses la même propriété, se les représentera de la même manière, les groupera enfin sous la même idée, partout où la suggestion du même parti à tirer, de la même action à faire, suscitera le même mot. Telles sont les origines du mot et de l'idée. L'un et l'autre ont sans doute évolué. Ils ne sont plus aussi grossièrement utilitaires. Ils restent utilitaires cependant. La pensée sociale ne peut pas ne pas conserver sa structure originelle. Est-elle intelligence ou intuition ? Je veux bien que l'intuition y fasse filtrer sa lumière : il n'y a pas de pensée sans esprit de finesse, et l'esprit de finesse est le reflet de l'intuition dans l'intelligence. Je veux bien aussi que cette part si modique d'intuition se soit élargie, qu'elle ait donné naissance à la poésie, puis à la prose, et converti en instruments d'art les mots qui n'étaient d'abord que des signaux : par les Grecs surtout s'est accompli ce miracle. Il n'en est pas moins vrai que pensée et langage, originellement destinés à organiser le travail des hommes dans l'espace, sont d'essence intellectuelle. Mais c'est nécessairement de l'intellectualité vague, - adaptation très générale de l'esprit à la matière que la société doit utiliser. Que la philosophie s'en soit d'abord contentée et qu'elle ait commencé par être dialectique pure, rien de plus naturel. Elle ne disposait pas d'autre chose. Un Platon, un Aristote adoptent le découpage de la réalité qu'ils trouvent tout fait dans le langage : \" dialectique \", qui se rattache à dialegein, dialegesthai, signifie en même temps \" dialogue \" et \" distribution \" ; une dialectique comme celle de Platon était à la fois une conversation où l'on cherchait à se mettre d'accord sur le sens d'un mot et une répartition des choses selon les indications du langage. Mais tôt ou tard ce système d'idées calquées sur les mots devait céder la place à une connaissance exacte représentée par des signes plus précis : la science se constituerait alors en prenant explicitement pour objet la matière, pour moyen l'expérimentation, pour idéal la mathématique ; l'intelligence arriverait ainsi au complet approfondissement de la matérialité et par conséquent aussi d'elle-même. Tôt ou tard aussi se développerait une philosophie qui s'affranchirait à son tour du mot, mais cette fois pour aller en sens inverse de la mathématique et pour accentuer, de la connaissance primitive et sociale, l'intuitif au lieu de l'intellectuel. Entre l'intuition et l'intelligence ainsi intensifiées le langage devait pourtant demeurer. Il reste, en effet, ce qu'il a toujours été. Il a beau s'être chargé de plus de science et de plus de philosophie ; il n'en continue pas moins à accomplir sa fonction. L'intelligence, qui se confondait d'abord avec lui et qui participait de son imprécision, s'est précisée en science : elle s'est emparée de la matière. L'intuition, qui lui faisait sentir son influence, voudrait s'élargir en philosophie et devenir coextensive à l'esprit. Entre elles cependant, entre ces deux formes de la pensée solitaire subsiste la pensée en commun, qui fut d'abord toute la pensée humaine. C'est elle que le langage continue à exprimer. Il s'est lesté de science, je le veux bien ; mais l'esprit scientifique exige que tout soit remis en question à tout instant, et le langage a besoin de stabilité. Il est ouvert à la philosophie : mais l'esprit philosophique sympathise avec la rénovation et la réinvention sans fin qui sont au fond des choses, et les mots ont un sens défini, une valeur conventionnelle relativement fixe ; ils ne peuvent exprimer le nouveau que comme un réarrangement de l'ancien. On appelle couramment et peut-être imprudemment \" raison \" cette logique conservatrice qui régit la pensée en commun : conversation ressemble beaucoup à conservation. Elle est là chez elle. Et elle y exerce une autorité légitime. Théoriquement, en effet, la conversation ne devrait porter que sur les choses de la vie sociale. Et l'objet essentiel de la société est d'insérer une certaine fixité dans la mobilité universelle. Autant de sociétés, autant d'îlots consolidés, çà et là, dans l'océan du devenir. Cette consolidation est d'autant plus parfaite que l'activité sociale est plus intelligente. L'intelligence générale, faculté d'arranger \" raisonnablement \" les concepts et de manier convenablement les mots, doit donc concourir à la vie sociale, comme l'intelligence, au sens plus étroit, fonction mathématique de l'esprit, préside à la connaissance de la matière. C'est à la première surtout que l'on pense quand on dit d'un homme qu'il est intelligent. On entend par là qu'il a de l'habileté et de la facilité à marier ensemble les concepts usuels pour en tirer des conclusions probables. On ne peut d'ailleurs que lui en savoir gré, tant qu'il s'en tient aux choses de la vie courante, pour laquelle les concepts ont été faits. Mais on n'admettrait pas qu'un homme simplement intelligent se mêlât de trancher les questions scientifiques, alors que l'intelligence précisée en science devient esprit mathématique, physique, biologique, et substitue aux mots des signes mieux appropriés. À plus forte raison devrait-on l'interdire en philosophie, alors que les questions posées ne relèvent plus de la seule intelligence. Mais non, il est entendu que l'homme intelligent est ici un homme compétent. C'est contre quoi nous protestons d'abord. Nous mettons très haut l'intelligence. Mais nous avons en médiocre estime l'\" homme intelligent \", habile à parler vraisemblablement de toutes choses."
+      }
+    ],
+    "chunk_judgments": {
+      "1934_PM_c45": {
+        "label": "pertinent",
+        "justification": "L'extrait décrit directement comment le langage découpe le réel en concepts tout faits."
+      },
+      "1888_EDIC_c1": {
+        "label": "partiellement pertinent",
+        "justification": "L'avant-propos annonce que le langage exige des distinctions nettes, sans développer les problèmes philosophiques qui en découlent."
+      }
+    },
+    "query": "Selon Bergson, en quoi la structure du langage est-elle source de problèmes en philosophie ?",
+    "answer": " Selon Bergson, la structure du langage est source de problèmes en philosophie car elle implique une confusion préalable de la durée avec l'étendue, de la succession avec la simultanéité, de la qualité avec la quantité. Cette confusion est due au fait que les concepts utilisés dans le langage ont été élaborés par l'organisme social en vue d'un objet qui n'a rien de métaphysique, et que la philosophie accepte souvent cette division qui a toutes chances de ne pas correspondre aux articulations du réel. En posant le problème tel qu'il est posé par le langage, la philosophie se condamne par avance à recevoir une solution toute faite ou à simplement choisir entre les solutions coéternelles à cette position du problème. En d'autres termes, la philosophie est contrainte à travailler avec des concepts qui ne sont pas adaptés à l'objet qu'elle étudie, ce qui peut entraîner des difficultés insurmontables dans la résolution de certains problèmes philosophiques. [1888_EDIC_c1, 1934_PM_c23, 1934_PM_c39]"
+  },
+  "Q009": {
+    "signals": {
+      "works": [
+        "1907_EC"
+      ],
+      "convergence": 0.41,
+      "is_convergent": false,
+      "is_confident": false
+    },
+    "chunks": [
+      {
+        "rerank_score": 0.24,
+        "rrf_score": 0.03,
+        "work_id": "1907_EC",
+        "chunk_id": "1907_EC_c316",
+        "section_id": "1907_EC_s5",
+        "section_path": "body/De la signification de la vie. L'ordre de la nature et la forme de l'intelligence",
+        "paragraph_ids": [
+          "1907_EC_p316"
+        ],
+        "page_start": {
+          "number": 291,
+          "display": "291"
+        },
+        "page_end": {
+          "number": 294,
+          "display": "294"
+        },
+        "text": "La philosophie nous introduit ainsi dans la vie spirituelle. Et elle nous montre en même temps la relation de la vie de l'esprit à celle du corps. La grande erreur des doctrines spiritualistes a été de croire qu'en isolant la vie spirituelle de tout le reste, en la suspendant dans l'espace aussi haut que possible au-dessus de terre, elles la mettaient à l'abri de toute atteinte : comme si elles ne l'exposaient pas simplement ainsi à être prise pour un effet de mirage ! Certes, elles ont raison d'écouter la conscience, quand la conscience affirme la liberté humaine , - mais l'intelligence est là, qui dit que la cause détermine son effet, que le même conditionne le même, que tout se répète et que tout est donné. Elles ont raison de croire à la réa. lité absolue de la personne et à son indépendance vis-à-vis de la matière ; - mais la science est là, qui montre la solidarité de la vie consciente et de l'activité cérébrale. Elles ont raison d'attribuer à l'homme une place privilégiée dans la nature, de tenir pour infinie la distance de l'animal à l'homme; - mais l'histoire de la vie est là, qui nous fait assister à la genèse des espèces par voie de transformation graduelle et qui semble ainsi réintégrer l'homme dans l'animalité. Quand un instinct puissant proclame la survivance probable de la personne, elles ont raison de ne pas fermer l'oreille à sa voix; -mais s'il existe ainsi des « âmes » capables d'une vie indépendante, d'où viennent-elles ? quand, comment, pourquoi entrent-elles dans ce corps que nous voyons, sous nos yeux, sortir très naturellement d'une cellule mixte empruntée aux corps de ses deux parents ? Toutes ces questions resteront sans réponse, une philosophie d'intuition sera la négation de la science, tôt ou tard elle sera balayée par la science, si elle ne se décide pas à voir la vie du corps là où elle est réellement, sur le chemin qui mène à la vie de l'esprit. Mais ce n'est plus alors à tels ou tels vivants déterminés qu'elle aura affaire. La vie entière, depuis l'impulsion initiale qui la lança dans le monde, lui apparaîtra comme un flot qui monte, et que contrarie le mouvement descendant de la matière. Sur la plus grande partie de sa surface, à des hauteurs diverses, le courant est converti par la matière en un tourbillonnement sur place. Sur un seul point il passe libre. ment, entraînant avec lui l'obstacle, qui alourdira sa marche mais ne l'arrêtera pas. En ce point est l'humanité ; là est notre situation privilégiée. D'autre part, ce flot qui monte est conscience, et, comme toute conscience, il enveloppe des virtualités sans nombre qui se compénètrent, auxquelles ne conviennent par conséquent ni la catégorie de l'unité ni celle de la multiplicité, faites pour la matière inerte. Seule, la matière qu'il charrie avec lui, et dans les interstices de laquelle il s'insère, peut le diviser en individualités distinctes. Le courant passe donc, traversant les générations humaines, se subdivisant en individus : cette subdivision était dessinée en lui vaguement, mais elle ne se fût pas accusée sans la matière. Ainsi se créent sans cesse des âmes, qui cependant, en un certain sens, préexistaient. Elles ne sont pas autre chose que les ruisselets entre lesquels se partage le grand fleuve de la vie, coulant a travers le corps de l'humanité. Le mouvement d'un courant est distinct de ce qu'il traverse, bien qu'il en adopte nécessairement les sinuosités. La conscience est distincte de l'organisme qu'elle anime, bien qu'elle en subisse certaines vicissitudes. Comme les actions possibles, dont un état de conscience contient le dessin, reçoivent à tout instant, dans les centres nerveux, un commencement d'exécution, le cerveau souligne à tout instant les articulations motrices de l'état de conscience ; mais la se borne l'interdépendance de la conscience et du cerveau ; le sort de la conscience n'est pas lié pour cela au sort de la matière cérébrale. Enfin, la conscience est essentiellement libre ; elle est la liberté même : mais elle ne peut traverser la matière sans se poser sur elle, sans s'adapter à elle : cette adaptation est ce qu'on appelle l'intellectualité ; et l'intelligence, se retournant vers la conscience agissante, C'est-à-dire libre, la fait naturellement entrer dans les cadres où elle a coutume de voir la matière s'insérer. Elle apercevra donc toujours la liberté sous forme de nécessité ; toujours elle négligera la part de nouveauté ou de création inhérente à l'acte libre, toujours elle substituera à l'action elle-même une imitation artificielle, approximative, obtenue en composant l'ancien avec l'ancien et le même avec le même. Ainsi, aux yeux d'une philosophie qui fait effort pour réabsorber l'intelligence dans l'intuition, bien des difficultés s'évanouissent ou s'atténuent. Mais une telle doctrine ne facilite pas seulement la spéculation. Elle nous donne aussi plus de force pour agir et pour vivre. Car, avec elle, nous ne nous sentons plus isolés dans l'humanité, l'humanité ne nous semble pas non plus isolée dans la nature qu'elle domine. Comme le plus petit grain de poussière est solidaire de notre système solaire tout entier, entraîné avec lui dans ce mouvement indivisé de descente qui est la matérialité même, ainsi tous les êtres organisés, du plus humble au plus élevé, depuis les premières origines de la vie jusqu'au temps où nous sommes, et dans tous les lieux comme dans tous les temps, ne font que rendre sensible aux yeux une impulsion unique, inverse du mouvement de la matière et, en elle-même, indivisible. Tous les vivants se tiennent, et tous cèdent à la même formidable poussée. L'animal prend son point d'appui sur la plante, l'homme chevauche sur l'animalité, et l'humanité entière, dans l'espace et dans le temps, est une immense armée qui galope à côté de chacun de nous, en avant et en arrière de nous, dans une charge entraînante capable de culbuter toutes les résistances et de franchir bien des obstacles, même peut-être la mort."
+      },
+      {
+        "rerank_score": 0.19,
+        "rrf_score": 0.03,
+        "work_id": "1907_EC",
+        "chunk_id": "1907_EC_c317",
+        "section_id": "1907_EC_s6",
+        "section_path": "body/Le mécanisme cinématographique de la pensée et l'illusion mécanistique. Coup d'œil sur l'histoire des systèmes. Le devenir réel et le faux évolutionisme",
+        "paragraph_ids": [
+          "1907_EC_p317"
+        ],
+        "page_start": {
+          "number": 295,
+          "display": "295"
+        },
+        "page_end": {
+          "number": 295,
+          "display": "295"
+        },
+        "text": "Il nous reste à examiner en elles-mêmes deux illusions théoriques que nous avons constamment rencontrées sur notre chemin, et dont nous avions envisagé jusqu'à présent les conséquences plutôt que le principe. Tel sera l'objet du présent chapitre. Il nous fournira l'occasion d'écarter certaines objections, de dissiper certains malentendus, et surtout de définir plus nettement, en l'opposant à d'autres, une philosophie qui voit dans la durée l'étoffe même de la réalité."
+      }
+    ],
+    "chunk_judgments": {
+      "1907_EC_c317": {
+        "label": "non pertinent",
+        "justification": "L'extrait traite de l'ordre de la nature, sans mentionner la chevauchée du vivant."
+      }
+    },
+    "query": "Quelle thèse Bergson explique-t-il en décrivant la grande chevauchée du vivant ?",
+    "answer": " Bergson explique que la vie entière, depuis son origine jusqu'à l'homme, peut être vue comme une grande chevauchée qui monte, contrairement au mouvement descendant de la matière. Selon lui, cette chevauchée est la conscience, qui enveloppe des virtualités sans nombre qui se compénètrent, et qui ne conviennent pas à la matière inerte. La conscience est distincte de l'organisme qu'elle anime, mais elle ne peut traverser la matière sans s'adapter à elle. La conscience est essentiellement libre, mais elle doit s'adapter à la matière pour s'insérer dans les cadres où elle a coutume de voir la matière s'insérer. Ainsi, tous les êtres organisés, du plus humble au plus élevé, sont solidairement liés et se tiennent en arrière et en avant de chacun de nous, dans une charge entraînante capable de culbuter toutes les résistances et de franchir bien des obstacles, même peut-être la mort."
+  }
+}

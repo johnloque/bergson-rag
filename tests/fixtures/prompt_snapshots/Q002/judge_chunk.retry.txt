@@ -1,0 +1,1 @@
+Ta réponse précédente n'était pas un objet JSON valide de la forme {"label": "...", "justification": "..."}. Réponds à nouveau, uniquement avec cet objet JSON, sans aucun texte avant ou après.

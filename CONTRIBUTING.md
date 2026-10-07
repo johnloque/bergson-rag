@@ -68,6 +68,9 @@ for a recruiter browsing the git history.
       tests
 - [ ] If retrieval/generation is impacted: evaluation metrics attached to
       the PR
+- [ ] If any file under `prompts/` changed: before/after evaluation
+      numbers attached to the PR, same as for retrieval changes — and the
+      wording change sits in its own branch (`docs/prompts.md`)
 - [ ] No secrets/API keys committed
 - [ ] `docs/ROADMAP.md` updated if sprint scope has changed
 

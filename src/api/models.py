@@ -29,6 +29,7 @@ lowercased-singular-class-name convention.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
@@ -38,6 +39,15 @@ from src.generation.chunk_judgment import ChunkJudgment
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+def _prompts_used_field() -> Any:
+    """`{prompt_id: {version, hash, custom[, library]}}` for the prompts the
+    row's LLM calls used (refactor/prompts-to-files, docs/prompts.md).
+    Nullable: rows written before that branch stay NULL — never backfilled,
+    which would be a guess. Added to an existing dev DB by
+    `src/api/db.py:_sync_additive_columns`."""
+    return Field(default=None, sa_column=Column(JSON, nullable=True))
 
 
 class Conversation(SQLModel, table=True):
@@ -124,6 +134,7 @@ class Generation(SQLModel, table=True):
     chunk_judgments_used: dict[str, ChunkJudgment] | None = Field(
         default=None, sa_column=Column(JSON)
     )
+    prompts_used: dict | None = _prompts_used_field()
     created_at: datetime = Field(default_factory=_utcnow)
 
 
@@ -151,6 +162,7 @@ class Evaluation(SQLModel, table=True):
     structural_flags: dict = Field(sa_column=Column(JSON))
     faithfulness_annotations: dict = Field(sa_column=Column(JSON))
     should_auto_expand: bool
+    prompts_used: dict | None = _prompts_used_field()
     created_at: datetime = Field(default_factory=_utcnow)
 
 
@@ -172,6 +184,7 @@ class ChunkJudgmentRow(SQLModel, table=True):
     label: str
     justification: str
     model: str
+    prompts_used: dict | None = _prompts_used_field()
     created_at: datetime = Field(default_factory=_utcnow)
 
 

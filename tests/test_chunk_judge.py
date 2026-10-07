@@ -34,9 +34,9 @@ from src.generation.generate import (
     FALLBACK_MODEL_ENV_VAR,
     generate_from_chunks,
 )
-from src.generation.prompt import CHUNK_JUDGMENT_INSTRUCTION
 from src.indexing.qdrant_index import COLLECTION_NAME, PAYLOAD_FIELDS, point_id_for
 from src.retrieval.hybrid import RetrievedChunk
+from tests.prompt_markers import CHUNK_JUDGMENT_INSTRUCTION
 
 QDRANT_URL = "http://localhost:6333"
 

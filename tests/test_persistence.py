@@ -57,7 +57,7 @@ Q001_QUERY = (
     "Quel usage Bergson fait-il de l'image de la boule de neige pour "
     "illustrer la perception du changement ?"
 )
-Q001_CHUNK_ID = "1907_EC_c5"
+Q001_CHUNK_ID = "1907_EC_c13"
 Q001_HALLUCINATED_ANSWER = (
     "Bergson utilise l'image de la boule de neige, qu'il a empruntée à Albert Einstein "
     f"en 1950, pour illustrer la relativité du temps [{Q001_CHUNK_ID}]."
@@ -65,7 +65,7 @@ Q001_HALLUCINATED_ANSWER = (
 
 # Q004 (eval/gold_dataset.csv) — second confirmed-hallucination fixture.
 Q004_QUERY = "Quel rapport Bergson établit-il entre l'imagination poétique et la réalité ?"
-Q004_CHUNK_ID = "1900_R_c49"
+Q004_CHUNK_ID = "1900_R_c170"
 Q004_HALLUCINATED_ANSWER = (
     "Bergson affirme, en reprenant une thèse de Kant, que l'imagination poétique n'a "
     "structurellement aucun rapport avec la réalité et relève d'une faculté purement "

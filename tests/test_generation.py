@@ -77,14 +77,14 @@ Q007_QUERY = (
     "Selon Bergson, en quoi la structure du langage est-elle source de "
     "problèmes en philosophie ?"
 )
-Q007_CHUNK_IDS = ("1888_EDIC_c1", "1934_PM_c23", "1934_PM_c39")
+Q007_CHUNK_IDS = ("1888_EDIC_c1", "1934_PM_c45", "1934_PM_c68")
 
 # Q001 (eval/gold_dataset.csv) — a single, mono-work, gold-verified chunk.
 Q001_QUERY = (
     "Quel usage Bergson fait-il de l'image de la boule de neige pour "
     "illustrer la perception du changement ?"
 )
-Q001_CHUNK_ID = "1907_EC_c5"
+Q001_CHUNK_ID = "1907_EC_c13"
 
 # Synthetic, deliberately constructed divergent-evidence case — NOT a gold
 # dataset item. Two real chunks from the same work (1888_EDIC, "Essai sur

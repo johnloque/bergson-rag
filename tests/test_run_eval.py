@@ -163,11 +163,11 @@ def test_known_items_resolve_to_prior_gold_chunk_ids():
     tests/test_paragraph_chunk_map.py at commit 5da96d6)."""
     items = {item.id: item for item in load_gold_dataset(GOLD_DATASET_PATH)}
 
-    assert items["Q001"].chunk_ids == ("1907_EC_c5",)
-    assert items["Q004"].chunk_ids == ("1900_R_c49",)
+    assert items["Q001"].chunk_ids == ("1907_EC_c13",)
+    assert items["Q004"].chunk_ids == ("1900_R_c170",)
     assert items["Q007"].chunk_ids == (
         "1888_EDIC_c1",
-        "1934_PM_c23",
-        "1934_PM_c33",
-        "1934_PM_c39",
+        "1934_PM_c45",
+        "1934_PM_c60",
+        "1934_PM_c68",
     )

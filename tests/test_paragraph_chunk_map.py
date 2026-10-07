@@ -24,17 +24,17 @@ pytestmark = pytest.mark.skipif(
 # (multi-work, four paragraph_ids across two works).
 Q001_WORK_ID = "1907_EC"
 Q001_PARAGRAPH_ID = "1907_EC_p13"
-Q001_CHUNK_ID = "1907_EC_c5"
+Q001_CHUNK_ID = "1907_EC_c13"
 
 Q004_WORK_ID = "1900_R"
-Q004_PARAGRAPH_ID = "1900_R_p169"
-Q004_CHUNK_ID = "1900_R_c49"
+Q004_PARAGRAPH_ID = "1900_R_p170"
+Q004_CHUNK_ID = "1900_R_c170"
 
 Q007_MAPPINGS = (
     ("1888_EDIC", "1888_EDIC_p1", "1888_EDIC_c1"),
-    ("1934_PM", "1934_PM_p45", "1934_PM_c23"),
-    ("1934_PM", "1934_PM_p60", "1934_PM_c33"),
-    ("1934_PM", "1934_PM_p68", "1934_PM_c39"),
+    ("1934_PM", "1934_PM_p45", "1934_PM_c45"),
+    ("1934_PM", "1934_PM_p60", "1934_PM_c60"),
+    ("1934_PM", "1934_PM_p68", "1934_PM_c68"),
 )
 
 

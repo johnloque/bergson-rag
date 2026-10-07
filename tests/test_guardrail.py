@@ -81,7 +81,7 @@ Q001_QUERY = (
     "Quel usage Bergson fait-il de l'image de la boule de neige pour "
     "illustrer la perception du changement ?"
 )
-Q001_CHUNK_ID = "1907_EC_c5"
+Q001_CHUNK_ID = "1907_EC_c13"
 Q001_HALLUCINATED_ANSWER = (
     "Bergson utilise l'image de la boule de neige, qu'il a empruntée à Albert Einstein "
     f"en 1950, pour illustrer la relativité du temps [{Q001_CHUNK_ID}]."
@@ -91,7 +91,7 @@ Q001_HALLUCINATED_ANSWER = (
 # fabricated attribution (to Kant) not present in, and not entailed by, the
 # cited chunk's real content.
 Q004_QUERY = "Quel rapport Bergson établit-il entre l'imagination poétique et la réalité ?"
-Q004_CHUNK_ID = "1900_R_c49"
+Q004_CHUNK_ID = "1900_R_c170"
 Q004_HALLUCINATED_ANSWER = (
     "Bergson affirme, en reprenant une thèse de Kant, que l'imagination poétique n'a "
     "structurellement aucun rapport avec la réalité et relève d'une faculté purement "
@@ -102,10 +102,10 @@ Q004_HALLUCINATED_ANSWER = (
 # faithful in this sprint's judge calibration (n=4). Real generate_from_chunks
 # output is used here (not a hand-crafted paraphrase, see module docstring).
 Q008_QUERY = "Quelle thèse Bergson explique-t-il à travers l'image du manteau accroché à un clou ?"
-Q008_CHUNK_IDS = ("1896_MM_c3", "1919_ES_c16")
+Q008_CHUNK_IDS = ("1896_MM_c7", "1919_ES_c32")
 
 # Q009 (eval/gold_dataset.csv) — the real hybrid_search + rerank pipeline
-# never surfaces the correct gold chunk (1907_EC_c130) for this query in its
+# never surfaces the correct gold chunk (1907_EC_c316) for this query in its
 # top candidates (confirmed empirically) — a genuine, persistent retrieval
 # miss, not a hand-constructed one, so the real pipeline is exercised here
 # rather than a stand-in chunk selection.
@@ -119,7 +119,7 @@ Q002_QUERY = (
     "Quelle thèse Bergson explique-t-il à travers l'image de la fonte d'un morceau de "
     "sucre dans un verre d'eau ?"
 )
-Q002_CHUNK_ID = "1907_EC_c9"
+Q002_CHUNK_ID = "1907_EC_c25"
 
 # Not a real corpus chunk_id — used only to exercise Layer 1's
 # citation-resolution check.
@@ -317,7 +317,7 @@ def test_q009_persistent_retrieval_miss_gets_very_low_confidence_tier(
 ):
     """The real hybrid_search + rerank pipeline for this query (not a
     hand-picked chunk selection) — confirmed empirically to never surface
-    the correct gold chunk (1907_EC_c130) among its top candidates.
+    the correct gold chunk (1907_EC_c316) among its top candidates.
 
     These 5 real chunks are long enough, concatenated, to overflow the local
     judge's default context window (`JUDGE_NUM_CTX=8192`,

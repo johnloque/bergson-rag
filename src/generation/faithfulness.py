@@ -170,6 +170,7 @@ from src.generation.prompt import CITATION_PATTERN
 from src.generation.segmentation import Segment, segment_answer
 from src.generation.signals import GenerationChunk
 from src.prompts.loader import (
+    Prompt,
     load_examples,
     load_field_descriptions,
     load_prompt,
@@ -349,9 +350,53 @@ class FrenchReasonNLIStatementPrompt(PydanticPrompt[NLIStatementInput, NLIStatem
 _NLI_PROMPT = FrenchReasonNLIStatementPrompt()
 
 
-def faithfulness_prompts_used() -> dict[str, dict[str, Any]]:
+@dataclass(frozen=True)
+class FaithfulnessPrompts:
+    """The two judge prompts `check_faithfulness` runs, with the prompt files
+    they come from. `DEFAULT_FAITHFULNESS_PROMPTS` (the committed
+    `prompts/faithfulness/`) is all production ever uses; another set is
+    built only by the prompt-comparison eval tooling
+    (`build_faithfulness_prompts`, `eval/scripts/run_prompt_comparison.py`)."""
+
+    segment_claims: SegmentClaimsPrompt
+    nli: FrenchReasonNLIStatementPrompt
+    sources: tuple[Prompt, Prompt]  # (faithfulness.segment_claims, faithfulness.nli_verifier)
+
+
+DEFAULT_FAITHFULNESS_PROMPTS = FaithfulnessPrompts(
+    segment_claims=_SEGMENT_CLAIMS_PROMPT,
+    nli=_NLI_PROMPT,
+    sources=(_SEGMENT_CLAIMS_SOURCE, _NLI_SOURCE),
+)
+
+
+def build_faithfulness_prompts(segment_claims: Prompt, nli_verifier: Prompt) -> FaithfulnessPrompts:
+    """The judge prompts for these two prompt files (e.g. overrides from
+    `load_prompt(..., override_text=...)`): same classes and models as the
+    defaults, with this instruction and these examples (validated by
+    `load_examples`, so a malformed examples file fails here). The output
+    schema's field descriptions are not overridable: they're compiled into
+    `SegmentClaims`/`SegmentedClaimsOutput` at import."""
+    if segment_claims.schema_path != _SEGMENT_CLAIMS_SOURCE.schema_path:
+        raise ValueError("faithfulness.segment_claims: the schema file can't be overridden")
+    claims_prompt = SegmentClaimsPrompt()
+    claims_prompt.instruction = segment_claims.render()
+    claims_prompt.examples = load_examples(
+        segment_claims, SegmentedAnswerInput, SegmentedClaimsOutput
+    )
+    nli_prompt = FrenchReasonNLIStatementPrompt()
+    nli_prompt.instruction = nli_verifier.render()
+    nli_prompt.examples = load_examples(nli_verifier, NLIStatementInput, NLIStatementOutput)
+    return FaithfulnessPrompts(
+        segment_claims=claims_prompt, nli=nli_prompt, sources=(segment_claims, nli_verifier)
+    )
+
+
+def faithfulness_prompts_used(
+    prompts: FaithfulnessPrompts = DEFAULT_FAITHFULNESS_PROMPTS,
+) -> dict[str, dict[str, Any]]:
     """`prompts_used` record for one `check_faithfulness` call."""
-    return prompts_used(_SEGMENT_CLAIMS_SOURCE, _NLI_SOURCE)
+    return prompts_used(*prompts.sources)
 
 
 def _text_for_judge(segment: Segment) -> str:
@@ -435,6 +480,8 @@ def check_faithfulness(
     chunks: Sequence[GenerationChunk],
     judge_llm: LangchainLLMWrapper | None = None,
     model: str = DEFAULT_JUDGE_MODEL,
+    *,
+    prompts: FaithfulnessPrompts = DEFAULT_FAITHFULNESS_PROMPTS,
 ) -> FaithfulnessResult:
     """RAGAS faithfulness of `answer` (as produced by `generate_from_chunks`,
     or any other source) against `chunks` as cited evidence for `query`.
@@ -449,6 +496,9 @@ def check_faithfulness(
     omitted, one is built from `model` for this call only. `model` always
     labels the returned result — it is not read back off a caller-supplied
     `judge_llm`, so pass the matching string when you supply one.
+
+    `prompts`: the committed judge prompts unless given; only the
+    prompt-comparison eval tooling passes another set (docs/prompts.md).
     """
     segments = segment_answer(answer)
     if not segments:
@@ -459,14 +509,14 @@ def check_faithfulness(
 
     async def _judge(claim: str) -> NLIStatementOutput | None:
         try:
-            return await _NLI_PROMPT.generate(
+            return await prompts.nli.generate(
                 llm=llm, data=NLIStatementInput(context=context, statements=[claim])
             )
         except RagasOutputParserException:
             return None
 
     async def _run() -> tuple[ClaimVerdict, ...]:
-        output = await _SEGMENT_CLAIMS_PROMPT.generate(
+        output = await prompts.segment_claims.generate(
             llm=llm,
             data=SegmentedAnswerInput(
                 question=query,

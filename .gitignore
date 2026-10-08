@@ -32,6 +32,8 @@ data/app.db-shm
 
 # eval/scripts/run_ragas_eval.py resume state — working file, not a result
 eval/results/ragas_checkpoint.jsonl
+# eval/scripts/run_prompt_comparison.py resume state, same reason
+eval/results/prompt_comparison_checkpoint.jsonl
 
 # OS / editors
 .DS_Store

@@ -1,0 +1,22 @@
+# Owner-supplied labels for real generated answers in the RAGAS eval
+# checkpoint (eval/results/ragas_checkpoint.jsonl), read by
+# eval/scripts/calibration_set.py. Each entry names a checkpoint row, its
+# label, and the exact substring of the known fabricated claim, copied
+# verbatim from the answer. Never add an entry without having read the
+# answer against its chunks: the tooling copies the answer, it doesn't
+# check the label. The build lists the checkpoint answers not labeled yet.
+generated:
+  - checkpoint_key: end_to_end:Q002
+    label: hallucinated
+    fabricated_substring: "De l'évolution de la vie. Mécanisme et finalité"
+    note: >-
+      Fabricated title for 1907_EC (real title: L'Évolution créatrice); the
+      judge scored this answer 1.0. docs/anti_hallucination_guardrails.md,
+      Sprint 10 section (2).
+  - checkpoint_key: end_to_end:Q004
+    label: hallucinated
+    fabricated_substring: "Le comique de caractère"
+    note: >-
+      Fabricated title for the 1900 work (real: Le Rire); the same answer
+      also dates L'évolution créatrice to 1934. docs/anti_hallucination_guardrails.md,
+      Sprint 10 section (2).

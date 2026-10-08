@@ -64,7 +64,7 @@ from typing import Any
 
 from src.generation.chunk_judgment import ChunkJudgment
 from src.generation.signals import EvidenceSignals, GenerationChunk
-from src.prompts.loader import load_prompt, prompts_used
+from src.prompts.loader import Prompt, load_prompt, prompts_used
 from src.works import resolve_paragraph_metadata, work_label
 
 # Prompt wording lives in prompts/generation/ (docs/prompts.md), branching
@@ -83,9 +83,9 @@ ANSWER_PROMPT = load_prompt("generation.answer")
 CITATION_PATTERN = re.compile(r"\[([^\[\]]+)\]")
 
 
-def generation_prompts_used() -> dict[str, dict[str, Any]]:
+def generation_prompts_used(answer_prompt: Prompt = ANSWER_PROMPT) -> dict[str, dict[str, Any]]:
     """`prompts_used` record for one `generate_from_chunks` call."""
-    return prompts_used(SYSTEM_PROMPT, ANSWER_PROMPT)
+    return prompts_used(SYSTEM_PROMPT, answer_prompt)
 
 
 def _chunk_data(chunk: GenerationChunk, judgment: ChunkJudgment | None) -> dict[str, Any]:
@@ -116,9 +116,13 @@ def build_prompt(
     chunks: Sequence[GenerationChunk],
     signals: EvidenceSignals,
     chunk_judgments: Mapping[str, ChunkJudgment] | None = None,
+    *,
+    answer_prompt: Prompt = ANSWER_PROMPT,
 ) -> str:
+    """`answer_prompt`: the committed `generation.answer` unless given; only
+    the prompt-comparison eval tooling passes another (docs/prompts.md)."""
     chunk_judgments = chunk_judgments or {}
-    return ANSWER_PROMPT.render(
+    return answer_prompt.render(
         query=query,
         chunks=[_chunk_data(chunk, chunk_judgments.get(chunk.chunk_id)) for chunk in chunks],
         works=[{"id": work, "label": work_label(work)} for work in signals.works],

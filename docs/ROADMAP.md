@@ -406,6 +406,8 @@ principle, just a fuller list of candidates now queued behind it.
 Prompt variants are compared through versioned, hashed files under
 `prompts/`, each answer/evaluation/judgment recording which versions
 produced it: [`docs/prompts.md`](prompts.md).
+Comparison tooling (variants, judge-first selection, frozen judge, `exp/`
+branch per variant): [`docs/prompts.md`, "Comparing prompt variants"](prompts.md#comparing-prompt-variants-featprompt-comparison).
 
 ### Sprint 15 — Portfolio polish
 Complete README, "Known limitations & scope" section finalized,

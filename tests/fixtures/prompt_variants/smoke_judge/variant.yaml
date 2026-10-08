@@ -1,0 +1,9 @@
+# Throwaway fixture for the slow judge-mode smoke test
+# (tests/test_prompt_comparison_smoke.py): plumbing only, not a real variant.
+name: smoke_judge
+hypothesis: Plumbing check only (no observed failure targeted).
+based_on:
+  faithfulness.segment_claims: 1d73fc7146afd75e35f397af6ecbd2449f9be263f36ffd22b71209b668f3bdbd
+  faithfulness.nli_verifier: 89e87a3d7dfbff708fda84fe52c33a33dcfe48b9f3d1d70cc3fb155eefb05f1e
+status: draft
+results: []

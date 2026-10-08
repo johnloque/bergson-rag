@@ -1,0 +1,8 @@
+# Throwaway fixture for the slow generation-mode smoke test
+# (tests/test_prompt_comparison_smoke.py): plumbing only, not a real variant.
+name: smoke_generation
+hypothesis: Plumbing check only (no observed failure targeted).
+based_on:
+  generation.answer: ea95d3d10495485dea95b1ca03e59b4c4fef124fc079325fd8ec1fc28348ff32
+status: draft
+results: []

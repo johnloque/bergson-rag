@@ -31,7 +31,7 @@ Q001_QUERY = (
     "Quel usage Bergson fait-il de l'image de la boule de neige pour "
     "illustrer la perception du changement ?"
 )
-Q001_CHUNK_ID = "1907_EC_c5"
+Q001_CHUNK_ID = "1907_EC_c13"
 
 
 def _collection_populated() -> bool:

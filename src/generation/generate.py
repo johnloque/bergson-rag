@@ -50,9 +50,15 @@ from litellm import ModelResponse
 from qdrant_client import QdrantClient
 
 from src.generation.chunk_judgment import ChunkJudgment
-from src.generation.prompt import SYSTEM_PROMPT, build_prompt, generation_prompts_used
+from src.generation.prompt import (
+    ANSWER_PROMPT,
+    SYSTEM_PROMPT,
+    build_prompt,
+    generation_prompts_used,
+)
 from src.generation.signals import EvidenceSignals, GenerationChunk, compute_signals
 from src.indexing.qdrant_index import COLLECTION_NAME, DENSE_VECTOR_NAME, point_id_for
+from src.prompts.loader import Prompt
 
 DEFAULT_MODEL = "ollama_chat/mistral"
 DEFAULT_FALLBACK_MODEL = "mistral/mistral-small-latest"
@@ -103,6 +109,8 @@ def generate_from_chunks(
     fallback_model: str | None = None,
     temperature: float | None = None,
     chunk_judgments: Mapping[str, ChunkJudgment] | None = None,
+    *,
+    answer_prompt: Prompt = ANSWER_PROMPT,
     **extra_params: Any,
 ) -> GenerationResult:
     """Synthesize an answer to `query` from `chunks` only.
@@ -129,6 +137,9 @@ def generate_from_chunks(
     needs a reproducible answer to score, but normal/interactive use has no
     reason to force greedy decoding.
 
+    `answer_prompt`: the committed `generation.answer` unless given; only
+    the prompt-comparison eval tooling passes another (docs/prompts.md).
+
     `**extra_params` are forwarded to `litellm.completion` as-is (e.g.
     `num_ctx` for an Ollama model) — eval/scripts/run_ragas_eval.py passes
     the same `num_ctx` used for judging, so generation and judging never
@@ -146,7 +157,7 @@ def generate_from_chunks(
 
     dense_vectors = fetch_dense_vectors(client, [chunk.chunk_id for chunk in chunks])
     signals = compute_signals(chunks, dense_vectors)
-    prompt = build_prompt(query, chunks, signals, chunk_judgments)
+    prompt = build_prompt(query, chunks, signals, chunk_judgments, answer_prompt=answer_prompt)
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT.render()},
         {"role": "user", "content": prompt},
@@ -174,5 +185,5 @@ def generate_from_chunks(
         model=used_model,
         prompt=prompt,
         signals=signals,
-        prompts_used=generation_prompts_used(),
+        prompts_used=generation_prompts_used(answer_prompt),
     )

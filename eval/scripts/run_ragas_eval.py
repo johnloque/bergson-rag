@@ -61,7 +61,6 @@ see docs/generation_strategy.md).
 from __future__ import annotations
 
 import argparse
-import json
 import math
 import os
 import subprocess
@@ -77,6 +76,7 @@ from ragas.dataset_schema import SingleTurnSample
 from ragas.llms.base import LangchainLLMWrapper
 from ragas.metrics import LLMContextPrecisionWithReference, LLMContextRecall
 
+from eval.scripts.checkpoint import append_checkpoint, load_checkpoint
 from eval.scripts.metrics import BREAKDOWN_ATTRS, GoldItem
 from eval.scripts.run_eval import GOLD_DATASET_PATH, QDRANT_URL, print_gold_dataset_status
 from src.generation.faithfulness import (
@@ -206,37 +206,6 @@ class GenerationOutcome:
 
 def _checkpoint_key(mode: str, item_id: str) -> str:
     return f"{mode}:{item_id}"
-
-
-def load_checkpoint(path: Path) -> dict[str, dict]:
-    """Rows keyed by `mode:item_id` (or an explicit `key` field — used to
-    namespace the determinism rerun's own checkpoint entries, see
-    `check_determinism`, distinct from the full run's entries for the same
-    `mode`/`item_id`), so a killed/resumed run (`run_both_modes` below) can
-    skip whatever was already computed and persisted rather than
-    recomputing it — real environment behavior observed running this
-    script (background process killed mid-run repeatedly, unrelated to
-    this project's own code), not a hypothetical concern."""
-    if not path.exists():
-        return {}
-    rows: dict[str, dict] = {}
-    with path.open(encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            row = json.loads(line)
-            key = row.get("key") or _checkpoint_key(row["mode"], row["item_id"])
-            rows[key] = row
-    return rows
-
-
-def append_checkpoint(path: Path, row: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False) + "\n")
-        f.flush()
-        os.fsync(f.fileno())
 
 
 def _outcome_to_row(outcome: GenerationOutcome, key: str) -> dict:

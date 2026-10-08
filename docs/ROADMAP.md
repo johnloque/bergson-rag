@@ -408,6 +408,7 @@ Prompt variants are compared through versioned, hashed files under
 produced it: [`docs/prompts.md`](prompts.md).
 Comparison tooling (variants, judge-first selection, frozen judge, `exp/`
 branch per variant): [`docs/prompts.md`, "Comparing prompt variants"](prompts.md#comparing-prompt-variants-featprompt-comparison).
+Judge baseline (committed defaults, two runs × 3 repeats; gate failed 10/14, 3 of the misses nan): [`docs/prompts.md`, "Judge baseline"](prompts.md#judge-baseline-expjudge-baseline).
 
 ### Sprint 15 — Portfolio polish
 Complete README, "Known limitations & scope" section finalized,

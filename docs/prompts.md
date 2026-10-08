@@ -439,6 +439,175 @@ unsupported claims per run, delta and noise marker; the nan rate per run
 sits next to every mean. Generation-mode comparisons flag items whose gold
 chunks appear in `docs/known_issues/`, when that directory exists.
 
+### Judge baseline (`exp/judge-baseline`)
+
+Measurement only: the **committed default** faithfulness prompts, judge
+mode, on `eval/calibration_set.json` as committed (sha256 `482bed45…`).
+Two identical runs, each `--repeat 3`: commit `d7aed49`, clean tree,
+temperature 0, local judge `ollama_chat/mistral` (Ollama digest
+`6577803aa9a0`), RAGAS 0.3.9, same fingerprint (`e8022718318f09a1`), one
+checkpoint file per run so the second run re-judged every item instead of
+replaying the first.
+
+- Run 1: [`prompt_cmp_judge_default_n26_20261008T124431Z`](../eval/results/prompt_cmp_judge_default_n26_20261008T124431Z.md)
+- Run 2 (baseline rerun, for the noise floor): [`prompt_cmp_judge_default_n26_20261008T141004Z`](../eval/results/prompt_cmp_judge_default_n26_20261008T141004Z.md)
+
+EXPLORATORY: n=26, below the n=50 threshold; no number here is
+decision-grade.
+
+**Set.** 26 items: 12 faithful (`gold`), 14 hallucinated, which split into
+2 `generated` (Q002 and Q004 end_to_end, Sprint 10) and 12 `perturbed`
+(9 `unsupported_sentence`, 2 `negation`, 1 `proper_noun`; no `year`
+perturbation found a target). Held-out check against
+`segment_claims.examples.yaml` and `nli_verifier.examples.yaml` (the
+per-prompt files that replaced `examples_fr.yaml`): no 8-word overlap, at
+build time and in both run headers.
+
+#### 1. Gate: failed, identically in both runs
+
+The gate rests on **14 items: 2 generated, 12 perturbed**. Detected in
+every repeat:
+
+| | run 1 | run 2 |
+|---|---|---|
+| generated | 1/2 | 1/2 |
+| perturbed | 9/12 | 9/12 |
+| — `unsupported_sentence` | 7/9 | 7/9 |
+| — `negation` | 1/2 | 1/2 |
+| — `proper_noun` | 1/1 | 1/1 |
+
+Missed, with per-repeat detections (run 1 / run 2):
+
+- **`Q002-gen-end_to_end`** (generated): `[F,F,F]` / `[F,F,F]`. **nan in
+  all 6 runs**: never judged. The NLI reply fails to parse
+  (`OutputParserException: Failed to parse StringIO`): the judge
+  re-escapes the double quotes around the fabricated title
+  (`"De l'évolution de la vie. Mécanisme et finalité"`) inside its JSON
+  statement and breaks it. Source: chunks `1907_EC_c25`, `1907_EC_c398`,
+  `1934_PM_c16`. None of them states a title (the judge never sees one).
+  No statements and no reasons were recorded.
+- **`Q001-p1-unsupported_sentence`**: `[F,F,F]` / `[F,F,F]`. **nan in all
+  6 runs**: `segment_claims` fails to parse even after RAGAS's
+  `FixOutputFormat` retries. Inserted sentence: « Bergson déclare avoir
+  emprunté cette idée à Aristote, dont il cite longuement la
+  Métaphysique. » Source chunk `1907_EC_c13` mentions neither Aristote nor
+  la Métaphysique. No statements and no reasons were recorded.
+- **`Q010-p1-unsupported_sentence`**: `[F,F,F]` / `[F,F,F]`. **nan in all
+  6 runs**, with the same `segment_claims` parse failure. Inserted sentence: « Il
+  illustre ensuite ce point par l'exemple d'une horloge arrêtée dans une
+  maison vide. » Source chunk `1932_2S_c170` has no horloge. No statements
+  and no reasons were recorded.
+- **`Q008-p1-negation`**: `[T,F,F]` / `[T,T,F]`. **The only miss on a
+  judged verdict**, and an unstable one: detected in 3 of 6 runs. Edit:
+  « et le mental sont solidaires » → « et le mental **ne** sont **pas**
+  solidaires ». Statement (identical in every run): « De manière
+  analogue, le cérébral et le mental ne sont pas solidaires, sans pour
+  autant qu'on puisse établir d'équivalence entre eux. » Source
+  (`1919_ES_c32`): « Un vêtement est solidaire du clou auquel il est
+  accroché ; il tombe si l'on arrache le clou […] il ne s'ensuit pas que
+  chaque détail du clou corresponde à un détail du vêtement, ni que le
+  clou soit l'équivalent du vêtement ». NLI reasons:
+  - verdict 0 (caught): « …il n'y a pas de mention d'une absence de
+    solidarité entre le cerveau et le mental, ni d'une absence
+    d'équivalence entre eux. »
+  - verdict 1 (missed): « …l'auteur suggère implicitement que le cerveau
+    et le mental sont solidaires, ce qui est en accord avec
+    l'affirmation. » The reason states the opposite of the statement and
+    still concludes "supported".
+
+So 3 of the 4 misses are parse failures, counted as missed under the
+gate's rule. They are deterministic, and they say nothing about what the
+judge would have answered. Only Q008-p1 shows the judge reading a
+statement and accepting it. On the 11 items that parsed, the known claim was
+flagged in every repeat for 10 of them.
+
+#### 2. Faithful class
+
+Mean faithfulness **0.611** (run 1) and **0.617** (run 2) over 12 items, with no
+nan. Per item (mean of 3 repeats, run 1 / run 2):
+
+| Item | Q001 | Q002 | Q003 | Q004 | Q005 | Q006 | Q007 | Q008 | Q009 | Q010 | Q011 | Q012 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| run 1 | 0.500 | 0.273 | 1.000 | 0.500 | 1.000 | 0.667 | 0.622 | 0.778 | 0.000 | 0.500 | 0.889 | 0.600 |
+| run 2 | 0.500 | 0.273 | 1.000 | 0.500 | 1.000 | 0.667 | 0.644 | 0.778 | 0.000 | 0.556 | 0.889 | 0.600 |
+
+27 distinct statements are flagged across 10 of the 12 gold answers (78
+flags in run 1, 77 in run 2). Only Q003 and Q005 are never flagged. All of
+them are listed with their reasons in the result files
+(`summary.flagged_faithful_statements`). These are investigation leads,
+and the labels are unchanged. They fall into three groups:
+
+- **Work title or date** (Q001, Q006, Q007, Q009, Q010: each answer's
+  opening sentence, e.g. « Dans l'Évolution Créatrice (1907)… », « Dans
+  Les Deux Sources (1932)… »). The judge sees chunk text only, never a
+  work's title or date, so these statements can't be supported by
+  construction; reasons say « ne mentionne pas explicitement l'œuvre… ».
+- **Paraphrase or inference beyond the chunk wording** (most of Q002, Q004,
+  Q009, Q012, Q007 « utile à la vie pratique et à la plupart des
+  sciences », Q011 r3 only): reasons of the form « ne mentionne pas
+  explicitement… ». Whether the gold answer overreaches or the judge reads
+  too literally is the owner's call.
+- **Reasons that may misread the chunk**: Q002 « Les états d'un tel système
+  sont juxtaposés dans l'espace » is rejected because « l'univers déroule
+  ses états successifs ». In Q009 « L'humanité s'appuie sur l'animal »,
+  the reason inverts the image (« l'animal est sous l'homme, pas
+  l'inverse »). In Q010 « Bergson récuse la transformation graduelle
+  interne », the reason infers that Bergson doesn't reject the transformation
+  from the chunk describing it (chunk not re-read here).
+  Q008's clou/vêtement statement flips (below).
+
+Hallucinated class, for reference (lower is the correct direction): 0.485 /
+0.479 over the 11 parsed items. Never pooled with the faithful class.
+
+#### 3. Stability
+
+- **Within each run** (3 repeats): mean per-item score range 0.063
+  (run 1) and 0.071 (run 2), max 0.333. 2 verdict flips per run, the same
+  two statements both times:
+  - Q008 (faithful): « En effet, si on arrache le clou, le vêtement tombe,
+    mais on ne peut pas en conclure que la forme du clou dessine celle du
+    vêtement… »
+  - Q008-p1-negation: the negated statement above.
+
+  Matched statements: 112 (run 1) and 113 (run 2). Statements extracted in
+  a single repeat only: 7 and 8.
+- **Across both runs** (`stability()` over the 6 runs pooled): mean range
+  0.071, max 0.333, **the same 2 flips and no other**, 119 matched
+  statements, 2 extracted only once.
+- **Noise floor**: `noise_floor(run1, run2)` from
+  `eval/scripts/compare_prompt_results.py`, called directly. The CLI refuses
+  two results with identical manifests by design. Per-item |run 1 mean −
+  run 2 mean|:
+  - 0 on 19 items;
+  - nonzero on 4: Q007 0.022, Q010 0.056, Q007-p1 0.048, Q008-p1 0.111;
+  - nan on 3 (the three always-nan items).
+
+  Max 0.111, mean 0.010 over the 23 finite items. Future comparisons
+  should pass run 2 as `--rerun`.
+
+Score movement concentrates in Q007, Q008, Q010, Q011 and their perturbed
+copies. Everything else is identical to three decimals across all 6 runs.
+
+#### 4. nan and parse failures
+
+**9/78 rows (11.5%) in each run**, the same 9 both times: Q002-gen ×3,
+Q001-p1 ×3 and Q010-p1 ×3. All of them are in the hallucinated class, and the
+faithful class has no nan. Per class and repeat: faithful 0/12, hallucinated
+3/14, in every repeat of both runs. There were no unevaluated claims.
+
+#### 5. Verdict
+
+**The committed defaults do not pass the gate**: 10 of 14 hallucinated
+items flagged in every repeat (generated 1/2, perturbed 9/12), with the
+same result in both runs. Three of the four misses are deterministic parse
+failures (nan), counted as missed by the gate's rule. The fourth,
+Q008-p1-negation, is a genuine and unstable miss: the negation is accepted
+in 3 of 6 runs. The faithful-class mean is **0.611 / 0.617**. Stability is
+high: 2 flipping statements, both in the Q008 pair, and a noise floor of 0
+on 19 of 26 items, max 0.111. This is a baseline, not a selection result:
+no other candidate has been run, the frozen judge is not designated, and
+nothing here recommends a prompt change.
+
 ## Tests
 
 All fast (CI's `-m "not slow"` job):

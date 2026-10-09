@@ -1,0 +1,22 @@
+name: judge-parsing-opt
+hypothesis: >-
+  Observed failure: the first judge baseline
+  (eval/results/prompt_cmp_judge_default_n26_20261008T124431Z.json and
+  _20261008T141004Z.json) lost Q001-p1-unsupported_sentence,
+  Q010-p1-unsupported_sentence and Q002-gen-end_to_end to malformed JSON
+  (nan in 6/6 runs; raw replies in
+  eval/results/raw_judge_replies_default_20261009.json): a missing comma
+  between two claims or two fields, and an invalid \' escape after a quoted
+  title. Since then the code repairs those replies (#57, judge input
+  version 2), so this variant is measured against the baseline rerun on
+  version 2 (exp/judge-baseline-v2), not the first one. Variant: explicit
+  JSON rules in both instructions (a comma between claims; « » instead of
+  inner double quotes; no escaped apostrophe). Examples and schema
+  unchanged. Question: do these rules change verdicts, stability or the
+  faithful-class mean once parsing no longer fails? Expected: no gain, at
+  the cost of a longer instruction.
+based_on:
+  faithfulness.segment_claims: 1d73fc7146afd75e35f397af6ecbd2449f9be263f36ffd22b71209b668f3bdbd
+  faithfulness.nli_verifier: 89e87a3d7dfbff708fda84fe52c33a33dcfe48b9f3d1d70cc3fb155eefb05f1e
+status: draft
+results: []

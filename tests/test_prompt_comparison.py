@@ -19,6 +19,7 @@ from eval.scripts import (
     compare_prompt_results,
     freeze_judge,
     judge_selection,
+    judge_variant_report,
     prompt_results,
     prompt_variants,
     run_prompt_comparison,
@@ -1159,3 +1160,86 @@ def test_allow_unfrozen_judge_stamps_the_header(tmp_path):
     ):
         assert key in header
     assert header["git"]["dirty"] in (True, False)
+
+
+# --- judge variant report ---------------------------------------------------
+
+
+def test_pooled_rows_renumber_repeats_run_after_run():
+    rows, total = judge_variant_report.pooled([result(), result()])
+    assert total == 4
+    assert sorted({r["repeat"] for r in rows if r["item_id"] == "Q001"}) == [1, 2, 3, 4]
+    with pytest.raises(ValueError, match="share --repeat"):
+        judge_variant_report.pooled([result(), result(repeat=1, rows=judge_rows(1))])
+
+
+def test_pooled_stability_counts_a_flip_across_runs():
+    # Each run is stable on its own; the verdict flips between the two.
+    second = [
+        {**r, "claims": [{**c, "supported": False} for c in r["claims"]]}
+        if r["item_id"] == "Q001"
+        else r
+        for r in judge_rows()
+    ]
+    cand = judge_variant_report.candidate([result(), result(rows=second)])
+    assert [run["stability"]["flips"] for run in cand["runs"]] == [0, 0]
+    assert cand["pooled_stability"]["flips"] == 1
+
+
+def test_judge_variant_report_gate_diff_floor_and_deltas(tmp_path):
+    variant_manifest = manifest(faithfulness__nli_verifier="1" * 64)
+    base1 = _write(tmp_path / "b1.json", result(rows=judge_rows(flag=False)))
+    rerun_rows = judge_rows(flag=False)
+    rerun_rows[0] = {**rerun_rows[0], "score": 0.8}  # Q001 repeat 1
+    base2 = _write(tmp_path / "b2.json", result(rows=rerun_rows))
+    var = _write(
+        tmp_path / "v.json",
+        result(label="v", manifest_=variant_manifest, rows=judge_rows(faithful_score=0.5)),
+    )
+    out = tmp_path / "out"
+    args = ["--baseline", str(base1), str(base2), "--output-dir", str(out)]
+    assert judge_variant_report.main([*args, "--variant", str(var)]) == 0
+    report = json.loads(next(out.glob("*.json")).read_text(encoding="utf-8"))
+    assert report["gate_diff"]["newly_caught"] == ["Q001-gen", "Q002-p1-proper_noun"]
+    assert report["gate_diff"]["newly_missed"] == []
+    floor = report["baseline"]["noise_floor"]
+    assert floor["nonzero"] == {"Q001": pytest.approx(0.1)} and floor["zero"] == 3
+    assert report["variant"]["noise_floor"] is None
+    q001, q002 = report["items"][:2]
+    assert q001["delta"] == pytest.approx(-0.5) and q001["noise"] == "outside noise"
+    assert q002["noise"] == "outside noise"
+    md = next(out.glob("*.md")).read_text(encoding="utf-8")
+    assert "EXPLORATORY" in md and "Newly caught: Q001-gen" in md
+    assert "single run, no floor" in md
+
+
+def test_judge_variant_report_refuses_a_rerun_as_variant(tmp_path, capsys):
+    a = _write(tmp_path / "a.json", result())
+    b = _write(tmp_path / "b.json", result())
+    out = tmp_path / "out"
+    argv = ["--baseline", str(a), str(b), "--variant", str(a), "--output-dir", str(out)]
+    assert judge_variant_report.main(argv) == 2
+    assert "not comparable" in capsys.readouterr().err
+    assert judge_variant_report.main([*argv, "--force"]) == 0
+    assert "NOT COMPARABLE" in next(out.glob("*.md")).read_text(encoding="utf-8")
+
+
+def test_judge_variant_report_without_variant_writes_the_baseline_report(tmp_path):
+    rows = judge_rows(flag=False)
+    rows[2] = {**rows[2], "claims": [{**c, "supported": False} for c in rows[2]["claims"]]}
+    base1 = _write(tmp_path / "b1.json", result(rows=rows))  # Q001-gen caught in repeat 1 only
+    base2 = _write(tmp_path / "b2.json", result(rows=judge_rows(flag=False)))
+    out = tmp_path / "out"
+    assert (
+        judge_variant_report.main(["--baseline", str(base1), str(base2), "--output-dir", str(out)])
+        == 0
+    )
+    report = json.loads(next(out.glob("*.json")).read_text(encoding="utf-8"))
+    assert report["variant"] is None and report["gate_diff"] is None
+    base = report["baseline"]
+    assert base["missed_detections"]["Q001-gen"] == [[True, False], [False, False]]
+    assert base["item_means"]["Q001"] == [1.0, 1.0]
+    md = next(out.glob("prompt_cmp_judgebase_default_*.md")).read_text(encoding="utf-8")
+    assert md.startswith("# Judge baseline") and "NOT COMPARABLE" not in md
+    assert "Q001-gen: [T,F] / [F,F]" in md and "Newly caught" not in md
+    assert "| Q001 | 1.000 (0/2) | 1.000 (0/2) |" in md

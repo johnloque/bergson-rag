@@ -40,6 +40,7 @@ from eval.scripts.judge_selection import (
     Axes,
     class_scores,
     dominance,
+    format_miss,
     is_nan,
     item_mean,
     rows_by_item,
@@ -176,6 +177,7 @@ def build_matrix(
             f"nan runs[{label}]",
             f"claims/run[{label}]",
             f"unsupported/run[{label}]",
+            f"unevaluated/run[{label}]",
         ]
     for label in labels[1:]:
         columns += [f"delta[{label}]", f"noise[{label}]"]
@@ -201,6 +203,7 @@ def build_matrix(
                 f"{sum(is_nan(r['score']) for r in runs)}/{len(runs)}",
                 f"{sum(len(r['claims']) for r in runs) / n:.1f}",
                 f"{sum(c['supported'] is False for r in runs for c in r['claims']) / n:.1f}",
+                f"{sum(c['supported'] is None for r in runs for c in r['claims']) / n:.1f}",
             ]
         item_floor = None if floor is None else floor.get(item["id"], float("nan"))
         for mean in means[1:]:
@@ -220,11 +223,18 @@ def _nan_rate(nan_per_run: Mapping[int, tuple[int, int]]) -> str:
     return ", ".join(f"run {r}: {n}/{t}" for r, (n, t) in nan_per_run.items())
 
 
+def _missed(gate: Mapping[str, Any]) -> str:
+    return ", ".join(format_miss(i, gate["miss_reasons"][i]) for i in gate["missed"])
+
+
 def class_means(results: Sequence[Mapping[str, Any]]) -> list[str]:
     """Mean per file and class, nan rate per run beside it. Judge mode keeps
     the faithful and hallucinated classes apart; generation items are all
     gold questions (one class)."""
-    lines = ["| candidate | class | mean | items | nan per run |", "|---|---|---|---|---|"]
+    lines = [
+        "| candidate | class | mean | items | nan per run | runs with unevaluated claims |",
+        "|---|---|---|---|---|---|",
+    ]
     for label, result in zip(_labels(results), results, strict=True):
         repeat = result["header"]["repeat"]
         classes = (FAITHFUL, HALLUCINATED) if result["header"]["mode"] == "judge" else (FAITHFUL,)
@@ -236,7 +246,7 @@ def class_means(results: Sequence[Mapping[str, Any]]) -> list[str]:
             }
             lines.append(
                 f"| {label} | {cls} ({direction[cls]}) | {_fmt(scores.mean)} | {scores.n_items} | "
-                f"{_nan_rate(scores.nan_per_run)} |"
+                f"{_nan_rate(scores.nan_per_run)} | {_nan_rate(scores.unevaluated_per_run)} |"
             )
     return lines
 
@@ -256,9 +266,12 @@ def judge_sections(results: Sequence[Mapping[str, Any]]) -> list[str]:
         types = ", ".join(f"{t} {d}/{n}" for t, (d, n) in gate["per_perturbation_type"].items())
         lines.append(
             f"| {label} | {'PASSED' if gate['passed'] else 'FAILED (rejected)'} | {origins} | "
-            f"{types or 'none'} | {', '.join(gate['missed']) or '—'} |"
+            f"{types or 'none'} | {_missed(gate) or '—'} |"
         )
     lines += [
+        "",
+        "Missed: a miss is a miss for the gate, whatever its reason (nan = the check "
+        "failed; unevaluated = the known claim got no verdict; judged supported).",
         "",
         "Perturbed items are mechanical edits, cruder than real fabrications: catching them "
         "shows the judge catches blatant errors, not subtle ones.",

@@ -791,6 +791,45 @@ def test_gate_passes_and_reports_counts_per_origin():
     assert gate.passed and gate.per_origin == {"generated": (1, 1), "perturbed": (1, 1)}
 
 
+def test_gate_records_why_each_repeat_missed():
+    rows = judge_rows()
+    rows[2]["claims"][1]["supported"] = None  # Q001-gen run 1: known claim unevaluated
+    rows[3] = row("Q002-p1-proper_noun", 1, None, error="RagasOutputParserException: x")
+    rows[-1]["claims"][1]["supported"] = True  # Q002-p1 run 2: judged supported
+    gate = judge_selection.gate(judge_items(), rows, 2)
+    assert gate.miss_reasons == {
+        "Q001-gen": ["unevaluated", None],
+        "Q002-p1-proper_noun": ["nan", "judged supported"],
+    }
+    assert judge_selection.format_miss("Q001-gen", ["unevaluated", None, "unevaluated"]) == (
+        "Q001-gen (unevaluated ×2)"
+    )
+    summary = judge_selection.summarize(judge_items(), rows, 2)
+    assert summary["gate"]["miss_reasons"] == gate.miss_reasons
+
+
+def test_runs_with_unevaluated_claims_are_counted_per_class_and_reported():
+    """A claim left unevaluated is left out of its run's score, which can
+    then read as faithful (1.0): the reports say so beside the nan rate."""
+    rows = judge_rows()
+    rows[2]["claims"][1]["supported"] = None  # Q001-gen run 1
+    rows[2]["score"] = 1.0
+    hallu = judge_selection.class_scores(judge_items(), rows, "hallucinated", 2)
+    assert hallu.unevaluated_per_run == {1: (1, 2), 2: (0, 2)}
+    assert judge_selection.class_scores(judge_items(), rows, "faithful", 2).unevaluated_per_run[
+        1
+    ] == (0, 2)
+
+    report = run_prompt_comparison.render_report(
+        {**result(rows=rows), "summary": judge_selection.summarize(judge_items(), rows, 2)}
+        | {"header": {**result()["header"], "created": "t", "command": "c"}}
+    )
+    assert "runs with unevaluated claims (left out of their score): run 1: 1/2" in report
+    assert "missed: Q001-gen (unevaluated ×1)" in report
+    lines = compare_prompt_results.class_means([result(rows=rows)])
+    assert lines[-1].endswith("| run 1: 1/2, run 2: 0/2 |")
+
+
 def test_classes_are_never_pooled():
     summary = judge_selection.summarize(judge_items(), judge_rows(), 2)
     assert summary["faithful_class"]["mean"] == 1.0
@@ -1241,5 +1280,9 @@ def test_judge_variant_report_without_variant_writes_the_baseline_report(tmp_pat
     assert base["item_means"]["Q001"] == [1.0, 1.0]
     md = next(out.glob("prompt_cmp_judgebase_default_*.md")).read_text(encoding="utf-8")
     assert md.startswith("# Judge baseline") and "NOT COMPARABLE" not in md
-    assert "Q001-gen: [T,F] / [F,F]" in md and "Newly caught" not in md
+    assert base["miss_reasons"]["Q001-gen"] == [
+        [None, "judged supported"],
+        ["judged supported", "judged supported"],
+    ]
+    assert "Q001-gen (judged supported ×3): [T,F] / [F,F]" in md and "Newly caught" not in md
     assert "| Q001 | 1.000 (0/2) | 1.000 (0/2) |" in md

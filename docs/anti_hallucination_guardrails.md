@@ -884,3 +884,44 @@ with the same tests, so none is introduced here:
 - `test_judge_chunk_pertinent_for_matching_chunk`,
   `test_judge_chunk_non_pertinent_for_unrelated_chunk` — `chunk_judge.py`
   is untouched by this branch; cause not investigated.
+
+## `fix/judge-parse-robustness`: repairing the judge's JSON before RAGAS parses it
+
+The judge baseline (`docs/prompts.md`, "Judge baseline") lost 3 of its 14
+hallucinated items to deterministic parse failures (nan in every run). Raw
+replies, captured in `eval/results/raw_judge_replies_default_20261009.json`,
+showed three code-side causes:
+
+- **Two known malformations.** A missing comma between two values on
+  separate lines (two claims of one segment, Q001-p1 and Q010-p1), and `\'`,
+  an escape JSON doesn't have, closing a quoted title (Q002-gen, NLI).
+  `src/generation/judge_output.py` repairs exactly these, and keeps a
+  repair only if it turns invalid JSON into valid JSON: a well-formed reply
+  is never touched.
+- **RAGAS's retry never succeeded.** `FixOutputFormat` expects the fixed
+  reply wrapped as `{"text": ...}`; the local judge returns it bare, so
+  every retry failed (its fixes were often valid). The bare reply is now
+  wrapped back.
+- **One exception escaped.** When the retry's fix still doesn't parse,
+  RAGAS raises langchain's `OutputParserException`, not its own: the NLI
+  step didn't catch it, so the whole check failed instead of one claim
+  being left unevaluated.
+
+Both repairs run in the judge LLM wrapper `build_judge_llm` returns
+(`_RepairingJudgeLLM`), so every caller of that function gets them: the
+guardrail, `run_prompt_comparison.py` and `run_ragas_eval.py`.
+
+On the real judge (default prompts, 1 repeat), all three items are judged
+now, without any retry: Q001-p1 and Q010-p1 flag their fabricated claim;
+Q002-gen's fabricated title is judged *supported*. That's a genuine judge
+miss, no longer hidden behind a nan.
+
+**Unevaluated claims in the eval reports.** A claim with no verdict is
+left out of its run's score, which can then read as faithful (1.0). The
+gate already counted such a run as missed (no verdict 0), but nothing said
+why. Reports now give, per class, the runs with unevaluated claims beside
+the nan rate, and for every missed item the reason per repeat (`nan`,
+`unevaluated`, `judged supported`, `no claim extracted`).
+
+The judge-baseline result files predate this branch: rerun the baseline
+before comparing a variant against it.

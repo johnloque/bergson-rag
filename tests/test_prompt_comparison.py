@@ -986,9 +986,10 @@ def test_results_from_another_judge_input_version_are_not_comparable():
     assert any("judge input version differs (1 vs 2)" in p for p in problems), problems
 
 
-def test_judge_mode_chunks_carry_their_paragraph_ids():
-    ids = calibration_set.load_chunk_paragraph_ids()
-    assert ids["1934_PM_c6"] == ["1934_PM_p6"]
+def test_judge_mode_chunks_carry_their_paragraph_ids(tmp_path):
+    chunk = {"chunk_id": "1934_PM_c6", "text": "Un passage.", "paragraph_ids": ["1934_PM_p6"]}
+    (tmp_path / "1934_PM.json").write_text(json.dumps([chunk]), encoding="utf-8")
+    assert calibration_set.load_chunk_paragraph_ids(tmp_path) == {"1934_PM_c6": ["1934_PM_p6"]}
 
 
 def _write(path: Path, data: dict) -> Path:

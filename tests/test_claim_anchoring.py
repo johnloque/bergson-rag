@@ -7,6 +7,8 @@ tests/test_faithfulness.py (slow)."""
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
+from typing import Any
 
 from ragas.metrics._faithfulness import NLIStatementOutput, StatementFaithfulnessAnswer
 
@@ -16,6 +18,7 @@ from src.generation.faithfulness import (
     SegmentedClaimsOutput,
     _anchor_claims,
     _claim_verdict,
+    _context_for_judge,
     _score,
     _text_for_judge,
 )
@@ -78,3 +81,31 @@ def test_text_for_judge_drops_citations_the_judge_could_mistake_for_segment_ids(
     text = "La durée [1889_DI_c3, 1907_EC_c5], dit-il. Oui [1907_EC_c9]."
     segment = Segment(id=0, text=text, start=0, end=len(text))
     assert _text_for_judge(segment) == "La durée, dit-il. Oui."
+
+
+def _chunk(text: str, work_id: str = "", paragraph_ids: tuple[str, ...] = ()) -> Any:
+    return SimpleNamespace(text=text, work_id=work_id, paragraph_ids=list(paragraph_ids))
+
+
+def test_judge_context_puts_each_chunk_under_its_source_header():
+    """The judge sees the same title/year as the generation prompt, the
+    anthology's own text included, so it can check a title claim against
+    the context instead of its memory."""
+    context = _context_for_judge(
+        [
+            _chunk("Premier passage.", "1907_EC", ("1907_EC_p40",)),
+            _chunk("Second passage.", "1934_PM", ("1934_PM_p6",)),
+        ]
+    )
+    assert context == (
+        "[1907_EC — L'Évolution créatrice (1907)]\nPremier passage.\n\n"
+        "[1934_PM — La Pensée et le Mouvant (1934) › Introduction (première partie) (1922)]"
+        "\nSecond passage."
+    )
+
+
+def test_judge_context_without_work_id_or_paragraphs_degrades_gracefully():
+    assert _context_for_judge([_chunk("Passage.")]) == "Passage."
+    assert _context_for_judge([_chunk("Passage.", "1919_ES")]) == (
+        "[1919_ES — L'énergie spirituelle (1919)]\nPassage."
+    )

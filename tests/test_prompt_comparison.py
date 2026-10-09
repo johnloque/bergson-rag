@@ -977,6 +977,20 @@ def test_comparability_refusals(other, message):
     assert any(message in p for p in problems), problems
 
 
+def test_results_from_another_judge_input_version_are_not_comparable():
+    """A result without the field predates it (version 1): plain chunk texts,
+    unrepaired replies."""
+    current = result(label="v", manifest_=manifest(faithfulness__nli_verifier="1" * 64))
+    current["header"]["judge_input_version"] = 2
+    problems = compare_prompt_results.comparability_problems([result(), current])
+    assert any("judge input version differs (1 vs 2)" in p for p in problems), problems
+
+
+def test_judge_mode_chunks_carry_their_paragraph_ids():
+    ids = calibration_set.load_chunk_paragraph_ids()
+    assert ids["1934_PM_c6"] == ["1934_PM_p6"]
+
+
 def _write(path: Path, data: dict) -> Path:
     prompt_results.write_result(path, data)
     return path

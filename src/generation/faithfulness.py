@@ -184,6 +184,7 @@ from src.prompts.loader import (
     load_prompt,
     prompts_used,
 )
+from src.works import resolve_paragraph_metadata, work_label
 
 # Same default model as generate_from_chunks (src/generation/generate.py) —
 # local Mistral via Ollama, cost-free by default (docs/ROADMAP.md).
@@ -210,6 +211,15 @@ JUDGE_TEMPERATURE = 0.0
 # Ollama-served model — passing an Ollama-specific param to a hosted
 # provider (e.g. the Mistral API fallback) would error.
 JUDGE_NUM_CTX = 16384
+
+# What the judge is given, besides its prompts, and how its replies are read:
+# bump it whenever code changes either, so eval checkpoints written before
+# can't be replayed as if they were current (the prompt-comparison
+# fingerprint covers prompts, models and items, not code).
+# 1: plain chunk texts, RAGAS's parser alone.
+# 2: replies repaired before parsing (fix/judge-parse-robustness), and each
+#    chunk under its source header (feat/judge-context-metadata).
+JUDGE_INPUT_VERSION = 2
 _OLLAMA_PROVIDERS = ("ollama", "ollama_chat")
 
 # `ragas.async_utils.run` (RAGAS's own sync-wrapper, used here until the fix
@@ -434,6 +444,36 @@ def _text_for_judge(segment: Segment) -> str:
     return re.sub(r"\s+([.,])", r"\1", re.sub(r"\s+", " ", text)).strip()
 
 
+def _source_header(chunk: GenerationChunk) -> str | None:
+    """`1907_EC — L'Évolution créatrice (1907)`, plus `› L'effort
+    intellectuel (1902)` for a chunk inside an individually-dated text of an
+    anthology: the same metadata the generation prompt shows
+    (`src/generation/prompt.py`, "Title/year grounding"). None for a chunk
+    with no `work_id` (an API caller may omit it)."""
+    if not chunk.work_id:
+        return None
+    header = f"{chunk.work_id} — {work_label(chunk.work_id)}"
+    if chunk.paragraph_ids:
+        metadata = resolve_paragraph_metadata(chunk.work_id, chunk.paragraph_ids[0])
+        if metadata.text_title is not None:
+            header += f" › {metadata.text_title} ({metadata.text_year})"
+    return header
+
+
+def _context_for_judge(chunks: Sequence[GenerationChunk]) -> str:
+    """The NLI context: each chunk's text under its source header. Without
+    the header the judge never sees a work's title or year, so it judged a
+    title claim against its own memory of Bergson: an invented title was
+    "supported" because the context was, it said, from another work it
+    named itself (Q002-gen, docs/anti_hallucination_guardrails.md,
+    `feat/judge-context-metadata`)."""
+    blocks = []
+    for chunk in chunks:
+        header = _source_header(chunk)
+        blocks.append(chunk.text if header is None else f"[{header}]\n{chunk.text}")
+    return "\n\n".join(blocks)
+
+
 def _anchor_claims(
     segments: Sequence[Segment], output: SegmentedClaimsOutput
 ) -> list[tuple[int, str]]:
@@ -531,7 +571,7 @@ def check_faithfulness(
         return FaithfulnessResult(score=float("nan"), model=model)
 
     llm = judge_llm if judge_llm is not None else build_judge_llm(model)
-    context = "\n".join(chunk.text for chunk in chunks)
+    context = _context_for_judge(chunks)
 
     async def _judge(claim: str) -> NLIStatementOutput | None:
         try:

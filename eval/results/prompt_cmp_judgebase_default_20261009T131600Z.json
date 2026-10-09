@@ -1,0 +1,1777 @@
+{
+  "banner": "EXPLORATORY: n=26 items, below the n=50 volume threshold (docs/gold_dataset_protocol.md). No number here is decision-grade, and this tooling never picks a winner: the owner does.",
+  "problems": [],
+  "differs_in": [],
+  "baseline_files": [
+    "eval/results/prompt_cmp_judge_default_n26_20261009T100635Z.json",
+    "eval/results/prompt_cmp_judge_default_n26_20261009T112759Z.json"
+  ],
+  "variant_files": [],
+  "baseline": {
+    "label": "default",
+    "runs": [
+      {
+        "gate": {
+          "passed": false,
+          "missed": [
+            "Q008-p1-negation"
+          ],
+          "per_origin": {
+            "generated": [
+              2,
+              2
+            ],
+            "perturbed": [
+              11,
+              12
+            ]
+          },
+          "per_perturbation_type": {
+            "negation": [
+              1,
+              2
+            ],
+            "proper_noun": [
+              1,
+              1
+            ],
+            "unsupported_sentence": [
+              9,
+              9
+            ]
+          },
+          "detections": {
+            "Q002-gen-end_to_end": [
+              true,
+              true,
+              true
+            ],
+            "Q004-gen-end_to_end": [
+              true,
+              true,
+              true
+            ],
+            "Q001-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ],
+            "Q002-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ],
+            "Q003-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ],
+            "Q004-p1-negation": [
+              true,
+              true,
+              true
+            ],
+            "Q005-p1-proper_noun": [
+              true,
+              true,
+              true
+            ],
+            "Q006-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ],
+            "Q007-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ],
+            "Q008-p1-negation": [
+              false,
+              false,
+              false
+            ],
+            "Q009-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ],
+            "Q010-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ],
+            "Q011-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ],
+            "Q012-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ]
+          },
+          "miss_reasons": {
+            "Q008-p1-negation": [
+              "judged supported",
+              "judged supported",
+              "judged supported"
+            ]
+          }
+        },
+        "faithful_class": {
+          "mean": 0.6653198653198653,
+          "n_items": 12,
+          "nan_per_run": {
+            "1": [
+              0,
+              12
+            ],
+            "2": [
+              0,
+              12
+            ],
+            "3": [
+              0,
+              12
+            ]
+          },
+          "unevaluated_per_run": {
+            "1": [
+              0,
+              12
+            ],
+            "2": [
+              0,
+              12
+            ],
+            "3": [
+              0,
+              12
+            ]
+          }
+        },
+        "hallucinated_class": {
+          "mean": 0.5336734693877551,
+          "n_items": 14,
+          "nan_per_run": {
+            "1": [
+              0,
+              14
+            ],
+            "2": [
+              0,
+              14
+            ],
+            "3": [
+              0,
+              14
+            ]
+          },
+          "unevaluated_per_run": {
+            "1": [
+              0,
+              14
+            ],
+            "2": [
+              0,
+              14
+            ],
+            "3": [
+              0,
+              14
+            ]
+          }
+        },
+        "stability": {
+          "measured": true,
+          "mean_range": 0.027289377289377297,
+          "max_range": 0.33333333333333337,
+          "flips": 1,
+          "matched_statements": 127,
+          "unmatched_statements": 10,
+          "flipped": [
+            [
+              "Q007-p1-unsupported_sentence",
+              "Cette assimilation est utile à la vie pratique et à la plupart des sciences."
+            ]
+          ]
+        },
+        "flagged_faithful_statements": [
+          {
+            "item_id": "Q002",
+            "repeat": 1,
+            "statement": "Les physiciens considèrent la fonte du morceau de sucre comme un système isolé.",
+            "reason": "Le contexte ne mentionne pas explicitement que les physiciens considèrent la fonte du morceau de sucre comme un système isolé."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 1,
+            "statement": "Les physiciens reposent sur des abstractions relatives (verre d'eau, sucre, processus de dissolution, unités de temps...).",
+            "reason": "Le contexte discute de la nature du temps et de la perception de la durée par les êtres conscients, mais il ne fait pas explicitement mention de l'utilisation de telles abstractions par les physiciens."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 1,
+            "statement": "Un tel système fonctionne comme la bande d'un cinématographe.",
+            "reason": "Le contexte discute de la succession des états dans l'univers et de la durée de la vie intérieure, mais il ne fait aucune référence à un système fonctionnant comme une bande de cinématographe."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 1,
+            "statement": "Dans un tel système, les événements se succèdent dans un déterminisme total.",
+            "reason": "Le contexte discute de la succession des événements dans l'univers, mais il ne suggère pas que ce déroulement est totalement déterminé."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 1,
+            "statement": "Tous les états, passés, présents et futurs d'un tel système sont déterminés d'un seul coup.",
+            "reason": "Le contexte indique que l'auteur considère que le temps est une succession et non un éventail ou un film cinématographique, ce qui implique que les états successifs ne sont pas déterminés d'un seul coup."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 1,
+            "statement": "Les états d'un tel système sont juxtaposés dans l'espace.",
+            "reason": "Le contexte indique explicitement que l'univers déroule ses états successifs avec une vitesse déterminée, ce qui implique un temps qui progresse et non une juxtaposition dans l'espace."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 1,
+            "statement": "La fonte du morceau de sucre coïncide avec mon attente.",
+            "reason": "Le contexte indique que la fonte du sucre est un processus qui doit attendre, mais il ne fait pas mention d'une coïncidence avec l'attente."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 1,
+            "statement": "La fonte du morceau de sucre coïncide avec mon impatience.",
+            "reason": "Le contexte indique que la durée attendue pour la fonte du sucre est liée à l'impatience de l'individu, mais il n'y a pas de mention explicite de la coïncidence entre la fonte du sucre et l'impatience."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 2,
+            "statement": "Les physiciens considèrent la fonte du morceau de sucre comme un système isolé.",
+            "reason": "Le contexte ne mentionne pas explicitement que les physiciens considèrent la fonte du morceau de sucre comme un système isolé."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 2,
+            "statement": "Les physiciens reposent sur des abstractions relatives (verre d'eau, sucre, processus de dissolution, unités de temps...).",
+            "reason": "Le contexte discute de la nature du temps et de la perception de la durée par les êtres conscients, mais il ne fait pas explicitement mention de l'utilisation de telles abstractions par les physiciens."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 2,
+            "statement": "Un tel système fonctionne comme la bande d'un cinématographe.",
+            "reason": "Le contexte discute de la succession des états dans l'univers et de la durée de la vie intérieure, mais il ne fait aucune référence à un système fonctionnant comme une bande de cinématographe."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 2,
+            "statement": "Dans un tel système, les événements se succèdent dans un déterminisme total.",
+            "reason": "Le contexte discute de la succession des événements dans l'univers, mais il ne suggère pas que ce déroulement est totalement déterminé."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 2,
+            "statement": "Tous les états, passés, présents et futurs d'un tel système sont déterminés d'un seul coup.",
+            "reason": "Le contexte indique que l'auteur considère que le temps est une succession et non un éventail ou un film cinématographique, ce qui implique que les états successifs ne sont pas déterminés d'un seul coup."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 2,
+            "statement": "Les états d'un tel système sont juxtaposés dans l'espace.",
+            "reason": "Le contexte indique explicitement que l'univers déroule ses états successifs avec une vitesse déterminée, ce qui implique un temps qui progresse et non une juxtaposition dans l'espace."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 2,
+            "statement": "La fonte du morceau de sucre coïncide avec mon attente.",
+            "reason": "Le contexte indique que la fonte du sucre est un processus qui doit attendre, mais il ne fait pas mention d'une coïncidence avec l'attente."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 2,
+            "statement": "La fonte du morceau de sucre coïncide avec mon impatience.",
+            "reason": "Le contexte indique que la durée attendue pour la fonte du sucre est liée à l'impatience de l'individu, mais il n'y a pas de mention explicite de la coïncidence entre la fonte du sucre et l'impatience."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 3,
+            "statement": "Les physiciens considèrent la fonte du morceau de sucre comme un système isolé.",
+            "reason": "Le contexte ne mentionne pas explicitement que les physiciens considèrent la fonte du morceau de sucre comme un système isolé."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 3,
+            "statement": "Les physiciens reposent sur des abstractions relatives (verre d'eau, sucre, processus de dissolution, unités de temps...).",
+            "reason": "Le contexte discute de la nature du temps et de la perception de la durée par les êtres conscients, mais il ne fait pas explicitement mention de l'utilisation de telles abstractions par les physiciens."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 3,
+            "statement": "Un tel système fonctionne comme la bande d'un cinématographe.",
+            "reason": "Le contexte discute de la succession des états dans l'univers et de la durée de la vie intérieure, mais il ne fait aucune référence à un système fonctionnant comme une bande de cinématographe."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 3,
+            "statement": "Dans un tel système, les événements se succèdent dans un déterminisme total.",
+            "reason": "Le contexte discute de la succession des événements dans l'univers, mais il ne suggère pas que ce déroulement est totalement déterminé."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 3,
+            "statement": "Tous les états, passés, présents et futurs d'un tel système sont déterminés d'un seul coup.",
+            "reason": "Le contexte indique que l'auteur considère que le temps est une succession et non un éventail ou un film cinématographique, ce qui implique que les états successifs ne sont pas déterminés d'un seul coup."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 3,
+            "statement": "Les états d'un tel système sont juxtaposés dans l'espace.",
+            "reason": "Le contexte indique explicitement que l'univers déroule ses états successifs avec une vitesse déterminée, ce qui implique un temps qui progresse et non une juxtaposition dans l'espace."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 3,
+            "statement": "La fonte du morceau de sucre coïncide avec mon attente.",
+            "reason": "Le contexte indique que la fonte du sucre est un processus qui doit attendre, mais il ne fait pas mention d'une coïncidence avec l'attente."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 3,
+            "statement": "La fonte du morceau de sucre coïncide avec mon impatience.",
+            "reason": "Le contexte indique que la durée attendue pour la fonte du sucre est liée à l'impatience de l'individu, mais il n'y a pas de mention explicite de la coïncidence entre la fonte du sucre et l'impatience."
+          },
+          {
+            "item_id": "Q004",
+            "repeat": 1,
+            "statement": "Les personnages imaginés approfondissent toutes les directions possibles que le poète aurait pu suivre dans sa vie.",
+            "reason": "Le contexte indique que l'imagination poétique permet au poète de s'approfondir dans une direction intérieure, mais il n'y a aucune mention de ce que les personnages imaginés approfondissent des directions possibles de la vie du poète."
+          },
+          {
+            "item_id": "Q004",
+            "repeat": 1,
+            "statement": "Quoiqu'il n'en ait effectivement suivi qu'une seule.",
+            "reason": "Le contexte discute de la capacité de l'imagination poétique à prendre des aspects différents de la vie et à les combiner pour créer des personnages complexes, sans mentionner explicitement que le poète ait suivi qu'une seule de ces directions possibles."
+          },
+          {
+            "item_id": "Q004",
+            "repeat": 2,
+            "statement": "Les personnages imaginés approfondissent toutes les directions possibles que le poète aurait pu suivre dans sa vie.",
+            "reason": "Le contexte indique que l'imagination poétique permet au poète de s'approfondir dans une direction intérieure, mais il n'y a aucune indication que les personnages imaginés approfondissent toutes les directions possibles que le poète aurait pu suivre dans sa vie."
+          },
+          {
+            "item_id": "Q004",
+            "repeat": 2,
+            "statement": "Quoiqu'il n'en ait effectivement suivi qu'une seule.",
+            "reason": "Le contexte discute de la capacité de l'imagination poétique à prendre des aspects différents de la vie et à les combiner pour créer des personnages complexes, sans mentionner explicitement que le poète ait suivi qu'une seule de ces directions possibles."
+          },
+          {
+            "item_id": "Q004",
+            "repeat": 3,
+            "statement": "Les personnages imaginés approfondissent toutes les directions possibles que le poète aurait pu suivre dans sa vie.",
+            "reason": "Le contexte indique que l'imagination poétique permet au poète de s'approfondir dans une direction intérieure, mais il n'y a aucune mention de ce que les personnages imaginés approfondissent des directions possibles de la vie du poète."
+          },
+          {
+            "item_id": "Q004",
+            "repeat": 3,
+            "statement": "Quoiqu'il n'en ait effectivement suivi qu'une seule.",
+            "reason": "Le contexte discute de la capacité de l'imagination poétique à prendre des aspects différents de la vie et à les combiner pour créer des personnages complexes, sans mentionner explicitement que le poète ait suivi qu'une seule de ces directions possibles."
+          },
+          {
+            "item_id": "Q006",
+            "repeat": 1,
+            "statement": "Dans La Pensée et le Mouvant (1934), Bergson reconstitue la pensée du philosophe Berkeley (à l'exception de sa théorie de la vision).",
+            "reason": "Le contexte décrit la philosophie de Berkeley et son influence sur d'autres philosophes, mais il ne mentionne pas explicitement que Bergson a reconstitué sa pensée dans La Pensée et le Mouvant, à l'exception de sa théorie de la vision. Il est donc impossible de déduire directement cette affirmation du contexte."
+          },
+          {
+            "item_id": "Q006",
+            "repeat": 2,
+            "statement": "Dans La Pensée et le Mouvant (1934), Bergson reconstitue la pensée du philosophe Berkeley (à l'exception de sa théorie de la vision).",
+            "reason": "Le contexte décrit la philosophie de Berkeley et son influence sur d'autres philosophes, mais il ne mentionne pas explicitement que Bergson a reconstitué sa pensée dans La Pensée et le Mouvant, à l'exception de sa théorie de la vision. Il est donc impossible de déduire directement cette affirmation du contexte."
+          },
+          {
+            "item_id": "Q006",
+            "repeat": 3,
+            "statement": "Dans La Pensée et le Mouvant (1934), Bergson reconstitue la pensée du philosophe Berkeley (à l'exception de sa théorie de la vision).",
+            "reason": "Le contexte décrit la philosophie de Berkeley et son influence sur d'autres philosophes, mais il ne mentionne pas explicitement que Bergson a reconstitué sa pensée dans La Pensée et le Mouvant, à l'exception de sa théorie de la vision. Il est donc impossible de déduire directement cette affirmation du contexte."
+          },
+          {
+            "item_id": "Q007",
+            "repeat": 1,
+            "statement": "Cette assimilation est utile à la vie pratique et à la plupart des sciences.",
+            "reason": "Le contexte discute sur la manière dont la philosophie peut être influencée par la manière dont nous pensons et utilisons les mots, et comment cette influence peut créer des difficultés dans la résolution de certains problèmes philosophiques. Il n'y a pas de mention explicite de l'utilité de cette assimilation pour la vie pratique et les sciences."
+          },
+          {
+            "item_id": "Q007",
+            "repeat": 2,
+            "statement": "Cette assimilation est utile à la vie pratique et à la plupart des sciences.",
+            "reason": "Le contexte discute sur la manière dont la philosophie peut être influencée par les habitudes de langage et les concepts élaborés par l'organisme social, et comment ces concepts peuvent ne pas correspondre aux articulations du réel. Il y a une discussion sur la manière dont la philosophie peut être limitée par le langage et comment elle peut être contrainte à recevoir une solution toute faite. Cependant, il n'y a pas de mention explicite de l'utilité de cette assimilation à la vie pratique et aux sciences."
+          },
+          {
+            "item_id": "Q007",
+            "repeat": 3,
+            "statement": "Cette donnée fondamentale nous pousse à penser dans l'espace.",
+            "reason": "Le contexte discute de la manière dont la pensée est structurée par le langage et la nature, et il ne fait aucune mention de la notion de pensée dans l'espace."
+          },
+          {
+            "item_id": "Q007",
+            "repeat": 3,
+            "statement": "Cette assimilation est utile à la vie pratique et à la plupart des sciences.",
+            "reason": "Le contexte discute sur la manière dont la philosophie peut être influencée par les habitudes de langage et les concepts élaborés par l'organisme social, et comment ces concepts peuvent ne pas correspondre aux articulations du réel. Il y a une discussion sur la manière dont la philosophie peut être limitée par le langage et comment elle peut être contrainte à recevoir une solution toute faite. Cependant, il n'y a pas de mention explicite de l'utilité de cette assimilation à la vie pratique et aux sciences."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 1,
+            "statement": "À la fin du troisième chapitre de l'Évolution créatrice (1907), Bergson décrit l'humanité comme une grande armée qui galope.",
+            "reason": "Le contexte décrit la philosophie de Bergson et sa relation avec la vie spirituelle, la vie de l'esprit à celle du corps, la conscience, l'intelligence, la matière, la liberté, etc., mais il ne décrit pas explicitement que Bergson décrit l'humanité comme une grande armée qui galope à la fin du troisième chapitre de l'Évolution créatrice."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 1,
+            "statement": "Bergson illustre ainsi sa thèse de la solidarité de l'univers entier.",
+            "reason": "Le contexte décrit la philosophie de Bergson, qui traite de la vie spirituelle et de sa relation à la vie du corps, de la conscience et de l'intelligence, de la liberté humaine et de la matière. Il y a une mention de la solidarité de la vie consciente et de l'activité cérébrale, mais il n'y a pas de mention explicite d'une thèse de solidarité de l'univers entier."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 1,
+            "statement": "Dans ce mouvement, la conscience n'apparaît plus isolée du reste de l'humanité.",
+            "reason": "Le contexte décrit la conscience comme étant distincte de l'organisme qu'elle anime, mais il ne la présente pas comme isolée du reste de l'humanité. Au contraire, il décrit l'humanité comme une armée immense qui galope à côté de chacun de nous, en avant et en arrière de nous."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 1,
+            "statement": "L'humanité s'appuie sur l'animal.",
+            "reason": "Le contexte décrit l'humanité comme une immense armée qui galope à côté de chacun de nous, en avant et en arrière de nous, mais il ne mentionne pas explicitement que l'humanité s'appuie sur l'animal."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 1,
+            "statement": "L'humanité perpétue la même poussée vitale, agissante et créatrice en traversant la matérialité et la nécessité.",
+            "reason": "Le contexte décrit la relation entre la vie de l'esprit et celle du corps, la conscience et l'intelligence, la liberté humaine et la matière, et la survie des âmes. Il y a une description de la vie de l'humanité comme un flot qui monte, qui est conscience, et qui est distinct de la matière. Cependant, il n'y a pas de mention explicite de la poussée vitale, agissante et créatrice de l'humanité en traversant la matérialité et la nécessité."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 2,
+            "statement": "À la fin du troisième chapitre de l'Évolution créatrice (1907), Bergson décrit l'humanité comme une grande armée qui galope.",
+            "reason": "Le contexte décrit la philosophie de Bergson et sa relation avec la vie spirituelle, la vie de l'esprit à celle du corps, la conscience, l'intelligence, la matière, la liberté, etc., mais il ne décrit pas explicitement que Bergson décrit l'humanité comme une grande armée qui galope à la fin du troisième chapitre de l'Évolution créatrice."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 2,
+            "statement": "Bergson illustre ainsi sa thèse de la solidarité de l'univers entier.",
+            "reason": "Le contexte décrit la philosophie de Bergson et sa thèse sur la vie, la conscience et l'intelligence, mais il ne mentionne pas explicitement qu'il illustre sa thèse de la solidarité de l'univers entier."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 2,
+            "statement": "Dans ce mouvement, la conscience n'apparaît plus isolée du reste de l'humanité.",
+            "reason": "Le contexte décrit la conscience comme étant distincte de l'organisme qu'elle anime, mais il ne la présente pas comme isolée du reste de l'humanité. Au contraire, il décrit l'humanité comme une armée immense qui galope à côté de chacun de nous, en avant et en arrière de nous."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 2,
+            "statement": "L'humanité s'appuie sur l'animal.",
+            "reason": "Le contexte décrit l'humanité comme une immense armée qui galope à côté de chacun de nous, en avant et en arrière de nous, mais il ne mentionne pas explicitement que l'humanité s'appuie sur l'animal."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 2,
+            "statement": "L'humanité perpétue la même poussée vitale, agissante et créatrice en traversant la matérialité et la nécessité.",
+            "reason": "Le contexte décrit la relation entre la vie de l'esprit et celle du corps, la conscience et l'intelligence, la liberté humaine et la matière, et la survie des âmes. Il y a une description de la vie de l'humanité comme un flot qui monte, qui est conscience, et qui est distinct de la matière. Cependant, il n'y a pas de mention explicite de la poussée vitale, agissante et créatrice de l'humanité en traversant la matérialité et la nécessité."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 3,
+            "statement": "À la fin du troisième chapitre de l'Évolution créatrice (1907), Bergson décrit l'humanité comme une grande armée qui galope.",
+            "reason": "Le contexte décrit la philosophie de Bergson et sa relation avec la vie spirituelle, la vie de l'esprit à celle du corps, la conscience, l'intelligence, la matière, la liberté, etc., mais il ne décrit pas explicitement que Bergson décrit l'humanité comme une grande armée qui galope à la fin du troisième chapitre de l'Évolution créatrice (1907)."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 3,
+            "statement": "Bergson illustre ainsi sa thèse de la solidarité de l'univers entier.",
+            "reason": "Le contexte décrit la philosophie de Bergson et sa vision de la vie, de la conscience et de l'univers, qui met l'accent sur la solidarité de la vie entière, mais il ne s'agit pas explicitement d'une illustration de la thèse de la solidarité de l'univers entier."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 3,
+            "statement": "Dans ce mouvement, la conscience n'apparaît plus isolée du reste de l'humanité.",
+            "reason": "Le contexte décrit la conscience comme étant distincte de l'organisme qu'elle anime, mais il ne la présente pas comme isolée du reste de l'humanité. Au contraire, il décrit l'humanité comme une armée immense qui galope à côté de chacun de nous, en avant et en arrière de nous."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 3,
+            "statement": "L'humanité s'appuie sur l'animal.",
+            "reason": "Le contexte décrit l'humanité comme une immense armée qui galope à côté de chacun de nous, en avant et en arrière de nous, mais il ne mentionne pas explicitement que l'humanité s'appuie sur l'animal."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 3,
+            "statement": "L'humanité perpétue la même poussée vitale, agissante et créatrice en traversant la matérialité et la nécessité.",
+            "reason": "Le contexte décrit la relation entre la vie de l'esprit et celle du corps, la conscience et l'intelligence, la liberté humaine et la matière, et la survie des âmes. Il y a une description de la vie de l'humanité comme un flot qui monte, qui est conscience, et qui est distinct de la matière. Cependant, il n'y a pas de mention explicite de la poussée vitale, agissante et créatrice de l'humanité en traversant la matérialité et la nécessité."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 1,
+            "statement": "Bergson récuse la transformation graduelle interne (de dialectique en mystique) dans le développement de la pensée grecque.",
+            "reason": "Le contexte décrit la transformation graduelle interne de la dialectique en mystique dans le développement de la pensée grecque, ce qui implique que Bergson ne récuse pas cette transformation."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 1,
+            "statement": "Selon Bergson, le développement de la pensée grecque est l'oeuvre de la seule raison.",
+            "reason": "Le contexte décrit la pensée grecque comme ayant été l'œuvre d'une force extra-rationnelle et de la raison, mais il ne mentionne pas explicitement que Bergson considère le développement de la pensée grecque comme étant l'œuvre de la seule raison."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 1,
+            "statement": "La mystique est un processus parallèle au développement de la pensée grecque, selon Bergson.",
+            "reason": "Le contexte discute de l'évolution de la pensée grecque et de la possibilité d'une influence extra-rationnelle, mais il ne fait aucune mention de Bergson ou de sa théorie."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 1,
+            "statement": "Ces poussées éruptives conditionnent invisiblement l'activité sédimentaire, selon la métaphore géologique utilisée par Bergson.",
+            "reason": "Le contexte discute de l'évolution de la pensée humaine et de la philosophie grecque, mais il ne fait aucune référence à une métaphore géologique utilisée par Bergson."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 2,
+            "statement": "Bergson récuse la transformation graduelle interne (de dialectique en mystique) dans le développement de la pensée grecque.",
+            "reason": "Le contexte décrit la transformation graduelle interne de la dialectique en mystique dans le développement de la pensée grecque, ce qui implique que Bergson ne récuse pas cette transformation."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 2,
+            "statement": "Selon Bergson, le développement de la pensée grecque est l'oeuvre de la seule raison.",
+            "reason": "Le contexte décrit la pensée grecque comme ayant été l'œuvre d'une force extra-rationnelle et de la raison, mais il ne mentionne pas explicitement que Bergson considère le développement de la pensée grecque comme étant l'œuvre de la seule raison."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 2,
+            "statement": "La mystique est un processus parallèle au développement de la pensée grecque, selon Bergson.",
+            "reason": "Le contexte discute de l'évolution de la pensée grecque et de la possibilité d'une influence extra-rationnelle, mais il ne fait aucune mention de Bergson ou de sa théorie."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 2,
+            "statement": "Ces poussées éruptives conditionnent invisiblement l'activité sédimentaire, selon la métaphore géologique utilisée par Bergson.",
+            "reason": "Le contexte discute de l'évolution de la pensée humaine et de la philosophie grecque, mais il ne fait aucune référence à une métaphore géologique utilisée par Bergson."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 3,
+            "statement": "Bergson récuse la transformation graduelle interne (de dialectique en mystique) dans le développement de la pensée grecque.",
+            "reason": "Le contexte décrit la transformation graduelle interne de la dialectique en mystique dans le développement de la pensée grecque, ce qui implique que Bergson ne récuse pas cette transformation."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 3,
+            "statement": "Selon Bergson, le développement de la pensée grecque est l'oeuvre de la seule raison.",
+            "reason": "Le contexte décrit la pensée grecque comme ayant été l'œuvre d'une force extra-rationnelle et de la raison, mais il ne mentionne pas explicitement que Bergson considère le développement de la pensée grecque comme étant l'œuvre de la seule raison."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 3,
+            "statement": "La mystique est un processus parallèle au développement de la pensée grecque, selon Bergson.",
+            "reason": "Le contexte discute de l'évolution de la pensée grecque et de la possibilité d'une influence extra-rationnelle, mais il ne fait aucune mention de Bergson ou de sa théorie."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 3,
+            "statement": "Ces poussées éruptives conditionnent invisiblement l'activité sédimentaire, selon la métaphore géologique utilisée par Bergson.",
+            "reason": "Le contexte discute de l'évolution de la pensée humaine et de la philosophie grecque, mais il ne fait aucune référence à une métaphore géologique utilisée par Bergson."
+          },
+          {
+            "item_id": "Q011",
+            "repeat": 3,
+            "statement": "Selon lui, ces tendances antagonistes se différencient, qu'il s'agisse de principes politiques ou d'inclinations individuelles.",
+            "reason": "Le contexte discute de tendances antagonistes dans l'évolution psychologique et sociale de l'homme, mais il ne précise pas si ces tendances se différencient entre principes politiques ou inclinations individuelles."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 1,
+            "statement": "Dans l'Évolution Créatrice (1907) et Les Deux Sources (1932), Bergson décrit la croissance de la vie en utilisant la métaphore de la gerbe.",
+            "reason": "Le contexte décrit en détail les idées de Bergson sur l'évolution de la vie, mais il ne mentionne pas explicitement qu'il utilise la métaphore de la gerbe pour décrire la croissance de la vie."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 1,
+            "statement": "Sur le plan psychologique, ce processus se traduit nécessairement par un sacrifice.",
+            "reason": "Le contexte ne discute pas explicitement de sacrifices liés au processus psychologique décrit. Il s'agit plutôt d'une évolution de tendances divergentes et complémentaires, mais il n'est pas directement informatif sur des sacrifices."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 1,
+            "statement": "L'individu choisit une route et abandonne toutes celles qu'il aurait pu suivre.",
+            "reason": "Le contexte indique que l'individu choisit entre différentes tendances, mais il ne mentionne pas qu'il abandonne toutes les autres possibilités."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 2,
+            "statement": "Dans l'Évolution Créatrice (1907) et Les Deux Sources (1932), Bergson décrit la croissance de la vie en utilisant la métaphore de la gerbe.",
+            "reason": "Le contexte décrit en détail les idées de Bergson sur l'évolution de la vie, mais il ne mentionne pas explicitement qu'il utilise la métaphore de la gerbe pour décrire la croissance de la vie."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 2,
+            "statement": "Sur le plan psychologique, ce processus se traduit nécessairement par un sacrifice.",
+            "reason": "Le contexte ne discute pas explicitement de sacrifices liés au processus psychologique décrit. Il s'agit plutôt d'une évolution de tendances divergentes et complémentaires, mais il n'est pas directement informatif sur des sacrifices."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 2,
+            "statement": "L'individu choisit une route et abandonne toutes celles qu'il aurait pu suivre.",
+            "reason": "Le contexte indique que l'individu choisit entre différentes tendances, mais il ne fait pas mention d'une seule route étant choisie et toutes les autres étant abandonnées."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 3,
+            "statement": "Dans l'Évolution Créatrice (1907) et Les Deux Sources (1932), Bergson décrit la croissance de la vie en utilisant la métaphore de la gerbe.",
+            "reason": "Le contexte décrit en détail les idées de Bergson sur l'évolution de la vie, mais il ne mentionne pas explicitement qu'il utilise la métaphore de la gerbe pour décrire la croissance de la vie."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 3,
+            "statement": "Sur le plan psychologique, ce processus se traduit nécessairement par un sacrifice.",
+            "reason": "Le contexte ne discute pas explicitement de sacrifices liés au processus psychologique décrit. Il s'agit plutôt d'une évolution de tendances divergentes et complémentaires, mais il n'est pas directement informatif sur des sacrifices."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 3,
+            "statement": "L'individu choisit une route et abandonne toutes celles qu'il aurait pu suivre.",
+            "reason": "Le contexte indique que l'individu choisit entre différentes tendances, mais il ne fait pas mention d'une seule route étant choisie et toutes les autres étant abandonnées."
+          }
+        ]
+      },
+      {
+        "gate": {
+          "passed": false,
+          "missed": [
+            "Q008-p1-negation"
+          ],
+          "per_origin": {
+            "generated": [
+              2,
+              2
+            ],
+            "perturbed": [
+              11,
+              12
+            ]
+          },
+          "per_perturbation_type": {
+            "negation": [
+              1,
+              2
+            ],
+            "proper_noun": [
+              1,
+              1
+            ],
+            "unsupported_sentence": [
+              9,
+              9
+            ]
+          },
+          "detections": {
+            "Q002-gen-end_to_end": [
+              true,
+              true,
+              true
+            ],
+            "Q004-gen-end_to_end": [
+              true,
+              true,
+              true
+            ],
+            "Q001-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ],
+            "Q002-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ],
+            "Q003-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ],
+            "Q004-p1-negation": [
+              true,
+              true,
+              true
+            ],
+            "Q005-p1-proper_noun": [
+              true,
+              true,
+              true
+            ],
+            "Q006-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ],
+            "Q007-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ],
+            "Q008-p1-negation": [
+              false,
+              false,
+              false
+            ],
+            "Q009-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ],
+            "Q010-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ],
+            "Q011-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ],
+            "Q012-p1-unsupported_sentence": [
+              true,
+              true,
+              true
+            ]
+          },
+          "miss_reasons": {
+            "Q008-p1-negation": [
+              "judged supported",
+              "judged supported",
+              "judged supported"
+            ]
+          }
+        },
+        "faithful_class": {
+          "mean": 0.656986531986532,
+          "n_items": 12,
+          "nan_per_run": {
+            "1": [
+              0,
+              12
+            ],
+            "2": [
+              0,
+              12
+            ],
+            "3": [
+              0,
+              12
+            ]
+          },
+          "unevaluated_per_run": {
+            "1": [
+              0,
+              12
+            ],
+            "2": [
+              0,
+              12
+            ],
+            "3": [
+              0,
+              12
+            ]
+          }
+        },
+        "hallucinated_class": {
+          "mean": 0.5363945578231293,
+          "n_items": 14,
+          "nan_per_run": {
+            "1": [
+              0,
+              14
+            ],
+            "2": [
+              0,
+              14
+            ],
+            "3": [
+              0,
+              14
+            ]
+          },
+          "unevaluated_per_run": {
+            "1": [
+              0,
+              14
+            ],
+            "2": [
+              0,
+              14
+            ],
+            "3": [
+              0,
+              14
+            ]
+          }
+        },
+        "stability": {
+          "measured": true,
+          "mean_range": 0.032967032967032975,
+          "max_range": 0.33333333333333337,
+          "flips": 2,
+          "matched_statements": 128,
+          "unmatched_statements": 15,
+          "flipped": [
+            [
+              "Q007",
+              "Cette assimilation est utile à la vie pratique et à la plupart des sciences."
+            ],
+            [
+              "Q007-p1-unsupported_sentence",
+              "Cette assimilation est utile à la vie pratique et à la plupart des sciences."
+            ]
+          ]
+        },
+        "flagged_faithful_statements": [
+          {
+            "item_id": "Q002",
+            "repeat": 1,
+            "statement": "Les physiciens considèrent la fonte du morceau de sucre comme un système isolé.",
+            "reason": "Le contexte ne mentionne pas explicitement que les physiciens considèrent la fonte du morceau de sucre comme un système isolé."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 1,
+            "statement": "Les physiciens reposent sur des abstractions relatives (verre d'eau, sucre, processus de dissolution, unités de temps...).",
+            "reason": "Le contexte discute de la nature du temps et de la perception de la durée par les êtres conscients, mais il ne fait pas explicitement mention de l'utilisation de telles abstractions par les physiciens."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 1,
+            "statement": "Un tel système fonctionne comme la bande d'un cinématographe.",
+            "reason": "Le contexte discute de la succession des états dans l'univers et de la durée de la vie intérieure, mais il ne fait aucune référence à un système fonctionnant comme une bande de cinématographe."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 1,
+            "statement": "Dans un tel système, les événements se succèdent dans un déterminisme total.",
+            "reason": "Le contexte discute de la succession des événements dans l'univers, mais il ne suggère pas que ce déroulement est totalement déterminé."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 1,
+            "statement": "Tous les états, passés, présents et futurs d'un tel système sont déterminés d'un seul coup.",
+            "reason": "Le contexte indique que l'auteur considère que le temps est une succession et non un éventail ou un film cinématographique, ce qui implique que les états successifs ne sont pas déterminés d'un seul coup."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 1,
+            "statement": "Les états d'un tel système sont juxtaposés dans l'espace.",
+            "reason": "Le contexte indique explicitement que l'univers déroule ses états successifs avec une vitesse déterminée, ce qui implique un temps qui progresse et non une juxtaposition dans l'espace."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 1,
+            "statement": "La fonte du morceau de sucre coïncide avec mon attente.",
+            "reason": "Le contexte indique que la fonte du sucre est un processus qui doit attendre, mais il ne fait pas mention d'une coïncidence avec l'attente."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 1,
+            "statement": "La fonte du morceau de sucre coïncide avec mon impatience.",
+            "reason": "Le contexte indique que la durée attendue pour la fonte du sucre est liée à l'impatience de l'individu, mais il n'y a pas de mention explicite de la coïncidence entre la fonte du sucre et l'impatience."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 2,
+            "statement": "Les physiciens considèrent la fonte du morceau de sucre comme un système isolé.",
+            "reason": "Le contexte ne mentionne pas explicitement que les physiciens considèrent la fonte du morceau de sucre comme un système isolé."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 2,
+            "statement": "Les physiciens reposent sur des abstractions relatives (verre d'eau, sucre, processus de dissolution, unités de temps...).",
+            "reason": "Le contexte discute de la nature du temps et de la perception de la durée par les êtres conscients, mais il ne fait pas explicitement mention de l'utilisation de telles abstractions par les physiciens."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 2,
+            "statement": "Un tel système fonctionne comme la bande d'un cinématographe.",
+            "reason": "Le contexte discute de la succession des états dans l'univers et de la durée de la vie intérieure, mais il ne fait aucune référence à un système fonctionnant comme une bande de cinématographe."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 2,
+            "statement": "Dans un tel système, les événements se succèdent dans un déterminisme total.",
+            "reason": "Le contexte discute de la succession des événements dans l'univers, mais il ne suggère pas que ce déroulement est totalement déterminé."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 2,
+            "statement": "Tous les états, passés, présents et futurs d'un tel système sont déterminés d'un seul coup.",
+            "reason": "Le contexte discute de la succession des états dans le temps et de la durée psychologique qui s'impose, ce qui implique que les états ne sont pas déterminés d'un seul coup."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 2,
+            "statement": "Les états d'un tel système sont juxtaposés dans l'espace.",
+            "reason": "Le contexte indique explicitement que l'univers déroule ses états successifs avec une vitesse déterminée, ce qui implique un temps qui progresse et non une juxtaposition dans l'espace."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 2,
+            "statement": "La fonte du morceau de sucre coïncide avec mon attente.",
+            "reason": "Le contexte indique que la fonte du sucre est un processus qui doit attendre, mais il ne fait pas mention d'une coïncidence avec l'attente."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 2,
+            "statement": "La fonte du morceau de sucre coïncide avec mon impatience.",
+            "reason": "Le contexte indique que la durée attendue pour la fonte du sucre est liée à l'impatience de l'individu, mais il n'y a pas de mention explicite de la coïncidence entre la fonte du sucre et l'impatience."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 3,
+            "statement": "Les physiciens considèrent la fonte du morceau de sucre comme un système isolé.",
+            "reason": "Le contexte ne mentionne pas explicitement que les physiciens considèrent la fonte du morceau de sucre comme un système isolé."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 3,
+            "statement": "Les physiciens reposent sur des abstractions relatives (verre d'eau, sucre, processus de dissolution, unités de temps...).",
+            "reason": "Le contexte discute de la nature du temps et de la perception de la durée par les êtres conscients, mais il ne fait pas explicitement mention de l'utilisation de telles abstractions par les physiciens."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 3,
+            "statement": "Un tel système fonctionne comme la bande d'un cinématographe.",
+            "reason": "Le contexte discute de la succession des états dans l'univers et de la durée de la vie intérieure, mais il ne fait aucune référence à un système fonctionnant comme une bande de cinématographe."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 3,
+            "statement": "Dans un tel système, les événements se succèdent dans un déterminisme total.",
+            "reason": "Le contexte discute de la succession des événements dans l'univers, mais il ne suggère pas que ce déroulement est totalement déterminé."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 3,
+            "statement": "Tous les états, passés, présents et futurs d'un tel système sont déterminés d'un seul coup.",
+            "reason": "Le contexte indique que l'auteur considère que le temps est une succession et non un éventail ou un film cinématographique, ce qui implique que les états successifs ne sont pas déterminés d'un seul coup."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 3,
+            "statement": "Les états d'un tel système sont juxtaposés dans l'espace.",
+            "reason": "Le contexte indique explicitement que l'univers déroule ses états successifs avec une vitesse déterminée, ce qui implique un temps qui progresse et non une juxtaposition dans l'espace."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 3,
+            "statement": "La fonte du morceau de sucre coïncide avec mon attente.",
+            "reason": "Le contexte indique que la fonte du sucre est un processus qui doit attendre, mais il ne fait pas mention d'une coïncidence avec l'attente."
+          },
+          {
+            "item_id": "Q002",
+            "repeat": 3,
+            "statement": "La fonte du morceau de sucre coïncide avec mon impatience.",
+            "reason": "Le contexte indique que la durée attendue pour la fonte du sucre est liée à l'impatience de l'individu, mais il n'y a pas de mention explicite de la coïncidence entre la fonte du sucre et l'impatience."
+          },
+          {
+            "item_id": "Q004",
+            "repeat": 1,
+            "statement": "Les personnages imaginés approfondissent toutes les directions possibles que le poète aurait pu suivre dans sa vie.",
+            "reason": "Le contexte indique que l'imagination poétique permet au poète de s'approfondir dans une direction intérieure, mais il n'y a aucune mention de ce que les personnages imaginés approfondissent des directions possibles de la vie du poète."
+          },
+          {
+            "item_id": "Q004",
+            "repeat": 1,
+            "statement": "Quoiqu'il n'en ait effectivement suivi qu'une seule.",
+            "reason": "Le contexte discute de la capacité de l'imagination poétique à prendre des aspects différents de la vie et à les combiner pour créer des personnages complexes, sans mentionner explicitement que le poète ait suivi qu'une seule de ces directions possibles."
+          },
+          {
+            "item_id": "Q004",
+            "repeat": 2,
+            "statement": "Les personnages imaginés approfondissent toutes les directions possibles que le poète aurait pu suivre dans sa vie.",
+            "reason": "Le contexte indique que l'imagination poétique permet au poète de s'approfondir dans une direction intérieure, mais il n'y a aucune mention de ce que les personnages imaginés approfondissent des directions possibles de la vie du poète."
+          },
+          {
+            "item_id": "Q004",
+            "repeat": 2,
+            "statement": "Quoiqu'il n'en ait effectivement suivi qu'une seule.",
+            "reason": "Le contexte discute de la capacité de l'imagination poétique à prendre des aspects différents de la vie et à les combiner pour créer des personnages complexes, sans mentionner explicitement que le poète ait suivi qu'une seule de ces directions possibles."
+          },
+          {
+            "item_id": "Q004",
+            "repeat": 3,
+            "statement": "Les personnages imaginés approfondissent toutes les directions possibles que le poète aurait pu suivre dans sa vie.",
+            "reason": "Le contexte indique que l'imagination poétique permet au poète de s'approfondir dans une direction intérieure, mais il n'y a aucune mention de ce que les personnages imaginés approfondissent des directions possibles de la vie du poète."
+          },
+          {
+            "item_id": "Q004",
+            "repeat": 3,
+            "statement": "Quoiqu'il n'en ait effectivement suivi qu'une seule.",
+            "reason": "Le contexte discute de la capacité de l'imagination poétique à prendre des aspects différents de la vie et à les combiner pour créer des personnages complexes, sans mentionner explicitement que le poète ait suivi qu'une seule de ces directions possibles."
+          },
+          {
+            "item_id": "Q006",
+            "repeat": 1,
+            "statement": "Dans La Pensée et le Mouvant (1934), Bergson reconstitue la pensée du philosophe Berkeley (à l'exception de sa théorie de la vision).",
+            "reason": "Le contexte décrit la philosophie de Berkeley et son influence sur d'autres philosophes, mais il ne mentionne pas explicitement que Bergson a reconstitué sa pensée dans La Pensée et le Mouvant, à l'exception de sa théorie de la vision. Il est donc impossible de déduire directement cette affirmation du contexte."
+          },
+          {
+            "item_id": "Q006",
+            "repeat": 2,
+            "statement": "Dans La Pensée et le Mouvant (1934), Bergson reconstitue la pensée du philosophe Berkeley (à l'exception de sa théorie de la vision).",
+            "reason": "Le contexte décrit la philosophie de Berkeley et son influence sur d'autres philosophes, mais il ne mentionne pas explicitement que Bergson a reconstitué sa pensée dans La Pensée et le Mouvant, à l'exception de sa théorie de la vision. Il est donc impossible de déduire directement cette affirmation du contexte."
+          },
+          {
+            "item_id": "Q006",
+            "repeat": 3,
+            "statement": "Dans La Pensée et le Mouvant (1934), Bergson reconstitue la pensée du philosophe Berkeley (à l'exception de sa théorie de la vision).",
+            "reason": "Le contexte décrit la philosophie de Berkeley et son influence sur d'autres philosophes, mais il ne mentionne pas explicitement que Bergson a reconstitué sa pensée dans La Pensée et le Mouvant, à l'exception de sa théorie de la vision. Il est donc impossible de déduire directement cette affirmation du contexte."
+          },
+          {
+            "item_id": "Q007",
+            "repeat": 1,
+            "statement": "Cette assimilation est utile à la vie pratique et à la plupart des sciences.",
+            "reason": "Le contexte discute sur la manière dont la philosophie peut être influencée par les habitudes de langage et les concepts élaborés par l'organisme social, et comment ces concepts peuvent ne pas correspondre aux articulations du réel. Il y a une discussion sur la manière dont la philosophie peut être limitée par le langage et comment elle peut être contrainte à recevoir une solution toute faite. Cependant, il n'y a pas de mention explicite de l'utilité de cette assimilation à la vie pratique et aux sciences."
+          },
+          {
+            "item_id": "Q007",
+            "repeat": 2,
+            "statement": "Cette donnée fondamentale nous pousse à penser dans l'espace.",
+            "reason": "Le contexte discute de la manière dont la pensée est structurée par le langage et la nature, et il ne fait aucune mention de la notion de pensée dans l'espace."
+          },
+          {
+            "item_id": "Q007",
+            "repeat": 3,
+            "statement": "Cette donnée fondamentale nous pousse à penser dans l'espace.",
+            "reason": "Le contexte discute de la manière dont la pensée est structurée par le langage et la nature, et il ne fait aucune mention de la notion de pensée dans l'espace."
+          },
+          {
+            "item_id": "Q007",
+            "repeat": 3,
+            "statement": "Cette assimilation est utile à la vie pratique et à la plupart des sciences.",
+            "reason": "Le contexte discute sur la manière dont la philosophie peut être influencée par les habitudes de langage et les concepts élaborés par l'organisme social, et comment ces concepts peuvent ne pas correspondre aux articulations du réel. Il y a une discussion sur la manière dont la philosophie peut être limitée par le langage et comment elle peut être contrainte à recevoir une solution toute faite. Cependant, il n'y a pas de mention explicite de l'utilité de cette assimilation à la vie pratique et aux sciences."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 1,
+            "statement": "À la fin du troisième chapitre de l'Évolution créatrice (1907), Bergson décrit l'humanité comme une grande armée qui galope.",
+            "reason": "Le contexte décrit la philosophie de Bergson et sa relation avec la vie spirituelle, la vie de l'esprit à celle du corps, la conscience, l'intelligence, la matière, la liberté, etc., mais il ne décrit pas explicitement que Bergson décrit l'humanité comme une grande armée qui galope à la fin du troisième chapitre de l'Évolution créatrice."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 1,
+            "statement": "Bergson illustre ainsi sa thèse de la solidarité de l'univers entier.",
+            "reason": "Le contexte décrit la philosophie de Bergson et sa thèse sur la vie, la conscience et l'intelligence, mais il ne mentionne pas explicitement que Bergson illustre sa thèse de la solidarité de l'univers entier."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 1,
+            "statement": "Dans ce mouvement, la conscience n'apparaît plus isolée du reste de l'humanité.",
+            "reason": "Le contexte décrit la conscience comme étant distincte de l'organisme qu'elle anime, mais il ne la présente pas comme isolée du reste de l'humanité. Au contraire, il décrit l'humanité comme une armée immense qui galope à côté de chacun de nous, en avant et en arrière de nous."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 1,
+            "statement": "L'humanité s'appuie sur l'animal.",
+            "reason": "Le contexte décrit l'humanité comme une immense armée qui galope à côté de chacun de nous, en avant et en arrière de nous, mais il ne mentionne pas explicitement que l'humanité s'appuie sur l'animal."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 1,
+            "statement": "L'humanité perpétue la même poussée vitale, agissante et créatrice en traversant la matérialité et la nécessité.",
+            "reason": "Le contexte décrit la relation entre la vie de l'esprit et celle du corps, la conscience et l'intelligence, la liberté humaine et la matière, et la survie des âmes. Il y a une description de la vie de l'humanité comme un flot qui monte, qui est conscience, et qui est distinct de la matière. Cependant, il n'y a pas de mention explicite de la poussée vitale, agissante et créatrice de l'humanité en traversant la matérialité et la nécessité."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 2,
+            "statement": "À la fin du troisième chapitre de l'Évolution créatrice (1907), Bergson décrit l'humanité comme une grande armée qui galope.",
+            "reason": "Le contexte décrit la philosophie de Bergson et sa relation avec la vie spirituelle, la vie de l'esprit à celle du corps, la conscience, l'intelligence, la matière, la liberté, etc., mais il ne décrit pas explicitement que Bergson décrit l'humanité comme une grande armée qui galope à la fin du troisième chapitre de l'Évolution créatrice."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 2,
+            "statement": "Bergson illustre ainsi sa thèse de la solidarité de l'univers entier.",
+            "reason": "Le contexte décrit la philosophie de Bergson et sa thèse sur la vie, la conscience et l'intelligence, mais il ne mentionne pas explicitement que Bergson illustre sa thèse de la solidarité de l'univers entier."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 2,
+            "statement": "Dans ce mouvement, la conscience n'apparaît plus isolée du reste de l'humanité.",
+            "reason": "Le contexte décrit la conscience comme étant distincte de l'organisme qu'elle anime, mais il ne la présente pas comme isolée du reste de l'humanité. Au contraire, il décrit l'humanité comme une armée immense qui galope à côté de chacun de nous, en avant et en arrière de nous."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 2,
+            "statement": "L'humanité s'appuie sur l'animal.",
+            "reason": "Le contexte décrit l'humanité comme une immense armée qui galope à côté de chacun de nous, en avant et en arrière de nous, mais il ne mentionne pas explicitement que l'humanité s'appuie sur l'animal."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 2,
+            "statement": "L'humanité perpétue la même poussée vitale, agissante et créatrice en traversant la matérialité et la nécessité.",
+            "reason": "Le contexte décrit la relation entre la vie de l'esprit et celle du corps, la conscience et l'intelligence, la liberté humaine et la matière, et la survie des âmes. Il y a une description de la vie de l'humanité comme un flot qui monte, qui est conscience, et qui est distinct de la matière. Cependant, il n'y a pas de mention explicite de la poussée vitale, agissante et créatrice de l'humanité en traversant la matérialité et la nécessité."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 3,
+            "statement": "À la fin du troisième chapitre de l'Évolution créatrice (1907), Bergson décrit l'humanité comme une grande armée qui galope.",
+            "reason": "Le contexte décrit la philosophie de Bergson et sa relation avec la vie spirituelle, la vie de l'esprit à celle du corps, la conscience, l'intelligence, la matière, la liberté, etc., mais il ne décrit pas explicitement que Bergson décrit l'humanité comme une grande armée qui galope à la fin du troisième chapitre de l'Évolution créatrice."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 3,
+            "statement": "Bergson illustre ainsi sa thèse de la solidarité de l'univers entier.",
+            "reason": "Le contexte décrit la philosophie de Bergson et sa thèse sur la vie, la conscience et l'intelligence, mais il ne mentionne pas explicitement que Bergson illustre sa thèse de la solidarité de l'univers entier."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 3,
+            "statement": "Dans ce mouvement, la conscience n'apparaît plus isolée du reste de l'humanité.",
+            "reason": "Le contexte décrit la conscience comme étant distincte de l'organisme qu'elle anime, mais il ne la présente pas comme isolée du reste de l'humanité. Au contraire, il décrit l'humanité comme une armée immense qui galope à côté de chacun de nous, en avant et en arrière de nous."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 3,
+            "statement": "L'humanité s'appuie sur l'animal.",
+            "reason": "Le contexte décrit l'humanité comme une immense armée qui galope à côté de chacun de nous, en avant et en arrière de nous, mais il ne mentionne pas explicitement que l'humanité s'appuie sur l'animal."
+          },
+          {
+            "item_id": "Q009",
+            "repeat": 3,
+            "statement": "L'humanité perpétue la même poussée vitale, agissante et créatrice en traversant la matérialité et la nécessité.",
+            "reason": "Le contexte décrit la relation entre la vie de l'esprit et celle du corps, la conscience et l'intelligence, la liberté humaine et la matière, et la survie des âmes. Il y a une description de la vie de l'humanité comme un flot qui monte, qui est conscience, et qui est distinct de la matière. Cependant, il n'y a pas de mention explicite de la poussée vitale, agissante et créatrice de l'humanité en traversant la matérialité et la nécessité."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 1,
+            "statement": "Bergson récuse la transformation graduelle interne (de dialectique en mystique) dans le développement de la pensée grecque.",
+            "reason": "Le contexte décrit la transformation graduelle interne de la dialectique en mystique dans le développement de la pensée grecque, ce qui implique que Bergson ne récuse pas cette transformation."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 1,
+            "statement": "Selon Bergson, le développement de la pensée grecque est l'oeuvre de la seule raison.",
+            "reason": "Le contexte décrit la pensée grecque comme ayant été l'œuvre d'une force extra-rationnelle et de la raison, mais il ne mentionne pas explicitement que Bergson considère le développement de la pensée grecque comme étant l'œuvre de la seule raison."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 1,
+            "statement": "La mystique est un processus parallèle au développement de la pensée grecque, selon Bergson.",
+            "reason": "Le contexte discute de l'évolution de la pensée grecque et de la possibilité d'une influence extra-rationnelle, mais il ne mentionne pas explicitement Bergson ou la théorie de Bergson."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 1,
+            "statement": "Ces poussées éruptives conditionnent invisiblement l'activité sédimentaire, selon la métaphore géologique utilisée par Bergson.",
+            "reason": "Le contexte discute de l'évolution de la pensée humaine et de la philosophie grecque, mais il ne fait aucune référence à une métaphore géologique utilisée par Bergson."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 2,
+            "statement": "Bergson récuse la transformation graduelle interne (de dialectique en mystique) dans le développement de la pensée grecque.",
+            "reason": "Le contexte décrit la transformation graduelle interne de la dialectique en mystique dans le développement de la pensée grecque, ce qui implique que Bergson ne récuse pas cette transformation."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 2,
+            "statement": "Selon Bergson, le développement de la pensée grecque est l'oeuvre de la seule raison.",
+            "reason": "Le contexte décrit la pensée grecque comme ayant été l'œuvre d'une force extra-rationnelle et de la raison, mais il ne mentionne pas explicitement que Bergson considère le développement de la pensée grecque comme étant l'œuvre de la seule raison."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 2,
+            "statement": "La mystique est un processus parallèle au développement de la pensée grecque, selon Bergson.",
+            "reason": "Le contexte discute de l'évolution de la pensée grecque et de la possibilité d'une influence extra-rationnelle, mais il ne fait aucune mention de Bergson ou de sa théorie."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 2,
+            "statement": "De même que les poussées éruptives conditionnent invisiblement l'activité sédimentaire (seul phénomène observable), selon Bergson.",
+            "reason": "Le contexte discute de l'évolution de la pensée humaine et de la philosophie grecque, mais il ne fait aucune référence à Bergson ou à son point de vue sur les poussées éruptives et l'activité sédimentaire."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 3,
+            "statement": "Bergson récuse la transformation graduelle interne (de dialectique en mystique) dans le développement de la pensée grecque.",
+            "reason": "Le contexte décrit la transformation graduelle interne de la dialectique en mystique dans le développement de la pensée grecque, ce qui implique que Bergson ne récuse pas cette transformation."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 3,
+            "statement": "Selon Bergson, le développement de la pensée grecque est l'oeuvre de la seule raison.",
+            "reason": "Le contexte décrit la pensée grecque comme ayant été l'œuvre d'une force extra-rationnelle et de la raison, mais il ne mentionne pas explicitement que Bergson considère le développement de la pensée grecque comme étant l'œuvre de la seule raison."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 3,
+            "statement": "La mystique est un processus parallèle au développement de la pensée grecque, selon Bergson.",
+            "reason": "Le contexte discute de l'évolution de la pensée grecque et de la possibilité d'une influence extra-rationnelle, mais il ne fait aucune mention de Bergson ou de sa théorie."
+          },
+          {
+            "item_id": "Q010",
+            "repeat": 3,
+            "statement": "De même que les poussées éruptives conditionnent invisiblement l'activité sédimentaire (seul phénomène observable), selon Bergson.",
+            "reason": "Le contexte discute de l'évolution de la pensée humaine et de la philosophie grecque, mais il ne fait aucune référence à Bergson ou à son point de vue sur les poussées éruptives et l'activité sédimentaire."
+          },
+          {
+            "item_id": "Q011",
+            "repeat": 2,
+            "statement": "Selon lui, ces tendances antagonistes se différencient, qu'il s'agisse de principes politiques ou d'inclinations individuelles.",
+            "reason": "Le contexte discute de tendances antagonistes dans l'évolution psychologique et sociale, mais il ne précise pas qu'elles se différencient entre principes politiques ou inclinations individuelles."
+          },
+          {
+            "item_id": "Q011",
+            "repeat": 3,
+            "statement": "Selon lui, ces tendances antagonistes se différencient, qu'il s'agisse de principes politiques ou d'inclinations individuelles.",
+            "reason": "Le contexte discute de tendances antagonistes dans l'évolution psychologique et sociale de l'homme, mais il ne précise pas si ces tendances se différencient entre principes politiques ou inclinations individuelles."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 1,
+            "statement": "Dans l'Évolution Créatrice (1907) et Les Deux Sources (1932), Bergson décrit la croissance de la vie en utilisant la métaphore de la gerbe.",
+            "reason": "Le contexte décrit en détail les idées de Bergson sur l'évolution de la vie, mais il ne mentionne pas explicitement qu'il utilise la métaphore de la gerbe pour décrire la croissance de la vie."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 1,
+            "statement": "Sur le plan psychologique, ce processus se traduit nécessairement par un sacrifice.",
+            "reason": "Le contexte ne discute pas explicitement de sacrifices liés au processus psychologique décrit. Il s'agit plutôt d'une évolution de tendances divergentes et complémentaires, mais il n'est pas directement informatif sur des sacrifices."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 1,
+            "statement": "L'individu choisit une route et abandonne toutes celles qu'il aurait pu suivre.",
+            "reason": "Le contexte indique que l'individu choisit entre différentes tendances, mais il ne mentionne pas qu'il abandonne toutes les autres possibilités."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 2,
+            "statement": "Dans l'Évolution Créatrice (1907) et Les Deux Sources (1932), Bergson décrit la croissance de la vie en utilisant la métaphore de la gerbe.",
+            "reason": "Le contexte décrit en détail les idées de Bergson sur l'évolution de la vie, mais il ne mentionne pas explicitement qu'il utilise la métaphore de la gerbe pour décrire la croissance de la vie."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 2,
+            "statement": "Sur le plan psychologique, ce processus se traduit nécessairement par un sacrifice.",
+            "reason": "Le contexte ne discute pas explicitement de sacrifices liés au processus psychologique décrit. Il s'agit plutôt d'une évolution de tendances divergentes et complémentaires, mais il n'est pas directement informatif sur des sacrifices."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 2,
+            "statement": "L'individu choisit une route et abandonne toutes celles qu'il aurait pu suivre.",
+            "reason": "Le contexte indique que l'individu choisit entre différentes tendances, mais il ne mentionne pas qu'il abandonne toutes les autres possibilités."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 3,
+            "statement": "Dans l'Évolution Créatrice (1907) et Les Deux Sources (1932), Bergson décrit la croissance de la vie en utilisant la métaphore de la gerbe.",
+            "reason": "Le contexte décrit en détail les idées de Bergson sur l'évolution de la vie, mais il ne mentionne pas explicitement qu'il utilise la métaphore de la gerbe pour décrire la croissance de la vie."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 3,
+            "statement": "Sur le plan psychologique, ce processus se traduit nécessairement par un sacrifice.",
+            "reason": "Le contexte ne discute pas explicitement de sacrifices liés au processus psychologique décrit. Il s'agit plutôt d'une évolution de tendances divergentes et complémentaires, mais il n'est pas directement informatif sur des sacrifices."
+          },
+          {
+            "item_id": "Q012",
+            "repeat": 3,
+            "statement": "L'individu choisit une route et abandonne toutes celles qu'il aurait pu suivre.",
+            "reason": "Le contexte indique que l'individu choisit entre différentes tendances, mais il ne fait pas mention d'une seule route étant choisie et toutes les autres étant abandonnées."
+          }
+        ]
+      }
+    ],
+    "missed_detections": {
+      "Q008-p1-negation": [
+        [
+          false,
+          false,
+          false
+        ],
+        [
+          false,
+          false,
+          false
+        ]
+      ]
+    },
+    "miss_reasons": {
+      "Q008-p1-negation": [
+        [
+          "judged supported",
+          "judged supported",
+          "judged supported"
+        ],
+        [
+          "judged supported",
+          "judged supported",
+          "judged supported"
+        ]
+      ]
+    },
+    "distinct_flagged_faithful": {
+      "statements": 27,
+      "items": [
+        "Q002",
+        "Q004",
+        "Q006",
+        "Q007",
+        "Q009",
+        "Q010",
+        "Q011",
+        "Q012"
+      ]
+    },
+    "item_means": {
+      "Q001": [
+        1.0,
+        1.0
+      ],
+      "Q002": [
+        0.2727272727272727,
+        0.2727272727272727
+      ],
+      "Q003": [
+        1.0,
+        1.0
+      ],
+      "Q004": [
+        0.5,
+        0.5
+      ],
+      "Q005": [
+        1.0,
+        1.0
+      ],
+      "Q006": [
+        0.6666666666666666,
+        0.6666666666666666
+      ],
+      "Q007": [
+        0.7555555555555555,
+        0.7666666666666666
+      ],
+      "Q008": [
+        1.0,
+        1.0
+      ],
+      "Q009": [
+        0.16666666666666666,
+        0.16666666666666666
+      ],
+      "Q010": [
+        0.3333333333333333,
+        0.3333333333333333
+      ],
+      "Q011": [
+        0.8888888888888888,
+        0.7777777777777777
+      ],
+      "Q012": [
+        0.4000000000000001,
+        0.4000000000000001
+      ],
+      "Q002-gen-end_to_end": [
+        0.8000000000000002,
+        0.8000000000000002
+      ],
+      "Q004-gen-end_to_end": [
+        0.4000000000000001,
+        0.4000000000000001
+      ],
+      "Q001-p1-unsupported_sentence": [
+        0.5,
+        0.5
+      ],
+      "Q002-p1-unsupported_sentence": [
+        0.3333333333333333,
+        0.3333333333333333
+      ],
+      "Q003-p1-unsupported_sentence": [
+        0.6666666666666666,
+        0.6666666666666666
+      ],
+      "Q004-p1-negation": [
+        0.43333333333333335,
+        0.4000000000000001
+      ],
+      "Q005-p1-proper_noun": [
+        0.6666666666666666,
+        0.6666666666666666
+      ],
+      "Q006-p1-unsupported_sentence": [
+        0.3333333333333333,
+        0.3333333333333333
+      ],
+      "Q007-p1-unsupported_sentence": [
+        0.6190476190476191,
+        0.6190476190476191
+      ],
+      "Q008-p1-negation": [
+        1.0,
+        1.0
+      ],
+      "Q009-p1-unsupported_sentence": [
+        0.2857142857142857,
+        0.35714285714285715
+      ],
+      "Q010-p1-unsupported_sentence": [
+        0.3333333333333333,
+        0.3333333333333333
+      ],
+      "Q011-p1-unsupported_sentence": [
+        0.5,
+        0.5
+      ],
+      "Q012-p1-unsupported_sentence": [
+        0.6,
+        0.6
+      ]
+    },
+    "item_nan_runs": {
+      "Q001": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q002": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q003": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q004": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q005": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q006": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q007": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q008": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q009": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q010": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q011": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q012": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q002-gen-end_to_end": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q004-gen-end_to_end": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q001-p1-unsupported_sentence": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q002-p1-unsupported_sentence": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q003-p1-unsupported_sentence": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q004-p1-negation": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q005-p1-proper_noun": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q006-p1-unsupported_sentence": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q007-p1-unsupported_sentence": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q008-p1-negation": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q009-p1-unsupported_sentence": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q010-p1-unsupported_sentence": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q011-p1-unsupported_sentence": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "Q012-p1-unsupported_sentence": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    "nan_rows": [
+      [
+        0,
+        78
+      ],
+      [
+        0,
+        78
+      ]
+    ],
+    "pooled_stability": {
+      "runs": 2,
+      "repeats": 6,
+      "mean_range": 0.03681318681318682,
+      "max_range": 0.33333333333333337,
+      "flips": 2,
+      "matched_statements": 136,
+      "unmatched_statements": 10,
+      "flipped": [
+        [
+          "Q007",
+          "Cette assimilation est utile à la vie pratique et à la plupart des sciences."
+        ],
+        [
+          "Q007-p1-unsupported_sentence",
+          "Cette assimilation est utile à la vie pratique et à la plupart des sciences."
+        ]
+      ]
+    },
+    "noise_floor": {
+      "zero": 22,
+      "nonzero": {
+        "Q007": 0.011111111111111072,
+        "Q011": 0.11111111111111116,
+        "Q004-p1-negation": 0.03333333333333327,
+        "Q009-p1-unsupported_sentence": 0.07142857142857145
+      },
+      "nan": [],
+      "max": 0.11111111111111116,
+      "mean": 0.008730158730158729,
+      "n_finite": 26,
+      "per_item": {
+        "Q001": 0.0,
+        "Q002": 0.0,
+        "Q003": 0.0,
+        "Q004": 0.0,
+        "Q005": 0.0,
+        "Q006": 0.0,
+        "Q007": 0.011111111111111072,
+        "Q008": 0.0,
+        "Q009": 0.0,
+        "Q010": 0.0,
+        "Q011": 0.11111111111111116,
+        "Q012": 0.0,
+        "Q002-gen-end_to_end": 0.0,
+        "Q004-gen-end_to_end": 0.0,
+        "Q001-p1-unsupported_sentence": 0.0,
+        "Q002-p1-unsupported_sentence": 0.0,
+        "Q003-p1-unsupported_sentence": 0.0,
+        "Q004-p1-negation": 0.03333333333333327,
+        "Q005-p1-proper_noun": 0.0,
+        "Q006-p1-unsupported_sentence": 0.0,
+        "Q007-p1-unsupported_sentence": 0.0,
+        "Q008-p1-negation": 0.0,
+        "Q009-p1-unsupported_sentence": 0.07142857142857145,
+        "Q010-p1-unsupported_sentence": 0.0,
+        "Q011-p1-unsupported_sentence": 0.0,
+        "Q012-p1-unsupported_sentence": 0.0
+      }
+    }
+  },
+  "variant": null,
+  "gate_diff": null,
+  "items": []
+}

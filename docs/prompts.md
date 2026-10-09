@@ -608,6 +608,104 @@ on 19 of 26 items, max 0.111. This is a baseline, not a selection result:
 no other candidate has been run, the frozen judge is not designated, and
 nothing here recommends a prompt change.
 
+### Judge baseline v2 (`exp/judge-baseline-v2`)
+
+The baseline above was produced at **judge input version 1**. Two code
+changes since then alter what the judge is given and how its replies are
+read (`JUDGE_INPUT_VERSION = 2`, `src/generation/faithfulness.py`), and
+neither touches a prompt: replies are repaired before parsing (#57), and
+each chunk of the NLI context sits under its title/year header (#58). This
+baseline replaces the first for every comparison. `compare_prompt_results`
+refuses to compare results across versions anyway.
+
+Same protocol: the committed default prompts (unchanged hashes), judge mode,
+`eval/calibration_set.json` (sha256 `482bed45…`). Two identical runs, each
+`--repeat 3`: commit `28b41a3` (main after #58), clean tree, temperature 0,
+`ollama_chat/mistral`, RAGAS 0.3.9. Same fingerprint (`665a4089d953`), one
+checkpoint file per run.
+
+- Run 1: [`prompt_cmp_judge_default_n26_20261009T100635Z`](../eval/results/prompt_cmp_judge_default_n26_20261009T100635Z.md)
+- Run 2 (rerun, for the noise floor): [`prompt_cmp_judge_default_n26_20261009T112759Z`](../eval/results/prompt_cmp_judge_default_n26_20261009T112759Z.md)
+- Report (`judge_variant_report --baseline`): [`prompt_cmp_judgebase_default_20261009T131600Z`](../eval/results/prompt_cmp_judgebase_default_20261009T131600Z.md)
+
+EXPLORATORY: n=26, below the n=50 threshold; no number here is
+decision-grade.
+
+| | v1 (run 1 / run 2) | v2 (run 1 / run 2) |
+|---|---|---|
+| Gate | failed, 10/14 | failed, **13/14** |
+| — generated | 1/2 | **2/2** |
+| — perturbed | 9/12 | 11/12 |
+| nan rows | 9/78 | **0/78** |
+| Unevaluated claims | — | 0 |
+| Faithful-class mean (higher = fewer false flags) | 0.611 / 0.617 | **0.665 / 0.657** |
+| Hallucinated-class mean (lower = correct) | 0.485 / 0.479 (11 parsed items) | 0.534 / 0.536 (14 items) |
+| Distinct flagged faithful statements | 27, across 10 items | 27, across 8 items |
+| Verdict flips (pooled, 6 repeats) | 2 (Q008 pair) | 2 (Q007 pair) |
+| Noise floor | 0 on 19 of 23 finite, max 0.111 | 0 on 22 of 26, max 0.111, mean 0.009 |
+
+The two hallucinated means aren't comparable: v1's leaves out the three
+nan items.
+
+#### What changed
+
+- **Parse failures: gone.** Q001-p1 and Q010-p1 now flag their inserted
+  sentence in every repeat. Q002-gen's invented title, « De l'évolution de
+  la vie. », is judged unsupported in every repeat (0.800 per run). The
+  judge's reason now cites the chunk headers.
+- **Title false flags on faithful answers: mostly gone.** In v1, the
+  opening title sentences of Q001, Q006, Q007, Q009 and Q010 were flagged,
+  because the judge couldn't see any title. In v2, Q001, Q007 and Q010 are
+  no longer flagged. Q001 reaches 1.000 (was 0.500), Q008 1.000 (was
+  0.778) and Q009 0.167 (was 0.000). Still flagged, for claims the header
+  can't settle: Q009 « À la fin du troisième chapitre de l'Évolution
+  créatrice (1907)… » (a chapter, not a work), Q012 « Dans l'Évolution
+  Créatrice (1907) et Les Deux Sources (1932)… », and Q006 « Dans La Pensée
+  et le Mouvant (1934), Bergson reconstitue la pensée… de Berkeley » (the
+  reason is about the content). Q010 drops from 0.500 to 0.333: three
+  claims about the Greek-thought metaphor are now flagged (« … ne fait
+  aucune référence à Bergson »).
+- **The one remaining miss: Q008-p1-negation, now stable.** In v1 it was
+  detected in 3 of 6 repeats; in v2 it's judged supported in **6 of 6**.
+  The reason contradicts itself every time: « l'auteur y voit une certaine
+  solidarité mais pas d'équivalence » (correct), then « Ainsi,
+  l'affirmation que le cerveau et le mental ne sont pas solidaires est
+  directement inférée du contexte ». The judge reads the right relation
+  but doesn't carry the negation into its verdict. That's a judgment
+  failure, not a parsing one, and the gate's only blocker now.
+  `negation` has 2 items (Q004-p1 is caught).
+
+#### Verdict
+
+**The committed defaults still fail the gate, on one item**: 13 of 14
+hallucinated items flagged in every repeat, the same in both runs. The
+miss is Q008-p1-negation, a negation accepted with a self-contradicting
+reason in all 6 repeats. No nan, no unevaluated claim. The faithful-class
+mean is higher than v1 (**0.665 / 0.657**), and the noise floor is lower
+(0 on 22 of 26 items). This is the baseline every judge variant is
+compared against from now on (pass run 2 as the rerun). Nothing here
+recommends a prompt change. A variant targeting negation would start from
+Q008-p1.
+
+#### Leads (not started)
+
+- **A negation variant** (faithfulness family, `nli_verifier.md`). The
+  observed failure is Q008-p1-negation: the judge states the relation the
+  context asserts (« une certaine solidarité »), then accepts its negation.
+  Candidate rule: a statement that denies a relation the context asserts
+  gets verdict 0, even if the rest of the statement matches.
+- **Too few negation items to judge it.** The calibration set has 2
+  `negation` perturbations: Q004-p1, caught, and Q008-p1, missed. A variant
+  tuned on Q008-p1 alone could fix that item without fixing negation.
+  Adding `negation` perturbations first (`eval/scripts/calibration_set.py`,
+  `_negate`) changes the calibration set's sha256. The baseline would then
+  have to be rerun before any variant is compared to it.
+- **Watch the faithful class.** Gold answers contain legitimate negations
+  (e.g. Q008's « on ne peut pas en conclure que la forme du clou dessine
+  celle du vêtement »). A stricter negation rule must not lower the
+  faithful-class mean: check its flagged faithful statements against
+  baseline v2's.
+
 ## Tests
 
 All fast (CI's `-m "not slow"` job):

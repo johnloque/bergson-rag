@@ -409,6 +409,8 @@ produced it: [`docs/prompts.md`](prompts.md).
 Comparison tooling (variants, judge-first selection, frozen judge, `exp/`
 branch per variant): [`docs/prompts.md`, "Comparing prompt variants"](prompts.md#comparing-prompt-variants-featprompt-comparison).
 Judge baseline (committed defaults, two runs × 3 repeats; gate failed 10/14, 3 of the misses nan): [`docs/prompts.md`, "Judge baseline"](prompts.md#judge-baseline-expjudge-baseline).
+Judge baseline v2 (judge input version 2: JSON repair + source headers; gate failed 13/14, only Q008-p1-negation, no nan): [`docs/prompts.md`, "Judge baseline v2"](prompts.md#judge-baseline-v2-expjudge-baseline-v2).
+Next judge lead, not started: a negation variant from Q008-p1, after adding `negation` items to the calibration set (2 today): [`docs/prompts.md`, "Leads"](prompts.md#leads-not-started).
 
 ### Sprint 15 — Portfolio polish
 Complete README, "Known limitations & scope" section finalized,

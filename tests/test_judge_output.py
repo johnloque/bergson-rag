@@ -119,7 +119,7 @@ def _judge(segment_reply: str, nli_reply: str, fix_reply: str) -> Any:
 
 def _check(llm: Any) -> Any:
     answer = "Bergson déclare avoir emprunté cette idée à Aristote, dont il cite la Métaphysique."
-    chunks = [SimpleNamespace(text="Un passage sans Aristote.")]
+    chunks = [SimpleNamespace(text="Un passage sans Aristote.", work_id="", paragraph_ids=[])]
     return check_faithfulness("Q ?", answer, chunks, judge_llm=llm)  # type: ignore[arg-type]
 
 

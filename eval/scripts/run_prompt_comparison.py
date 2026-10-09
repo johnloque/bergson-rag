@@ -45,6 +45,7 @@ from eval.scripts.calibration_set import (
     calibration_texts,
     held_out_overlaps,
     load_calibration_set,
+    load_chunk_paragraph_ids,
     load_chunk_texts,
     resolve_chunk_texts,
 )
@@ -185,6 +186,8 @@ def base_header(
     for item in items:
         origin = item.get("origin", "gold")
         per_origin[origin] = per_origin.get(origin, 0) + 1
+    from src.generation.faithfulness import JUDGE_INPUT_VERSION
+
     variant = overrides.variant
     return {
         "banner": exploratory_banner(len(items)),
@@ -214,6 +217,9 @@ def base_header(
             "generation": TEMPERATURE if overrides.mode == "generation" else None,
         },
         "retrieval": GENERATION_RETRIEVAL if overrides.mode == "generation" else JUDGE_RETRIEVAL,
+        # src/generation/faithfulness.py: what the judge is given besides its
+        # prompts, and how its replies are read (absent = 1)
+        "judge_input_version": JUDGE_INPUT_VERSION,
         "items": {
             "count": len(items),
             "ids": [item["id"] for item in items],
@@ -238,6 +244,7 @@ def run_judge_mode(
     items = select_items(calibration["items"], args.items)
     all_chunk_texts = load_chunk_texts(args.chunks_dir)
     texts = {item["id"]: resolve_chunk_texts(item, all_chunk_texts) for item in items}
+    paragraph_ids = load_chunk_paragraph_ids(args.chunks_dir)
     try:
         prompts = build_faithfulness_prompts(
             overrides.prompts["faithfulness.segment_claims"],
@@ -272,7 +279,7 @@ def run_judge_mode(
                 chunk_id=ref["chunk_id"],
                 section_id="",
                 section_path="",
-                paragraph_ids=[],
+                paragraph_ids=paragraph_ids[ref["chunk_id"]],
                 page_start={},
                 page_end={},
                 text=text,
@@ -554,6 +561,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "temperature": header["temperature"],
             "items": header["items"]["ids"],
             "calibration": header["items"].get("calibration_set_sha256"),
+            "judge_input_version": header["judge_input_version"],
         }
     )
     header["fingerprint"] = run_fingerprint

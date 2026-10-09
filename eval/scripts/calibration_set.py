@@ -164,12 +164,22 @@ def gold_chunk_ids(row: GoldRow, chunks_dir: Path) -> list[str]:
     return chunk_ids
 
 
+def _load_chunks(chunks_dir: Path) -> list[dict[str, Any]]:
+    return [
+        chunk
+        for path in sorted(chunks_dir.glob("*.json"))
+        for chunk in json.loads(path.read_text(encoding="utf-8"))
+    ]
+
+
 def load_chunk_texts(chunks_dir: Path = DEFAULT_CHUNKS_DIR) -> dict[str, str]:
-    texts: dict[str, str] = {}
-    for path in sorted(chunks_dir.glob("*.json")):
-        for chunk in json.loads(path.read_text(encoding="utf-8")):
-            texts[chunk["chunk_id"]] = chunk["text"]
-    return texts
+    return {chunk["chunk_id"]: chunk["text"] for chunk in _load_chunks(chunks_dir)}
+
+
+def load_chunk_paragraph_ids(chunks_dir: Path = DEFAULT_CHUNKS_DIR) -> dict[str, list[str]]:
+    """chunk_id -> its paragraph ids, which resolve an anthology chunk's own
+    text title and year (`src.works.resolve_paragraph_metadata`)."""
+    return {chunk["chunk_id"]: chunk["paragraph_ids"] for chunk in _load_chunks(chunks_dir)}
 
 
 # --- perturbations --------------------------------------------------------

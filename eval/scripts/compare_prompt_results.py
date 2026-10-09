@@ -93,6 +93,12 @@ def comparability_problems(results: Sequence[Mapping[str, Any]]) -> list[str]:
         problems.append("items differ (ids or order)")
     if len({h["items"].get("calibration_set_sha256") for h in headers}) > 1:
         problems.append("calibration set differs (different texts or chunks)")
+    versions = {h.get("judge_input_version", 1) for h in headers}
+    if len(versions) > 1:
+        problems.append(
+            f"judge input version differs ({' vs '.join(map(str, sorted(versions)))}): the code "
+            "changed what the judge is given or how its replies are read"
+        )
     units = differing_units(results)
     if not units:
         problems.append(

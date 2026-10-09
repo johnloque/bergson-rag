@@ -925,3 +925,38 @@ the nan rate, and for every missed item the reason per repeat (`nan`,
 
 The judge-baseline result files predate this branch: rerun the baseline
 before comparing a variant against it.
+
+## `feat/judge-context-metadata`: the judge sees each chunk's source
+
+The NLI context used to be the chunk texts alone, so the judge never saw a
+work's title or year. On Q002-gen it judged the invented title « De
+l'évolution de la vie. » *supported*, because the context was, it said,
+from « De l'évolution créatrice ». It named that title itself, from its own
+memory: none of the chunks states it. A prompt rule forbidding unsupported
+titles couldn't have helped. The judge had nothing to check a title
+against, and 11 of the 12 faithful calibration answers cite a correct
+title and year.
+
+`_context_for_judge` (`src/generation/faithfulness.py`) now puts each
+chunk under its source header, with the same metadata the generation
+prompt shows (`src.works`), the anthology's own text included:
+
+```
+[1934_PM — La Pensée et le Mouvant (1934) › Introduction (première partie) (1922)]
+<chunk text>
+```
+
+A chunk with no `work_id` (an API caller may omit it) keeps its bare text.
+Judge mode (`run_prompt_comparison.py`) now passes each chunk's real
+`paragraph_ids`, which resolve the text-level title.
+
+Real judge, default prompts, 1 repeat (exploratory): Q002-gen's title is
+now judged unsupported, and the judge's reason cites the headers. In Q001
+and Q010 the correct titles stay supported.
+
+**`JUDGE_INPUT_VERSION`** (now 2) records what the judge is given besides
+its prompts, and how its replies are read. It goes into the
+prompt-comparison fingerprint, so checkpoints written before can't be
+replayed. It also goes into the result header: `compare_prompt_results`
+refuses results with different versions (a header without the field is
+version 1). The judge baseline must be rerun.

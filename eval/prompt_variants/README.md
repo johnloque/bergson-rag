@@ -11,7 +11,7 @@ stay here and on disk: they're the record of what was tried.
 
 | Variant | Family | Targeted failure | Status | Results | Branch |
 |---|---|---|---|---|---|
-| — | | | | | |
+| `judge-parsing-opt` | faithfulness | JSON parse failures of the first judge baseline (Q001-p1, Q010-p1, Q002-gen), since repaired in code (#57) | draft | — | `exp/prompt-judge-parsing-opt` |
 
 ## Layout
 

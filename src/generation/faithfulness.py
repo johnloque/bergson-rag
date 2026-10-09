@@ -85,8 +85,12 @@ comes first in the prompt, so Ollama reuses its cache across the N calls;
 estimated latency overhead 0-20%.
 
 A claim whose NLI output can't be parsed (`RagasOutputParserException`,
-observed once in 30 calls) is kept with `supported=None` ("not evaluated")
-rather than failing the whole check; it is excluded from `score`.
+observed once in 30 calls, or `OutputParserException` when RAGAS's retry
+returns a fix that still doesn't parse) is kept with `supported=None` ("not
+evaluated") rather than failing the whole check; it is excluded from
+`score`. Before any of that, the judge's replies go through a deterministic
+repair of its known JSON malformations (`build_judge_llm`,
+`src/generation/judge_output.py`).
 
 The NLI step does not use `ragas.metrics.Faithfulness` itself: the prompt is
 run directly, and `score` is computed here (supported / evaluated claims).
@@ -144,6 +148,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import litellm
+from langchain_core.exceptions import OutputParserException
+from langchain_core.outputs import LLMResult
 from langchain_litellm import ChatLiteLLM
 from pydantic import BaseModel, Field
 from ragas.exceptions import RagasOutputParserException
@@ -164,8 +170,10 @@ from ragas.llms.base import LangchainLLMWrapper
 # Pydantic models, not internal machinery.
 from ragas.metrics._faithfulness import NLIStatementInput, NLIStatementOutput
 from ragas.prompt import PydanticPrompt
+from ragas.prompt.pydantic_prompt import fix_output_format_prompt
 
 from src.generation.generate import DEFAULT_MODEL
+from src.generation.judge_output import repair_json_reply, wrap_fix_reply
 from src.generation.prompt import CITATION_PATTERN
 from src.generation.segmentation import Segment, segment_answer
 from src.generation.signals import GenerationChunk
@@ -261,6 +269,24 @@ def _run_on_background_loop[T](coro: Coroutine[Any, Any, T]) -> T:
     return future.result()
 
 
+class _RepairingJudgeLLM(LangchainLLMWrapper):
+    """`LangchainLLMWrapper` whose replies are repaired before RAGAS parses
+    them (`src/generation/judge_output.py`): the known JSON malformations of
+    the local judge, and the bare reply it gives to RAGAS's `FixOutputFormat`
+    retry, put back in the `{"text": ...}` envelope that retry expects.
+    A well-formed reply passes through unchanged. Only the async path is
+    overridden: it's the one `PydanticPrompt.generate` takes."""
+
+    async def agenerate_text(self, prompt: Any, *args: Any, **kwargs: Any) -> LLMResult:
+        result = await super().agenerate_text(prompt, *args, **kwargs)
+        is_fix_retry = prompt.to_string().startswith(fix_output_format_prompt.instruction)
+        for generations in result.generations:
+            for generation in generations:
+                text = repair_json_reply(generation.text)
+                generation.text = wrap_fix_reply(text) if is_fix_retry else text
+        return result
+
+
 def build_judge_llm(
     model: str = DEFAULT_JUDGE_MODEL, temperature: float = JUDGE_TEMPERATURE
 ) -> LangchainLLMWrapper:
@@ -269,7 +295,7 @@ def build_judge_llm(
     `judge_llm` to avoid reconstructing it per item in a batch loop."""
     _, provider, _, _ = litellm.get_llm_provider(model)
     model_kwargs = {"num_ctx": JUDGE_NUM_CTX} if provider in _OLLAMA_PROVIDERS else {}
-    return LangchainLLMWrapper(
+    return _RepairingJudgeLLM(
         ChatLiteLLM(model=model, temperature=temperature, model_kwargs=model_kwargs)
     )
 
@@ -512,7 +538,9 @@ def check_faithfulness(
             return await prompts.nli.generate(
                 llm=llm, data=NLIStatementInput(context=context, statements=[claim])
             )
-        except RagasOutputParserException:
+        # OutputParserException: what RAGAS raises when its FixOutputFormat
+        # retry returns a fixed reply that still doesn't parse.
+        except (RagasOutputParserException, OutputParserException):
             return None
 
     async def _run() -> tuple[ClaimVerdict, ...]:

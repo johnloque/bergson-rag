@@ -49,6 +49,7 @@ from eval.scripts.judge_selection import (
     Axes,
     _statement_key,
     dominance,
+    format_miss,
     is_nan,
     item_mean,
     rows_by_item,
@@ -113,6 +114,14 @@ def candidate(results: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "runs": runs,
         # missed item -> per run, per repeat: flagged or not
         "missed_detections": {i: [run["gate"]["detections"][i] for run in runs] for i in missed},
+        # missed item -> per run, per repeat: why it missed (None where flagged)
+        "miss_reasons": {
+            i: [
+                run["gate"]["miss_reasons"].get(i, [None] * len(run["gate"]["detections"][i]))
+                for run in runs
+            ]
+            for i in missed
+        },
         "distinct_flagged_faithful": {
             "statements": len(flagged),
             "items": sorted({item_id for item_id, _ in flagged}),
@@ -233,7 +242,8 @@ def render(report: Mapping[str, Any]) -> str:
     for cand in cands:
         lines += ["", f"Missed by {cand['label']}, detections per repeat (run 1 / run 2 …):"]
         lines += [
-            f"- {item_id}: " + " / ".join(_tf(flags) for flags in per_run)
+            f"- {format_miss(item_id, [r for run in cand['miss_reasons'][item_id] for r in run])}: "
+            + " / ".join(_tf(flags) for flags in per_run)
             for item_id, per_run in cand["missed_detections"].items()
         ] or ["- none"]
     if var:
@@ -250,8 +260,9 @@ def render(report: Mapping[str, Any]) -> str:
         "",
         "| candidate | run | faithful (higher = fewer false flags) | hallucinated (lower = "
         "correct) | nan rows | nan per repeat, faithful | nan per repeat, hallucinated | "
+        "unevaluated per repeat, faithful | unevaluated per repeat, hallucinated | "
         "flagged faithful statements |",
-        "|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for cand in cands:
         runs = zip(cand["runs"], cand["nan_rows"], strict=True)
@@ -262,10 +273,18 @@ def render(report: Mapping[str, Any]) -> str:
                 )
                 for cls in (FAITHFUL, HALLUCINATED)
             ]
+            unevaluated = [
+                ", ".join(
+                    f"r{r} {n}/{t}"
+                    for r, (n, t) in run[f"{cls}_class"]["unevaluated_per_run"].items()
+                )
+                for cls in (FAITHFUL, HALLUCINATED)
+            ]
             lines.append(
                 f"| {cand['label']} | {k} | {_fmt(run['faithful_class']['mean'])} | "
                 f"{_fmt(run['hallucinated_class']['mean'])} | {nan}/{total} | "
-                f"{per_class[0]} | {per_class[1]} | {len(run['flagged_faithful_statements'])} |"
+                f"{per_class[0]} | {per_class[1]} | {unevaluated[0]} | {unevaluated[1]} | "
+                f"{len(run['flagged_faithful_statements'])} |"
             )
     for cand in cands:
         distinct = cand["distinct_flagged_faithful"]

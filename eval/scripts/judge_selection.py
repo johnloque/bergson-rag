@@ -45,18 +45,49 @@ def rows_by_item(rows: Iterable[Mapping[str, Any]]) -> dict[str, list[Mapping[st
     return grouped
 
 
-def flags_known_claim(row: Mapping[str, Any], item: Mapping[str, Any]) -> bool:
-    """Whether this run gave verdict 0 to a claim drawn from a segment that
-    overlaps the item's fabricated substring."""
+def _known_claims(row: Mapping[str, Any], item: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Claims drawn from a segment that overlaps the item's fabricated substring."""
     start = item["fabricated_start"]
     end = start + len(item["fabricated_substring"])
     overlapping = {
         s["id"] for s in row.get("segments", []) if s["start"] < end and start < s["end"]
     }
-    return any(
-        claim["supported"] is False and claim["segment_id"] in overlapping
-        for claim in row.get("claims", [])
-    )
+    return [claim for claim in row.get("claims", []) if claim["segment_id"] in overlapping]
+
+
+def flags_known_claim(row: Mapping[str, Any], item: Mapping[str, Any]) -> bool:
+    """Whether this run gave verdict 0 to a claim drawn from a segment that
+    overlaps the item's fabricated substring."""
+    return any(claim["supported"] is False for claim in _known_claims(row, item))
+
+
+def miss_reason(row: Mapping[str, Any] | None, item: Mapping[str, Any]) -> str | None:
+    """Why this run didn't flag the known claim (None if it did). A miss
+    is a miss for the gate whatever the reason; the reason says whether the
+    judge accepted the claim or never gave it a verdict."""
+    if row is None:
+        return "missing run"
+    if flags_known_claim(row, item):
+        return None
+    if row.get("error"):
+        return "nan"
+    known = _known_claims(row, item)
+    if any(claim["supported"] is None for claim in known):
+        return "unevaluated"
+    return "judged supported" if known else "no claim extracted"
+
+
+def format_miss(item_id: str, reasons: Sequence[str | None]) -> str:
+    """`Q002-gen (unevaluated ×3)`: an item's missed repeats, by reason."""
+    counts: dict[str, int] = {}
+    for reason in reasons:
+        if reason is not None:
+            counts[reason] = counts.get(reason, 0) + 1
+    return f"{item_id} ({', '.join(f'{r} ×{n}' for r, n in counts.items())})"
+
+
+def has_unevaluated_claims(row: Mapping[str, Any]) -> bool:
+    return any(claim["supported"] is None for claim in row.get("claims", []))
 
 
 @dataclass
@@ -70,6 +101,8 @@ class GateResult:
     # perturbation type -> (detected, total)
     per_perturbation_type: dict[str, tuple[int, int]]
     missed: list[str]
+    # missed item id -> per-repeat miss reason (None where flagged), see miss_reason
+    miss_reasons: dict[str, list[str | None]] = field(default_factory=dict)
 
 
 def gate(
@@ -80,6 +113,7 @@ def gate(
     per_origin: dict[str, list[int]] = {}
     per_type: dict[str, list[int]] = {}
     missed: list[str] = []
+    miss_reasons: dict[str, list[str | None]] = {}
     for item in items:
         if item["label"] != HALLUCINATED:
             continue
@@ -96,6 +130,9 @@ def gate(
             type_counts[1] += 1
         if not detected:
             missed.append(item["id"])
+            miss_reasons[item["id"]] = [
+                miss_reason(runs.get(r), item) for r in range(1, repeat + 1)
+            ]
     return GateResult(
         passed=bool(detections) and not missed,
         repeat=repeat,
@@ -103,6 +140,7 @@ def gate(
         per_origin={k: (v[0], v[1]) for k, v in sorted(per_origin.items())},
         per_perturbation_type={k: (v[0], v[1]) for k, v in sorted(per_type.items())},
         missed=missed,
+        miss_reasons=miss_reasons,
     )
 
 
@@ -118,6 +156,9 @@ class ClassScores:
     mean: float  # mean over items of each item's mean over repeats
     n_items: int
     nan_per_run: dict[int, tuple[int, int]]  # repeat -> (nan runs, runs)
+    # repeat -> (runs with at least one claim left unevaluated, runs): their
+    # score leaves those claims out, so it can read as faithful
+    unevaluated_per_run: dict[int, tuple[int, int]] = field(default_factory=dict)
 
 
 def class_scores(
@@ -128,15 +169,18 @@ def class_scores(
     means = [item_mean(grouped.get(item_id, [])) for item_id in ids]
     finite = [m for m in means if not math.isnan(m)]
     nan_per_run: dict[int, tuple[int, int]] = {}
+    unevaluated_per_run: dict[int, tuple[int, int]] = {}
     for r in range(1, repeat + 1):
         runs = [row for item_id in ids for row in grouped.get(item_id, []) if row["repeat"] == r]
         missing = len(ids) - len(runs)
         nan_per_run[r] = (sum(is_nan(row["score"]) for row in runs) + missing, len(ids))
+        unevaluated_per_run[r] = (sum(has_unevaluated_claims(row) for row in runs), len(ids))
     return ClassScores(
         label=label,
         mean=sum(finite) / len(finite) if finite else float("nan"),
         n_items=len(ids),
         nan_per_run=nan_per_run,
+        unevaluated_per_run=unevaluated_per_run,
     )
 
 
@@ -275,16 +319,23 @@ def summarize(
                 k: list(v) for k, v in gate_result.per_perturbation_type.items()
             },
             "detections": gate_result.detections,
+            "miss_reasons": gate_result.miss_reasons,
         },
         "faithful_class": {
             "mean": faithful.mean,
             "n_items": faithful.n_items,
             "nan_per_run": {str(k): list(v) for k, v in faithful.nan_per_run.items()},
+            "unevaluated_per_run": {
+                str(k): list(v) for k, v in faithful.unevaluated_per_run.items()
+            },
         },
         "hallucinated_class": {
             "mean": hallucinated.mean,
             "n_items": hallucinated.n_items,
             "nan_per_run": {str(k): list(v) for k, v in hallucinated.nan_per_run.items()},
+            "unevaluated_per_run": {
+                str(k): list(v) for k, v in hallucinated.unevaluated_per_run.items()
+            },
         },
         "stability": {
             "measured": stable.measured,

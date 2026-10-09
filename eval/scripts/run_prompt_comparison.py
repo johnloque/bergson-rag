@@ -49,7 +49,7 @@ from eval.scripts.calibration_set import (
     resolve_chunk_texts,
 )
 from eval.scripts.checkpoint import append_checkpoint, load_checkpoint
-from eval.scripts.judge_selection import is_nan, item_mean, rows_by_item, summarize
+from eval.scripts.judge_selection import format_miss, is_nan, item_mean, rows_by_item, summarize
 from eval.scripts.prompt_results import (
     DEFAULT_CHECKPOINT_PATH,
     NOT_FROZEN,
@@ -367,6 +367,17 @@ def _fmt(value: float | None) -> str:
     return "nan" if is_nan(value) else f"{value:.3f}"
 
 
+def _per_run(counts: Mapping[str, Sequence[int]]) -> str:
+    return ", ".join(f"run {r}: {n}/{t}" for r, (n, t) in counts.items())
+
+
+def _missed(gate: Mapping[str, Any]) -> str:
+    """Missed items with why each repeat missed (summaries written before
+    miss reasons existed list the ids alone)."""
+    reasons = gate.get("miss_reasons", {})
+    return ", ".join(format_miss(i, reasons[i]) if i in reasons else i for i in gate["missed"])
+
+
 def render_report(result: Mapping[str, Any]) -> str:
     header, rows, summary = result["header"], result["rows"], result.get("summary")
     items = result["items"]
@@ -430,7 +441,7 @@ def render_report(result: Mapping[str, Any]) -> str:
             "## Gate (every hallucinated item flagged in every run)",
             "",
             f"**{'PASSED' if gate['passed'] else 'FAILED'}**"
-            + (f" — missed: {', '.join(gate['missed'])}" if gate["missed"] else ""),
+            + (f" — missed: {_missed(gate)}" if gate["missed"] else ""),
             "",
             "Rests on: "
             + ", ".join(f"{origin} {d}/{n}" for origin, (d, n) in gate["per_origin"].items())
@@ -447,12 +458,14 @@ def render_report(result: Mapping[str, Any]) -> str:
             ("hallucinated_class", "Hallucinated class", "lower is the correct direction"),
         ):
             block = summary[key]
-            nan = ", ".join(f"run {r}: {n}/{t}" for r, (n, t) in block["nan_per_run"].items())
+            nan = _per_run(block["nan_per_run"])
+            unevaluated = _per_run(block.get("unevaluated_per_run", {})) or "not recorded"
             lines += [
                 "",
                 f"## {title} ({direction}, never pooled)",
                 "",
-                f"Mean {_fmt(block['mean'])} over {block['n_items']} items; nan per run: {nan}",
+                f"Mean {_fmt(block['mean'])} over {block['n_items']} items; nan per run: {nan}; "
+                f"runs with unevaluated claims (left out of their score): {unevaluated}",
             ]
         stab = summary["stability"]
         lines += ["", "## Stability over repeats", ""]
@@ -476,8 +489,8 @@ def render_report(result: Mapping[str, Any]) -> str:
         "## Per item",
         "",
         "| id | origin | label | category | scores per run | mean | nan runs | claims | "
-        "unsupported |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "unsupported | unevaluated |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for item in items:
         runs = grouped.get(item["id"], [])
@@ -486,7 +499,8 @@ def render_report(result: Mapping[str, Any]) -> str:
             f"{item.get('category', '')} | {' / '.join(_fmt(r['score']) for r in runs)} | "
             f"{_fmt(item_mean(runs))} | {sum(is_nan(r['score']) for r in runs)}/{len(runs)} | "
             f"{sum(len(r['claims']) for r in runs)} | "
-            f"{sum(c['supported'] is False for r in runs for c in r['claims'])} |"
+            f"{sum(c['supported'] is False for r in runs for c in r['claims'])} | "
+            f"{sum(c['supported'] is None for r in runs for c in r['claims'])} |"
         )
     errors = [f"{r['item_id']} run {r['repeat']}: {r['error']}" for r in rows if r["error"]]
     lines += ["", "## Failures (recorded as nan, never dropped)", ""]

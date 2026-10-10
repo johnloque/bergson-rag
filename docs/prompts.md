@@ -706,6 +706,60 @@ Q008-p1.
   faithful-class mean: check its flagged faithful statements against
   baseline v2's.
 
+### Variant `judge-parsing-opt` (`exp/prompt-judge-parsing-opt`): rejected
+
+Explicit JSON rules added to both faithfulness instructions
+(`segment_claims.md`, `nli_verifier.md`): a comma between claims, « »
+instead of inner double quotes, no escaped apostrophe. Examples and schema
+unchanged. It targeted the first baseline's parse failures (Q001-p1,
+Q010-p1, Q002-gen), which the code has repaired since (#57), so the only
+open question was whether the rules change verdicts once parsing no longer
+fails.
+
+Same protocol as baseline v2: judge mode, `eval/calibration_set.json`, two
+identical runs of `--repeat 3`, commit `a89475b`, clean tree, judge input
+version 2, fingerprint `056b29f7f09c`, one checkpoint file per run.
+
+- Run 1: [`prompt_cmp_judge_judge-parsing-opt_n26_20261010T110747Z`](../eval/results/prompt_cmp_judge_judge-parsing-opt_n26_20261010T110747Z.md)
+- Run 2 (rerun, for the noise floor): [`prompt_cmp_judge_judge-parsing-opt_n26_20261010T113950Z`](../eval/results/prompt_cmp_judge_judge-parsing-opt_n26_20261010T113950Z.md)
+- Report (`judge_variant_report`, vs baseline v2): [`prompt_cmp_judgevs_judge-parsing-opt_20261010T140431Z`](../eval/results/prompt_cmp_judgevs_judge-parsing-opt_20261010T140431Z.md)
+
+EXPLORATORY: n=26, below the n=50 threshold; no number here is
+decision-grade.
+
+| | baseline v2 (run 1 / run 2) | `judge-parsing-opt` (run 1 / run 2) |
+|---|---|---|
+| Gate | failed, 13/14 | failed, **12/14** |
+| — missed | Q008-p1-negation | Q008-p1-negation, **Q002-gen-end_to_end** |
+| nan rows / unevaluated claims | 0/78 / 0 | 0/78 / 0 |
+| Faithful-class mean (higher = fewer false flags) | **0.665 / 0.657** | 0.640 / 0.625 |
+| Hallucinated-class mean (lower = correct) | **0.534 / 0.536** | 0.596 / 0.590 |
+| Flagged faithful statements (rows) | 74 / 75 | 68 / 70 |
+| Distinct flagged faithful statements | 27, across 8 items | 24, across 9 items |
+| Verdict flips (pooled, 6 repeats) | **2** | 5 |
+| Noise floor | 0 on 22 of 26, max 0.111, mean 0.009 | 0 on 21 of 26, max 0.111, mean 0.016 |
+
+- **Newly missed: Q002-gen-end_to_end**, judged supported in 6 of 6
+  repeats (0.800 → 1.000). The invented title « De l'évolution de la
+  vie. » is accepted with a self-contradicting reason: the context names
+  other titles and « ne mentionne pas un autre titre, donc l'œuvre en
+  question est certainement » the invented one.
+- **Per-item deltas well outside the baseline floor**, both ways:
+  Q011 −0.444 (two of its three claims now flagged), Q008
+  −0.111 (a legitimate negation flagged in some repeats), Q009 +0.167,
+  Q012 +0.200; on the hallucinated side Q006-p1 +0.333, Q001-p1, Q010-p1
+  and Q011-p1 +0.167. The rules change the judge's verdicts, not only its
+  formatting.
+- **Less stable**: 5 flipped statements pooled (Q007, Q008, Q011 and their
+  perturbations) against 2.
+
+**Verdict: rejected** (owner's decision). Once parsing is repaired in
+code, the JSON rules bring no gain: they lose a hallucinated item at the
+gate, raise the hallucinated-class mean, lower the faithful-class mean and
+add flips. The expected outcome in `variant.yaml` (« no gain, at the cost
+of a longer instruction ») held. Parse robustness stays in code (#57);
+baseline v2 remains the reference.
+
 ## Tests
 
 All fast (CI's `-m "not slow"` job):

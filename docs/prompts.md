@@ -768,6 +768,94 @@ add flips. The expected outcome in `variant.yaml` (« no gain, at the cost
 of a longer instruction ») held. Parse robustness stays in code (#57);
 baseline v2 remains the reference.
 
+### Judge baseline v3 (`exp/judge-baseline-v3`)
+
+Baseline v2 rerun on the calibration set with 2 extra negations
+(`feat/calibration-extra-negations`, #61): Q002-p2-negation and
+Q010-p2-negation, so 4 `negation` items and 28 in all (sha256
+`c9460f67…`). Nothing else changed: same committed default prompts
+(unchanged hashes), judge input version 2, the 26 earlier items untouched.
+
+Same protocol: judge mode, two identical runs of `--repeat 3`, commit
+`45dd0b0` (main after #61), clean tree, temperature 0,
+`ollama_chat/mistral`, RAGAS 0.3.9. Fingerprint `e3e7ac3357fd` (the set
+changed), one checkpoint file per run.
+
+- Run 1: [`prompt_cmp_judge_default_n28_20261011T090042Z`](../eval/results/prompt_cmp_judge_default_n28_20261011T090042Z.md)
+- Run 2 (rerun, for the noise floor): [`prompt_cmp_judge_default_n28_20261011T103203Z`](../eval/results/prompt_cmp_judge_default_n28_20261011T103203Z.md)
+- Report (`judge_variant_report --baseline`): [`prompt_cmp_judgebase_default_20261011T120058Z`](../eval/results/prompt_cmp_judgebase_default_20261011T120058Z.md)
+
+EXPLORATORY: n=28, below the n=50 threshold; no number here is
+decision-grade.
+
+| | v2 (run 1 / run 2), n=26 | v3 (run 1 / run 2), n=28 |
+|---|---|---|
+| Gate | failed, 13/14 | failed, 15/16 |
+| — generated | 2/2 | 2/2 |
+| — perturbed | 11/12 | 13/14 |
+| — negation | 1/2 | 3/4 (see below: 1/4 on the negation itself) |
+| nan rows / unevaluated claims | 0/78 / 0 | 0/84 / 0 |
+| Faithful-class mean (higher = fewer false flags) | 0.665 / 0.657 | 0.671 / 0.666 |
+| Hallucinated-class mean (lower = correct) | 0.534 / 0.536 (14 items) | 0.528 / 0.531 (16 items) |
+| Flagged faithful statements (rows) | 74 / 75 | 73 / 74 |
+| Distinct flagged faithful statements | 27, across 8 items | 27, across 8 items |
+| Verdict flips (pooled, 6 repeats) | 2 (Q007 pair) | 3 (Q007 pair, Q009) |
+| Noise floor | 0 on 22 of 26, max 0.111, mean 0.009 | 0 on 24 of 28, max 0.111, mean 0.012 |
+
+#### The 26 earlier items: unchanged
+
+Same inputs, same prompts: every per-item mean equals v2's or moves
+within the run-to-run range both baselines show (Q007 0.822 / 0.711
+against 0.756 / 0.767; Q011, Q009, Q004-p1, Q006-p1, Q009-p1 by one claim
+in one repeat). The faithful-class shift (+0.006 / +0.009) is that noise,
+not a change. Q008-p1-negation is still judged supported in 6 of 6
+repeats, with the same self-contradicting reason.
+
+#### The two new negations: the gate's 3/4 overstates
+
+The gate counts an item as detected when any claim drawn from a segment
+overlapping the fabricated substring gets verdict 0
+(`flags_known_claim`, `eval/scripts/judge_selection.py`). Both new items
+pass it, but not because the judge rejects the negation:
+
+- **Q002-p2-negation** (« présents et futurs **ne sont pas** déterminés
+  d'un seul coup »): the negated claim, « Tous les états… ne sont pas
+  déterminés d'un seul coup, comme juxtaposés dans l'espace », is judged
+  **supported** in 6 of 6 repeats (« ce qui implique que les états ne sont
+  pas déterminés d'un seul coup »). The item passes the gate through two
+  other claims from the same segment (« la bande d'un cinématographe »,
+  « un déterminisme total »), which are false flags the judge also raises
+  on the gold Q002. Worse, the verdict is inverted: the gold's correct
+  claim (« … sont déterminés d'un seul coup ») is flagged in 6 of 6
+  repeats. The perturbed item scores 0.444, above the gold's 0.273.
+- **Q010-p2-negation** (« la mystique **n'est pas** un processus
+  parallèle »): the negated claim is flagged, but with « ne fait aucune
+  référence à Bergson », and the gold Q010's affirmative version
+  (« La mystique est un processus parallèle… selon Bergson ») is flagged
+  too, for the same reason. The gate credit comes from « l'oeuvre de la
+  seule raison », also flagged on the gold. The judge doesn't tell the
+  negation from the original.
+
+Reading the claims, the judge rejects the negation itself on **1 of 4**
+items: Q004-p1 (« ne sont pas le poète lui-même » flagged in every repeat,
+while the gold's affirmative version is accepted). Q008-p1 and Q002-p2 are
+accepted with a reason that justifies the negation; Q010-p2 isn't told
+apart from the gold.
+
+#### Verdict
+
+**The committed defaults still fail the gate, on Q008-p1-negation only**
+(15/16 in both runs, no nan, no unevaluated claim). On the 26 earlier
+items, v3 reproduces v2. This is the baseline every judge variant is
+compared against from now on (pass run 2 as the rerun); v2 can't be, since
+`compare_prompt_results` needs the same calibration set. Nothing here
+recommends a prompt change.
+
+For a negation variant, the gate alone won't show progress on 3 of the 4
+negation items: Q002-p2 and Q010-p2 already pass it for unrelated reasons.
+Compare the verdict on the negated claim itself, per item and repeat,
+against the gold's verdict on the affirmative version.
+
 ## Tests
 
 All fast (CI's `-m "not slow"` job):

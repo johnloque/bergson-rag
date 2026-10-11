@@ -348,7 +348,11 @@ fabricated substring, so a frequent "n'est pas" doesn't discard every
 negation). One per item by default, the type rotated deterministically,
 moving to the next type when the answer offers no target;
 `--perturbations-per-item N` (max 4) adds more, each costing a full
-local-judge run per repeat. (a) and (b) only target a name or year that
+local-judge run per repeat. `--extra-negations N` (default 2) then adds
+N more (d) edits, one per gold item, drawn with the seed among the items
+that don't already have a negation and offer a usable one (Q002-p2 and
+Q010-p2 at seed 1859); it only adds items, the rotated ones are unchanged,
+and asking for more than are eligible stops the build. (a) and (b) only target a name or year that
 appears in the item's chunks: the judge sees chunk text only, never a
 work's title or date, so swapping one the chunks don't mention would
 falsify nothing checkable. An edit whose replacement appears in the item's
@@ -700,6 +704,10 @@ Q008-p1.
   Adding `negation` perturbations first (`eval/scripts/calibration_set.py`,
   `_negate`) changes the calibration set's sha256. The baseline would then
   have to be rerun before any variant is compared to it.
+  **Done** (`feat/calibration-extra-negations`): 2 extra negations,
+  Q002-p2-negation and Q010-p2-negation, so 4 `negation` items and 28 in
+  all; sha256 `482bed45…` → `c9460f67…`. Baseline v2 was run on the old
+  set: rerun it on this one before comparing a negation variant.
 - **Watch the faithful class.** Gold answers contain legitimate negations
   (e.g. Q008's « on ne peut pas en conclure que la forme du clou dessine
   celle du vêtement »). A stricter negation rule must not lower the

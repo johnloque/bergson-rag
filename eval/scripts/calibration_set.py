@@ -28,12 +28,17 @@ Every item carries an `origin` and a `label`:
   whose replacement or inserted text appears in the item's chunks is
   discarded and logged. A perturbed item
   keeps its source item's chunks (paired design).
+- `perturbed` / hallucinated, extra negations: `--extra-negations N`
+  (default 2) adds N more (d) edits, on N gold items drawn with the seed
+  among those that don't already have a negation and offer a usable one.
+  They only add items: the rotated ones above are unchanged.
 
 Perturbed items are cruder than real fabrications: the judge catching them
 shows it catches blatant errors, not subtle ones. They are always reported
 apart from generated ones.
 
 Usage: python -m eval.scripts.calibration_set [--perturbations-per-item 1]
+    [--extra-negations 2]
 Needs `data/processed/chunks/` (ingestion) and, for generated items, the
 local checkpoint file.
 """
@@ -101,6 +106,9 @@ UNSUPPORTED_SENTENCES = (  # fmt: skip
 # alone, frequent in the corpus, doesn't discard every negation.
 NEGATIONS = (("est", "n'est pas"), ("sont", "ne sont pas"), ("peut", "ne peut pas"))
 NEGATION_WINDOW_WORDS = 3
+# Negation is the judge's one stable miss (Q008-p1-negation, docs/prompts.md):
+# extra negation items, so a variant targeting it isn't tuned on one item.
+DEFAULT_EXTRA_NEGATIONS = 2
 
 
 class MissingText(Exception):
@@ -361,6 +369,37 @@ def perturb_item(
     return edits
 
 
+def extra_negations(
+    rows: Sequence[GoldRow],
+    chunk_texts: Mapping[str, Sequence[str]],
+    already_negated: set[str],
+    seed: int,
+    count: int,
+) -> list[tuple[GoldRow, Edit]]:
+    """`count` extra negation edits, one per gold item, on items drawn
+    with `seed` among those not in `already_negated` whose answer has a
+    negation target and whose edit isn't discarded (replacement in the
+    chunks). Each edit is seeded per item, apart from the rotated ones.
+    Raises ValueError if fewer than `count` items are eligible: the set
+    never silently holds fewer."""
+    eligible: list[tuple[GoldRow, Edit]] = []
+    for row in rows:
+        if row.id in already_negated:
+            continue
+        texts = chunk_texts[row.id]
+        rng = random.Random(f"{seed}:{row.id}:extra:negation")
+        edit = perturb(row.expected_answer, "negation", rng, texts)
+        if edit is not None and not appears_in(edit.replacement, texts):
+            eligible.append((row, edit))
+    if len(eligible) < count:
+        raise ValueError(
+            f"{count} extra negations asked, only {len(eligible)} gold items eligible: "
+            f"{[row.id for row, _ in eligible]}"
+        )
+    chosen = random.Random(f"{seed}:extra-negations").sample(range(len(eligible)), count)
+    return [eligible[i] for i in sorted(chosen)]
+
+
 # --- generated items ------------------------------------------------------
 
 
@@ -402,6 +441,7 @@ def build_calibration_set(
     checkpoint: Mapping[str, dict],
     seed: int = DEFAULT_SEED,
     per_item: int = DEFAULT_PERTURBATIONS_PER_ITEM,
+    extra_negation_count: int = 0,
 ) -> dict[str, Any]:
     """The calibration set as JSON-ready data. Raises `MissingText` naming
     every labeled answer that isn't in `checkpoint` (nothing is built)."""
@@ -457,19 +497,32 @@ def build_calibration_set(
         }
         items.append(item)
 
+    def add_perturbed(row: GoldRow, number: int, edit: Edit) -> None:
+        item = base(
+            row, f"{row.id}-p{number}-{edit.type}", "perturbed", "hallucinated", edit.answer
+        )
+        item["fabricated_substring"] = edit.fabricated_substring
+        item["fabricated_start"] = edit.fabricated_start
+        item["perturbation"] = {"source_item": row.id, **asdict(edit)}
+        for key in ("answer", "fabricated_substring", "fabricated_start"):
+            del item["perturbation"][key]
+        items.append(item)
+
+    item_texts = {row.id: [chunk_texts[cid] for cid in gold_chunks[row.id]] for row in gold_rows}
+    edit_counts: dict[str, int] = {}
+    negated: set[str] = set()
     for index, row in enumerate(gold_rows):
-        texts = [chunk_texts[cid] for cid in gold_chunks[row.id]]
-        edits = perturb_item(row.id, index, row.expected_answer, texts, seed, per_item, log)
+        edits = perturb_item(
+            row.id, index, row.expected_answer, item_texts[row.id], seed, per_item, log
+        )
         for number, edit in enumerate(edits, start=1):
-            item = base(
-                row, f"{row.id}-p{number}-{edit.type}", "perturbed", "hallucinated", edit.answer
-            )
-            item["fabricated_substring"] = edit.fabricated_substring
-            item["fabricated_start"] = edit.fabricated_start
-            item["perturbation"] = {"source_item": row.id, **asdict(edit)}
-            for key in ("answer", "fabricated_substring", "fabricated_start"):
-                del item["perturbation"][key]
-            items.append(item)
+            add_perturbed(row, number, edit)
+        edit_counts[row.id] = len(edits)
+        negated.update(row.id for edit in edits if edit.type == "negation")
+
+    # Numbered after the item's rotated edits: "Q002-p2-negation".
+    for row, edit in extra_negations(gold_rows, item_texts, negated, seed, extra_negation_count):
+        add_perturbed(row, edit_counts[row.id] + 1, edit)
 
     return {
         "description": (
@@ -478,6 +531,7 @@ def build_calibration_set(
         ),
         "seed": seed,
         "perturbations_per_item": per_item,
+        "extra_negations": extra_negation_count,
         "items": items,
         "perturbation_log": log,
         "unlabeled_checkpoint_items": unlabeled_checkpoint_keys(checkpoint, labels),
@@ -584,6 +638,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Perturbed copies per gold item (default 1, max 4, one per type). Each one is a "
         "full local-judge run per --repeat in judge mode: cost grows linearly.",
     )
+    parser.add_argument(
+        "--extra-negations",
+        type=int,
+        default=DEFAULT_EXTRA_NEGATIONS,
+        help=f"Extra negation items, one per gold item not already negated (default "
+        f"{DEFAULT_EXTRA_NEGATIONS}). Same per-run cost as --perturbations-per-item.",
+    )
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--labels", type=Path, default=LABELS_PATH)
     parser.add_argument("--checkpoint", type=Path, default=CHECKPOINT_PATH)
@@ -593,6 +654,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if not 1 <= args.perturbations_per_item <= len(PERTURBATION_TYPES):
         parser.error(f"--perturbations-per-item must be 1..{len(PERTURBATION_TYPES)}")
+    if args.extra_negations < 0:
+        parser.error("--extra-negations must be >= 0")
 
     gold_rows = read_gold_rows(args.gold)
     chunk_texts = load_chunk_texts(args.chunks_dir)
@@ -608,6 +671,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             checkpoint,
             args.seed,
             args.perturbations_per_item,
+            args.extra_negations,
         )
     except MissingText as missing:
         print(

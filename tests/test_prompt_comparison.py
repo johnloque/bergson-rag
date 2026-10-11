@@ -541,7 +541,7 @@ GOLD = [
 ]
 
 
-def build(labels=(), checkpoint=None, per_item=1, seed=7, chunk=CHUNK):
+def build(labels=(), checkpoint=None, per_item=1, seed=7, chunk=CHUNK, extra_negations=0):
     return calibration_set.build_calibration_set(
         GOLD,
         {"Q001": ["W_c1"], "Q002": ["W_c1"]},
@@ -550,6 +550,7 @@ def build(labels=(), checkpoint=None, per_item=1, seed=7, chunk=CHUNK):
         checkpoint or {},
         seed=seed,
         per_item=per_item,
+        extra_negation_count=extra_negations,
     )
 
 
@@ -634,6 +635,27 @@ def test_negation_edits_a_window_not_a_bare_verb():
     assert "n'est pas" in edit.replacement and len(edit.replacement.split()) > 3
     edit = calibration_set.perturb("Pour lui, c'est la durée.", "negation", random.Random(0), [])
     assert edit is not None and "ce n'est pas" in edit.answer.lower()
+
+
+def test_extra_negations_only_add_items():
+    plain, extended = build(), build(extra_negations=1)
+    assert extended["items"][: len(plain["items"])] == plain["items"]
+    assert extended == build(extra_negations=1)
+    (added,) = extended["items"][len(plain["items"]) :]
+    assert added["origin"] == "perturbed" and added["label"] == "hallucinated"
+    assert added["perturbation"]["type"] == "negation"
+    assert added["id"] == f"{added['source_item']}-p2-negation"  # after its rotated edit
+    start = added["fabricated_start"]
+    assert added["answer"][start:].startswith(added["fabricated_substring"])
+    assert extended["extra_negations"] == 1
+
+
+def test_extra_negations_skip_items_already_negated_and_never_fall_short():
+    # 4 per item: both gold items already have a negation, none is eligible.
+    with pytest.raises(ValueError, match="only 0 gold items eligible"):
+        build(per_item=4, extra_negations=1)
+    with pytest.raises(ValueError, match="3 extra negations asked, only 2"):
+        build(extra_negations=3)
 
 
 LABEL = {

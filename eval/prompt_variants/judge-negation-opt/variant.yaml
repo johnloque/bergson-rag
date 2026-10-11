@@ -1,0 +1,22 @@
+name: judge-negation-opt
+hypothesis: >-
+  Observed failure: judge baseline v3
+  (eval/results/prompt_cmp_judgebase_default_20261011T120058Z.md) misses
+  Q008-p1-negation in 6 of 6 repeats: « le cérébral et le mental ne sont
+  pas solidaires » is judged supported with a self-contradicting reason
+  (the context asserts « une certaine solidarité »). Reading the claims,
+  the judge rejects the negated claim itself on 1 of 4 negation items only
+  (Q004-p1); Q002-p2's negation is accepted and the gold's affirmative
+  claim flagged; Q010-p2 isn't told apart from its gold. Variant: a
+  polarity rule in the nli_verifier instruction (a statement that denies
+  what the context affirms, or the reverse, gets 0; a negation the context
+  states is supported; the verdict must agree with the reason), plus one
+  off-domain few-shot example with both cases. segment_claims and the
+  schema unchanged. Question: does the judge now reject the negated claim
+  on Q008-p1, Q002-p2 and Q010-p2 without flagging more faithful
+  statements (gold answers hold legitimate negations, e.g. Q008's clou)?
+based_on:
+  faithfulness.segment_claims: 1d73fc7146afd75e35f397af6ecbd2449f9be263f36ffd22b71209b668f3bdbd
+  faithfulness.nli_verifier: 89e87a3d7dfbff708fda84fe52c33a33dcfe48b9f3d1d70cc3fb155eefb05f1e
+status: draft
+results: []

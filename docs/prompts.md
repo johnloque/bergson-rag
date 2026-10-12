@@ -417,6 +417,17 @@ committed `prompts/`: a winning variant is promoted into `prompts/` first,
 in its own branch, so that the frozen judge and the judge generation mode
 runs are the same thing.
 
+**Accepted misses.** `--accept-miss ITEM_ID --justification "..."`
+(repeatable) is the owner's explicit exception for a known gate miss; the
+gate itself is unchanged. Each accepted item must be missed in the result,
+and missed only because the judge gave the known claim a verdict
+(`judged supported` in every missed repeat; a nan, an unevaluated claim or
+a missing run can't be accepted). Any other miss still refuses, and so does
+an accepted item that was actually detected. The record keeps
+`gate.passed: false` and lists each exception under
+`gate.accepted_misses` (item, per-repeat reasons, justification); the
+frozen-judge status stamped in every generation-mode header names them.
+
 ### Results and comparison
 
 Each run writes `eval/results/prompt_cmp_<mode>_<label>_n<N>_<ts>.json`
@@ -933,6 +944,43 @@ wording « even if every other word matches the context » pushes mistral
 toward word matching, not toward polarity. Baseline v3 remains the
 reference.
 
+### Frozen judge: baseline v3, with one accepted miss
+
+The owner froze the **committed default** faithfulness prompts, as
+measured by baseline v3 (run 1,
+[`prompt_cmp_judge_default_n28_20261011T090042Z`](../eval/results/prompt_cmp_judge_default_n28_20261011T090042Z.md)),
+into `eval/frozen_judge.json`:
+
+```
+python -m eval.scripts.freeze_judge \
+  eval/results/prompt_cmp_judge_default_n28_20261011T090042Z.json \
+  --accept-miss Q008-p1-negation --justification "..."
+```
+
+The gate fails on Q008-p1-negation alone (15/16, both runs), judged
+supported in 6 of 6 repeats. The only fix tried, `judge-negation-opt`,
+moved no negation verdict and collapsed the faithful-class mean (0.671 →
+0.175). The miss is accepted as a documented exception rather than by
+loosening the gate: every other hallucinated item is still required.
+
+**Known limitation: the frozen judge does not reliably detect a negation
+that reverses a sentence's meaning.** It rejects the negated claim itself
+on **1 of the 4** `negation` items, Q004-p1 only. Q008-p1 and Q002-p2 are
+accepted with a reason that justifies the negation (on Q002 the gold's
+correct affirmative is flagged instead), and Q010-p2 isn't told apart from
+the gold. The gate's 3/4 on `negation` overstates it: Q002-p2 and Q010-p2
+pass through other claims flagged in the same segment (baseline v3, "The
+two new negations").
+
+Consequence for generation mode: **a comparison of `generation.answer`
+variants can't rely on the faithfulness score to catch an answer that
+inverts the source's polarity**. A variant that introduces such errors may
+score as well as one that doesn't. Where polarity matters, read the
+answers (or the judged claims) by hand; a delta in faithfulness says
+nothing about it. Lifting the limitation means a new judge variant,
+compared against baseline v3, then a new freeze (which makes earlier
+generation comparisons stale).
+
 ## Tests
 
 All fast (CI's `-m "not slow"` job):
@@ -958,8 +1006,8 @@ All fast (CI's `-m "not slow"` job):
   (perturbation determinism, edits stored as data, discarded edits, the
   "supply this" stop, held-out overlap), the gate, the two axes and
   dominance, flip counting, nan handling, comparability, noise floor,
-  freeze-judge refusals, and generation mode's frozen-judge refusal. No
-  model call.
+  freeze-judge refusals and accepted misses, and generation mode's
+  frozen-judge refusal. No model call.
 
 `tests/test_prompt_comparison_smoke.py` (slow) runs each mode once against
 a real model with a throwaway fixture variant

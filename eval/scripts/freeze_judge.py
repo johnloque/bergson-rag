@@ -12,6 +12,7 @@ It refuses when the result
   must rest on every hallucinated item), unless every missed item is named
   with --accept-miss (see below);
 - was run with --repeat < 2 (stability unmeasured);
+- was measured with another judge input version than the code's;
 - has faithfulness prompt hashes other than the committed `prompts/`: a
   winning variant is promoted into `prompts/` first, in its own branch, so
   the frozen judge and the judge generation mode runs are the same thing.
@@ -108,6 +109,14 @@ def check_freezable(
             reasons.append("run on another calibration set than the committed one")
         if header["items"]["ids"] != [item["id"] for item in calibration["items"]]:
             reasons.append("run on a subset of the calibration set (--items)")
+    from src.generation.faithfulness import JUDGE_INPUT_VERSION
+
+    run_version = header.get("judge_input_version", 1)
+    if run_version != JUDGE_INPUT_VERSION:
+        reasons.append(
+            f"judge input version {run_version}, the code's is {JUDGE_INPUT_VERSION}: this result "
+            "measured another judge than the one generation mode runs; rerun it"
+        )
     run_hashes = faithfulness_hashes(header["manifest"])
     committed = committed_faithfulness_hashes()
     if run_hashes != committed:
@@ -143,6 +152,8 @@ def frozen_record(
         },
         "ragas_version": manifest["library:ragas"]["version"],
         "judge_model": header["models"]["judge"],
+        # results written before the field existed were version 1
+        "judge_input_version": header.get("judge_input_version", 1),
         "source_result": str(source.resolve().relative_to(REPO_ROOT))
         if source.resolve().is_relative_to(REPO_ROOT)
         else str(source),

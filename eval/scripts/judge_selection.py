@@ -257,10 +257,11 @@ def _no_worse(a: float, b: float, higher_is_better: bool) -> bool:
     return a >= b - 1e-12 if higher_is_better else a <= b + 1e-12
 
 
-def dominance(x: Axes, y: Axes) -> str:
+def dominance(x: Axes, y: Axes, axis_a: str = "faithful-class mean (fewer false flags)") -> str:
     """Verdict between two gate-passing candidates. X is preferred over Y
-    only if better-or-equal on both axes ((a) faithful-class mean; (b)
-    stability: flips and score range) and strictly better on one."""
+    only if better-or-equal on both axes ((a) faithful-class mean, named
+    `axis_a` in the verdict; (b) stability: flips and score range) and
+    strictly better on one."""
     x_a = _no_worse(x.faithful_mean, y.faithful_mean, True)
     y_a = _no_worse(y.faithful_mean, x.faithful_mean, True)
     x_b = _no_worse(x.flips, y.flips, False) and _no_worse(x.mean_range, y.mean_range, False)
@@ -277,8 +278,8 @@ def dominance(x: Axes, y: Axes) -> str:
         f"{better_b} more stable" if better_b else "stability split (fewer flips vs. smaller range)"
     )
     return (
-        f"trade-off between {x.name} and {y.name}: {better_a} has the higher faithful-class "
-        f"mean (fewer false flags), {stability_note}; no preference without the owner's call"
+        f"trade-off between {x.name} and {y.name}: {better_a} has the higher {axis_a}, "
+        f"{stability_note}; no preference without the owner's call"
     )
 
 

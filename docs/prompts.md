@@ -981,6 +981,88 @@ nothing about it. Lifting the limitation means a new judge variant,
 compared against baseline v3, then a new freeze (which makes earlier
 generation comparisons stale).
 
+### Choosing a generation variant
+
+Step 3 of "Judge first, then generation": `generation.answer` variants,
+scored by the frozen judge. Same discipline as judge selection: a gate, two
+axes side by side, no composite score, and the owner designates the winner.
+Analysis: `eval/scripts/generation_selection.py` (pure functions); every
+generation-mode result now carries its summary.
+
+**What a run records.** Each row keeps the answer, the gold chunk ids
+actually given and a hash of their text (`chunks_sha256`); the header keeps
+a hash of the gold questions and their chunk ids (`gold_set_sha256`, also in
+the checkpoint fingerprint) and the frozen judge's record (prompt hashes,
+judge input version, accepted misses). A gold chunk missing from the index
+is a failed row (nan), never an answer from fewer chunks. Two results whose
+gold set or chunk text differ on any item are not comparable (a re-index
+between two runs shows up here).
+
+The frozen judge now records the **judge input version** it was measured
+with (`JUDGE_INPUT_VERSION`, `src/generation/faithfulness.py`): generation
+mode refuses a frozen judge whose version isn't the code's, and
+`freeze_judge` refuses a result measured with another one. The committed
+`eval/frozen_judge.json` got `judge_input_version: 2`, read from its source
+result's header.
+
+1. **Gate (deterministic, no judge)**: no answer, in any repeat, names a
+   work title the corpus doesn't have or pairs a real title with a wrong
+   year: the Layer 1 checks the guardrail itself blocks on
+   (`src/generation/guardrail.py`). A failed generation is not a
+   fabrication: it is nan, reported next to every mean.
+2. **Two axes**, among candidates passing the gate: (a) the faithfulness
+   mean by the frozen judge (higher = fewer unsupported claims); (b)
+   stability: per-item score range and verdict flips over repeats, with the
+   items whose answer is identical in every repeat beside them. Dominance is
+   the judge's: preferred only if better-or-equal on both.
+3. **Substance, beside the axes, never in them**: claims per answer,
+   characters per answer, citations per answer, answers with at least one
+   citation, citations to a chunk the answer wasn't given. An answer that
+   says less has less to get wrong: when a candidate scores higher **with
+   fewer claims per answer**, the report says its gain may come from saying
+   less. Citations are not a gate: the local model often omits them from
+   well-grounded answers (guardrail docstring), and the citation checks of
+   older answers predate re-chunking.
+4. **Polarity review, read by hand.** The frozen judge's known limitation
+   (it doesn't reliably catch a negation that reverses a sentence) is not
+   something a faithfulness delta can show. Every answer segment carrying a
+   French negation marker (« ne/n' … pas, plus, jamais, rien, aucun… »,
+   « non », « sans », « ni »; « ne … que » excluded) that the judge did not
+   flag is listed; against a baseline, only the segments the variant newly
+   writes for that item. A reading aid, over-inclusive on purpose, not a
+   detector.
+
+Unsupported claims are listed with the judge's reason (against a baseline:
+the ones newly flagged), as for the faithful class in judge mode.
+
+**Procedure**, mirroring the judge's:
+
+```
+# baseline: committed prompts, two runs for the noise floor
+python -m eval.scripts.run_prompt_comparison --mode generation --repeat 3
+python -m eval.scripts.run_prompt_comparison --mode generation --repeat 3 \
+  --checkpoint eval/results/prompt_comparison_checkpoint_rerun.jsonl
+python -m eval.scripts.generation_variant_report --baseline RUN1.json RUN2.json
+
+# a variant (exp/prompt-<name>), once or twice
+python -m eval.scripts.run_prompt_comparison --variant <name> --repeat 3
+python -m eval.scripts.generation_variant_report --baseline RUN1.json RUN2.json \
+  --variant VAR_RUN1.json [VAR_RUN2.json]
+```
+
+The rerun needs its own checkpoint (or `--fresh`): with the same
+fingerprint, the second run would replay the first one's rows. The report
+(`prompt_cmp_genbase_*` / `prompt_cmp_genvs_*`) has the gate per run,
+faithfulness with nan and unevaluated claims per repeat, substance,
+stability per run and pooled, the noise floor, the dominance verdict (only
+when both pass the gate in every run), newly unsupported claims, the
+polarity review and per-item deltas against the baseline floor.
+`compare_prompt_results` gives the same gate, axes, warning and polarity
+list for 2+ generation results.
+
+The generation set is the gold dataset (n=12): every number is
+exploratory, as in judge mode.
+
 ## Tests
 
 All fast (CI's `-m "not slow"` job):
@@ -1006,8 +1088,16 @@ All fast (CI's `-m "not slow"` job):
   (perturbation determinism, edits stored as data, discarded edits, the
   "supply this" stop, held-out overlap), the gate, the two axes and
   dominance, flip counting, nan handling, comparability, noise floor,
-  freeze-judge refusals and accepted misses, and generation mode's
-  frozen-judge refusal. No model call.
+  freeze-judge refusals and accepted misses, the judge input version in
+  the frozen record, and generation mode's frozen-judge refusal. No model
+  call.
+- `tests/test_generation_comparison.py` — generation selection: negation
+  markers, the fabrication gate, substance (claims counted only where the
+  judge answered), identical answers, the polarity review and its "newly
+  asserted" filter, the fewer-claims warning, comparability on the gold set
+  and chunk text, both reports, and the harness's generation-mode records
+  (chunk hashes, a missing gold chunk refused, the frozen judge's record).
+  No model call, no `data/processed`.
 
 `tests/test_prompt_comparison_smoke.py` (slow) runs each mode once against
 a real model with a throwaway fixture variant

@@ -12,6 +12,7 @@
   },
   "ragas_version": "0.3.9",
   "judge_model": "ollama_chat/mistral",
+  "judge_input_version": 2,
   "source_result": "eval/results/prompt_cmp_judge_default_n28_20261011T090042Z.json",
   "gate": {
     "passed": false,

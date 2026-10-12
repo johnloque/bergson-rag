@@ -17,6 +17,9 @@ origin, scores, delta, nan flags, statement counts, outside-noise marker;
 the nan rate per run is given next to every mean. Judge-mode results also
 get the gate, the two selection axes and pairwise dominance
 (`eval/scripts/judge_selection.py`); the two classes are never pooled.
+Generation-mode results get theirs from `eval/scripts/generation_selection.py`
+(fabrication gate, faithfulness and stability axes, substance beside them,
+and the negated segments each candidate newly asserts, for reading by hand).
 
 Usage: python -m eval.scripts.compare_prompt_results BASE.json CAND.json [...]
            [--rerun BASE_RERUN.json] [--force]
@@ -34,6 +37,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from eval.scripts import generation_selection
 from eval.scripts.judge_selection import (
     FAITHFUL,
     HALLUCINATED,
@@ -93,6 +97,13 @@ def comparability_problems(results: Sequence[Mapping[str, Any]]) -> list[str]:
         problems.append("items differ (ids or order)")
     if len({h["items"].get("calibration_set_sha256") for h in headers}) > 1:
         problems.append("calibration set differs (different texts or chunks)")
+    if len({h["items"].get("gold_set_sha256") for h in headers}) > 1:
+        problems.append("gold set differs (questions or chunk ids)")
+    changed = chunk_text_changes(results)
+    if changed:
+        problems.append(
+            f"gold chunk text differs between runs on {', '.join(changed)} (re-indexed?)"
+        )
     versions = {h.get("judge_input_version", 1) for h in headers}
     if len(versions) > 1:
         problems.append(
@@ -111,6 +122,17 @@ def comparability_problems(results: Sequence[Mapping[str, Any]]) -> list[str]:
     elif FAMILY_MODE[units[0]] != headers[0]["mode"]:
         problems.append(f"{units[0]} differs, but these are {headers[0]['mode']}-mode results")
     return problems
+
+
+def chunk_text_changes(results: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Generation-mode items whose gold chunks weren't the same text in
+    every run of every result."""
+    seen: dict[str, set[str]] = {}
+    for result in results:
+        for row in result["rows"]:
+            if row.get("chunks_sha256"):
+                seen.setdefault(row["item_id"], set()).add(row["chunks_sha256"])
+    return sorted(item_id for item_id, digests in seen.items() if len(digests) > 1)
 
 
 def noise_floor(base: Mapping[str, Any], rerun: Mapping[str, Any]) -> dict[str, float]:
@@ -327,6 +349,93 @@ def judge_sections(results: Sequence[Mapping[str, Any]]) -> list[str]:
     return lines
 
 
+def generation_sections(results: Sequence[Mapping[str, Any]]) -> list[str]:
+    labels = _labels(results)
+    summaries = [
+        generation_selection.summarize(r["items"], r["rows"], r["header"]["repeat"])
+        for r in results
+    ]
+    lines = [
+        "## Gate: no fabricated work title, no title/year mismatch, in any run",
+        "",
+        "| candidate | gate | answers checked | failures |",
+        "|---|---|---|---|",
+    ]
+    for label, summary in zip(labels, summaries, strict=True):
+        gate = summary["gate"]
+        failures = ", ".join(
+            f"{item_id} run {f['repeat']}" for item_id, fs in gate["failures"].items() for f in fs
+        )
+        lines.append(
+            f"| {label} | {'PASSED' if gate['passed'] else 'FAILED (rejected)'} | "
+            f"{gate['answers_checked']}/{gate['runs_expected']} | {failures or '—'} |"
+        )
+    lines += [
+        "",
+        "## Selection axes, substance beside them (no composite score)",
+        "",
+        "| candidate | (a) faithfulness mean | (b) verdict flips | (b) mean score range | "
+        "identical answers | claims/answer | generation failures |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    passing: list[Axes] = []
+    for label, summary in zip(labels, summaries, strict=True):
+        stab = summary["stability"]
+        mean = summary["faithfulness"]["mean"]
+        measured = stab["measured"]
+        lines.append(
+            f"| {label} | {_fmt(mean)} | {stab['flips'] if measured else 'unmeasured'} | "
+            f"{_fmt(stab['mean_range']) if measured else '—'} | {len(stab['identical'])} | "
+            f"{_fmt(summary['substance']['mean_claims_per_answer'])} | "
+            f"{len(summary['generation_failures'])} |"
+        )
+        if summary["gate"]["passed"] and measured:
+            passing.append(Axes(label, mean, stab["flips"], stab["mean_range"]))
+    lines += [
+        "",
+        "Pairwise verdicts, gate-passing candidates with measured stability (the owner "
+        "designates the winner; this tooling never does):",
+        "",
+    ]
+    pairs = [
+        dominance(x, y, generation_selection.FAITHFULNESS_AXIS)
+        for i, x in enumerate(passing)
+        for y in passing[i + 1 :]
+    ]
+    lines += [f"- {p}" for p in pairs] or [
+        "- Fewer than two gate-passing candidates with measured stability."
+    ]
+    base = summaries[0]
+    warnings = [
+        generation_selection.fewer_claims_warning(
+            base["faithfulness"]["mean"],
+            base["substance"]["mean_claims_per_answer"],
+            summary["faithfulness"]["mean"],
+            summary["substance"]["mean_claims_per_answer"],
+            label,
+        )
+        for label, summary in zip(labels[1:], summaries[1:], strict=True)
+    ]
+    lines += [f"- **Warning**: {w}" for w in warnings if w]
+    lines += [
+        "",
+        "## Negated segments newly asserted (polarity review, read by hand)",
+        "",
+        "The frozen judge does not reliably detect a negation that reverses a sentence's "
+        "meaning: these segments carry a negation marker, the judge accepted them, and the "
+        "baseline never wrote them for that item.",
+        "",
+    ]
+    for label, summary in zip(labels[1:], summaries[1:], strict=True):
+        new = generation_selection.distinct_segments(
+            generation_selection.new_segments(summary["polarity_review"], results[0]["rows"])
+        )
+        lines.append(f"**{label}**: {len(new)}")
+        lines += [f"- {e['item_id']} (first in run {e['repeat']}): {e['segment']}" for e in new]
+        lines.append("")
+    return lines
+
+
 def render(
     results: Sequence[Mapping[str, Any]],
     paths: Sequence[Path],
@@ -386,6 +495,8 @@ def render(
     lines += ["", "## Means (nan rate per run beside each)", "", *class_means(results), ""]
     if header["mode"] == "judge":
         lines += judge_sections(results)
+    else:
+        lines += generation_sections(results)
     lines += [
         "## Per-item matrix",
         "",

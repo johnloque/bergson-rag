@@ -50,12 +50,14 @@ from eval.scripts.calibration_set import (
     resolve_chunk_texts,
 )
 from eval.scripts.checkpoint import append_checkpoint, load_checkpoint
+from eval.scripts.generation_selection import summarize as summarize_generation
 from eval.scripts.judge_selection import format_miss, is_nan, item_mean, rows_by_item, summarize
 from eval.scripts.prompt_results import (
     DEFAULT_CHECKPOINT_PATH,
     NOT_FROZEN,
     RESULTS_DIR,
     exploratory_banner,
+    frozen_judge_record,
     frozen_judge_status,
     git_info,
     result_paths,
@@ -144,6 +146,19 @@ def faithfulness_row(result: Any) -> dict[str, Any]:
         "segments": [{"id": s.id, "start": s.start, "end": s.end} for s in result.segments],
         "unevaluated_claims": sum(c.supported is None for c in result.claims),
     }
+
+
+def gold_set_hash(items: Sequence[Mapping[str, Any]]) -> str:
+    """What generation mode answers: each gold question and its chunk ids."""
+    payload = [[i["id"], i["query"], list(i["chunk_ids"])] for i in items]
+    return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
+
+
+def chunks_hash(chunks: Sequence[Any]) -> str:
+    """The gold chunks' text as given to the generator: a re-index that
+    changes it makes two runs incomparable on that item."""
+    payload = [[c.chunk_id, c.text] for c in chunks]
+    return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
 
 def failed_row(error: BaseException) -> dict[str, Any]:
@@ -326,6 +341,7 @@ def run_generation_mode(
     }
     items = select_items(list(by_id.values()), args.items)
     header = base_header(overrides, args, items)
+    header["items"]["gold_set_sha256"] = gold_set_hash(items)
     header["fallback_model"] = "disabled (a silent switch to a hosted model would change models)"
 
     client = QdrantClient(url=args.qdrant_url)
@@ -335,6 +351,15 @@ def run_generation_mode(
 
     def compute(item: Mapping[str, Any], _: int) -> dict[str, Any]:
         chunks = load_gold_chunks(client, tuple(item["chunk_ids"]))
+        given = {
+            "num_chunks": len(chunks),
+            "chunk_ids": [c.chunk_id for c in chunks],
+            "chunks_sha256": chunks_hash(chunks),
+        }
+        missing = [c for c in item["chunk_ids"] if c not in given["chunk_ids"]]
+        if missing:  # never answer from fewer chunks than the gold set names
+            error = LookupError(f"gold chunk(s) not in the index: {missing}")
+            return {**failed_row(error), "answer": None, **given}
         try:
             generated = generate_from_chunks(
                 item["query"],
@@ -347,7 +372,7 @@ def run_generation_mode(
                 **extra,
             )
         except Exception as error:
-            return {**failed_row(error), "answer": None, "num_chunks": len(chunks)}
+            return {**failed_row(error), "answer": None, **given}
         try:
             judged = faithfulness_row(
                 check_faithfulness(
@@ -363,7 +388,7 @@ def run_generation_mode(
         return {
             **judged,
             "answer": generated.answer,
-            "num_chunks": len(chunks),
+            **given,
             "prompts_used": generated.prompts_used,
         }
 
@@ -383,6 +408,92 @@ def _missed(gate: Mapping[str, Any]) -> str:
     miss reasons existed list the ids alone)."""
     reasons = gate.get("miss_reasons", {})
     return ", ".join(format_miss(i, reasons[i]) if i in reasons else i for i in gate["missed"])
+
+
+POLARITY_CAVEAT = (
+    "The frozen judge does not reliably detect a negation that reverses a sentence's meaning "
+    '(docs/prompts.md, "Frozen judge: baseline v3"): a faithfulness score says nothing about '
+    "polarity. Read the segments below against their chunks."
+)
+
+
+def gate_failure_lines(gate: Mapping[str, Any]) -> list[str]:
+    lines = []
+    for item_id, failures in gate["failures"].items():
+        for f in failures:
+            years = [f"{m['title']} {m['claimed']}" for m in f["title_year_mismatches"]]
+            lines.append(
+                f"- {item_id} run {f['repeat']}: fabricated titles "
+                f"{', '.join(f['fabricated_titles']) or '—'}; title/year {', '.join(years) or '—'}"
+            )
+    return lines
+
+
+def generation_summary_lines(header: Mapping[str, Any], summary: Mapping[str, Any]) -> list[str]:
+    gate, faith, stab = summary["gate"], summary["faithfulness"], summary["stability"]
+    sub = summary["substance"]
+    record = header["frozen_judge"].get("record") or {}
+    accepted = ", ".join(m["item"] for m in record.get("accepted_misses", [])) or "none"
+    lines = [
+        "",
+        "## Gate (no fabricated work title, no title/year mismatch, in any run)",
+        "",
+        f"**{'PASSED' if gate['passed'] else 'FAILED'}** over {gate['answers_checked']}/"
+        f"{gate['runs_expected']} generated answers",
+        *gate_failure_lines(gate),
+        "",
+        "## Faithfulness by the frozen judge (higher = fewer unsupported claims)",
+        "",
+        f"Mean {_fmt(faith['mean'])} over {faith['n_items']} items; nan per run: "
+        f"{_per_run(faith['nan_per_run'])}; runs with unevaluated claims (left out of their "
+        f"score): {_per_run(faith['unevaluated_per_run'])}. Judge's accepted gate misses: "
+        f"{accepted}.",
+        "",
+        "## Substance (beside the axes: an answer that says less has less to get wrong)",
+        "",
+        "| run | claims/answer | chars/answer | citations/answer | answers with a citation |",
+        "|---|---|---|---|---|",
+    ]
+    for r in sub["claims_per_answer"]:
+        cited, total = sub["answers_with_citation"][r]
+        lines.append(
+            f"| {r} | {_fmt(sub['claims_per_answer'][r])} | {_fmt(sub['answer_chars'][r])} | "
+            f"{_fmt(sub['citations_per_answer'][r])} | {cited}/{total} |"
+        )
+    lines += ["", "Citations to a chunk the answer wasn't given:"]
+    lines += [
+        f"- {u['item_id']} run {u['repeat']}: {', '.join(u['citations'])}"
+        for u in sub["unknown_citations"]
+    ] or ["- none"]
+    lines += ["", "## Stability over repeats", ""]
+    if stab["measured"]:
+        lines.append(
+            f"Mean per-item score range {_fmt(stab['mean_range'])} (max "
+            f"{_fmt(stab['max_range'])}); verdict flips {stab['flips']} of "
+            f"{stab['matched_statements']} statements seen in 2+ runs; "
+            f"{stab['unmatched_statements']} statements extracted in one run only; answer "
+            f"identical in every repeat on {len(stab['identical'])} items, varied on "
+            f"{', '.join(stab['varied']) or 'none'}."
+        )
+    else:
+        lines.append("Not measured (--repeat 1).")
+    lines += ["", "## Unsupported claims (with the judge's reason)", ""]
+    lines += [
+        f"- {c['item_id']} run {c['repeat']}: {c['statement']} — {c['reason']}"
+        for c in summary["unsupported_claims"]
+    ] or ["None."]
+    lines += [
+        "",
+        "## Polarity review (negated segments the judge accepted)",
+        "",
+        POLARITY_CAVEAT,
+        "",
+    ]
+    lines += [
+        f"- {e['item_id']} run {e['repeat']} ({', '.join(e['markers'])}): {e['segment']}"
+        for e in summary["polarity_review"]
+    ] or ["None."]
+    return lines
 
 
 def render_report(result: Mapping[str, Any]) -> str:
@@ -441,7 +552,9 @@ def render_report(result: Mapping[str, Any]) -> str:
                 f"| {pid} | {entry['version']} | `{entry['hash'][:12]}` | {entry['custom']} |"
             )
 
-    if summary:
+    if summary and header["mode"] == "generation":
+        lines += generation_summary_lines(header, summary)
+    elif summary:
         gate = summary["gate"]
         lines += [
             "",
@@ -537,7 +650,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 2
-        frozen = {"matches": matches, "status": status if matches else f"{NOT_FROZEN}: {status}"}
+        frozen = {
+            "matches": matches,
+            "status": status if matches else f"{NOT_FROZEN}: {status}",
+            "record": frozen_judge_record(),
+        }
 
     try:
         runner = run_judge_mode if overrides.mode == "judge" else run_generation_mode
@@ -553,17 +670,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     header["command"] = "python -m eval.scripts.run_prompt_comparison " + " ".join(
         sys.argv[1:] if argv is None else argv
     )
-    run_fingerprint = fingerprint(
-        {
-            "mode": header["mode"],
-            "manifest": header["manifest"],
-            "models": header["models"],
-            "temperature": header["temperature"],
-            "items": header["items"]["ids"],
-            "calibration": header["items"].get("calibration_set_sha256"),
-            "judge_input_version": header["judge_input_version"],
-        }
-    )
+    config = {
+        "mode": header["mode"],
+        "manifest": header["manifest"],
+        "models": header["models"],
+        "temperature": header["temperature"],
+        "items": header["items"]["ids"],
+        "calibration": header["items"].get("calibration_set_sha256"),
+        "judge_input_version": header["judge_input_version"],
+    }
+    if "gold_set_sha256" in header["items"]:  # absent from judge mode: its keys stay as they were
+        config["gold"] = header["items"]["gold_set_sha256"]
+    run_fingerprint = fingerprint(config)
     header["fingerprint"] = run_fingerprint
     checkpoint = {} if args.fresh else load_checkpoint(args.checkpoint)
     print(f"{header['banner']}\nRunning {header['mode']} mode, {header['source']['label']}:")
@@ -574,6 +692,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     result: dict[str, Any] = {"header": header, "items": items, "rows": rows}
     if header["mode"] == "judge":
         result["summary"] = summarize(items, rows, args.repeat)
+    else:
+        result["summary"] = summarize_generation(items, rows, args.repeat)
     json_path, md_path = result_paths(
         header["mode"],
         header["source"]["label"],

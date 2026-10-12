@@ -1,0 +1,53 @@
+# Few-shot examples for faithfulness.nli_verifier (nli_verifier.md).
+# Hand-editable. Each entry is validated at load time against RAGAS's
+# NLIStatementInput / NLIStatementOutput (ragas.metrics._faithfulness).
+# RAGAS's own English examples, with the reasons in French.
+- input:
+    context: John is a student at XYZ University. He is pursuing a degree in Computer Science. He is enrolled in several courses this semester, including Data Structures, Algorithms, and Database Management. John is a diligent student and spends a significant amount of time studying and completing assignments. He often stays late in the library to work on his projects.
+    statements:
+    - John is majoring in Biology.
+    - John is taking a course on Artificial Intelligence.
+    - John is a dedicated student.
+    - John has a part-time job.
+  output:
+    statements:
+    - statement: John is majoring in Biology.
+      reason: Le contexte indique explicitement que John étudie l'informatique. Rien ne laisse penser qu'il étudie la biologie.
+      verdict: 0
+    - statement: John is taking a course on Artificial Intelligence.
+      reason: Le contexte énumère les cours que suit John, et l'intelligence artificielle n'en fait pas partie. On ne peut donc pas en déduire qu'il suit un cours d'IA.
+      verdict: 0
+    - statement: John is a dedicated student.
+      reason: Le contexte indique qu'il consacre beaucoup de temps à étudier et à faire ses devoirs, et qu'il reste souvent tard à la bibliothèque pour ses projets, ce qui témoigne de son application.
+      verdict: 1
+    - statement: John has a part-time job.
+      reason: Le contexte ne donne aucune information sur un emploi à temps partiel de John.
+      verdict: 0
+- input:
+    context: Photosynthesis is a process used by plants, algae, and certain bacteria to convert light energy into chemical energy.
+    statements:
+    - Albert Einstein was a genius.
+  output:
+    statements:
+    - statement: Albert Einstein was a genius.
+      reason: Le contexte et l'affirmation n'ont aucun rapport.
+      verdict: 0
+# Variant judge-negation-opt: polarity example (a negation that contradicts
+# the context, a negation the context states, a denied relation).
+- input:
+    context: Maria lives in Lyon and works as a nurse at the city hospital. She does not own a car and cycles to work every day. Her brother lives in Lyon too, a few streets away from her.
+    statements:
+    - Maria does not live in Lyon.
+    - Maria does not own a car.
+    - Maria and her brother do not live in the same city.
+  output:
+    statements:
+    - statement: Maria does not live in Lyon.
+      reason: Le contexte affirme que Maria vit à Lyon. L'affirmation nie ce que dit le contexte, elle ne peut donc pas en être déduite.
+      verdict: 0
+    - statement: Maria does not own a car.
+      reason: Le contexte indique lui-même que Maria n'a pas de voiture. La négation est celle du contexte.
+      verdict: 1
+    - statement: Maria and her brother do not live in the same city.
+      reason: Le contexte dit que Maria et son frère vivent tous deux à Lyon. L'affirmation nie ce lien, elle contredit le contexte.
+      verdict: 0

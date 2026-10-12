@@ -412,7 +412,7 @@ Judge baseline (committed defaults, two runs × 3 repeats; gate failed 10/14, 3 
 Judge baseline v2 (judge input version 2: JSON repair + source headers; gate failed 13/14, only Q008-p1-negation, no nan): [`docs/prompts.md`, "Judge baseline v2"](prompts.md#judge-baseline-v2-expjudge-baseline-v2).
 Variant `judge-parsing-opt` (explicit JSON rules in the judge's instructions) rejected against baseline v2: gate 12/14 (newly misses Q002-gen), lower faithful-class mean, more flips: [`docs/prompts.md`, "Variant judge-parsing-opt"](prompts.md#variant-judge-parsing-opt-expprompt-judge-parsing-opt-rejected).
 Judge baseline v3 (calibration set with 4 `negation` items, n=28; gate failed 15/16, only Q008-p1-negation; 26 earlier items reproduce v2; the judge rejects the negation itself on 1 of 4 items, the gate credits 2 more through collateral flags): [`docs/prompts.md`, "Judge baseline v3"](prompts.md#judge-baseline-v3-expjudge-baseline-v3).
-Next judge lead, not started: a negation variant from Q008-p1, compared against baseline v3 on the negated claims' verdicts, not the gate alone: [`docs/prompts.md`, "Leads"](prompts.md#leads-not-started).
+Variant `judge-negation-opt` (polarity rule + few-shot example in `nli_verifier`) rejected against baseline v3: gate unchanged (15/16, Q008-p1 still missed), no negated claim's verdict changes, faithful-class mean 0.671 → 0.175 (the judge turns literal): [`docs/prompts.md`, "Variant judge-negation-opt"](prompts.md#variant-judge-negation-opt-expprompt-judge-negation-opt-rejected).
 
 ### Sprint 15 — Portfolio polish
 Complete README, "Known limitations & scope" section finalized,

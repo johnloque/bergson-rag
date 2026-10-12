@@ -12,7 +12,7 @@ stay here and on disk: they're the record of what was tried.
 | Variant | Family | Targeted failure | Status | Results | Branch |
 |---|---|---|---|---|---|
 | `judge-parsing-opt` | faithfulness | JSON parse failures of the first judge baseline (Q001-p1, Q010-p1, Q002-gen), since repaired in code (#57) | rejected | [vs baseline v2](../results/prompt_cmp_judgevs_judge-parsing-opt_20261010T140431Z.md): gate 12/14 (newly misses Q002-gen), faithful mean 0.640 / 0.625 | `exp/prompt-judge-parsing-opt` |
-| `judge-negation-opt` | faithfulness | Q008-p1-negation accepted 6/6 in baseline v3 (negated claim itself rejected on 1 of 4 negation items) | draft | — | `exp/prompt-judge-negation-opt` |
+| `judge-negation-opt` | faithfulness | Q008-p1-negation accepted 6/6 in baseline v3 (negated claim itself rejected on 1 of 4 negation items) | rejected | [vs baseline v3](../results/prompt_cmp_judgevs_judge-negation-opt_20261012T071333Z.md): gate 15/16 (Q008-p1 still missed), faithful mean 0.175 / 0.174 | `exp/prompt-judge-negation-opt` |
 
 ## Layout
 

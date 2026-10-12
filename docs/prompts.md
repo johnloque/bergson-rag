@@ -698,6 +698,8 @@ Q008-p1.
   context asserts (« une certaine solidarité »), then accepts its negation.
   Candidate rule: a statement that denies a relation the context asserts
   gets verdict 0, even if the rest of the statement matches.
+  **Tried** (`exp/prompt-judge-negation-opt`): rejected against baseline
+  v3, see "Variant judge-negation-opt" below.
 - **Too few negation items to judge it.** The calibration set has 2
   `negation` perturbations: Q004-p1, caught, and Q008-p1, missed. A variant
   tuned on Q008-p1 alone could fix that item without fixing negation.
@@ -855,6 +857,81 @@ For a negation variant, the gate alone won't show progress on 3 of the 4
 negation items: Q002-p2 and Q010-p2 already pass it for unrelated reasons.
 Compare the verdict on the negated claim itself, per item and repeat,
 against the gold's verdict on the affirmative version.
+
+### Variant `judge-negation-opt` (`exp/prompt-judge-negation-opt`): rejected
+
+The negation lead from baseline v2, measured against baseline v3. The
+`nli_verifier` instruction gains a polarity rule: a statement that denies
+what the context affirms (« ne … pas », « ne … plus », « aucun »,
+« jamais »), or affirms what the context denies, gets verdict 0, even if
+every other word matches the context; a negation the context itself states
+is supported; the verdict must agree with the reason. Its examples gain one
+off-domain example (Maria, Lyon, a car) with both cases: a negation that
+contradicts the context (0), one the context states (1), and a denied
+relation (0). `segment_claims` and the schema unchanged; no Bergson content
+in the example (held-out check clean).
+
+Same protocol as baseline v3: judge mode, two identical runs of
+`--repeat 3`, commit `c6ba1ab`, clean tree, judge input version 2,
+temperature 0, `ollama_chat/mistral`, RAGAS 0.3.9, one checkpoint file per
+run.
+
+- Run 1: [`prompt_cmp_judge_judge-negation-opt_n28_20261011T135344Z`](../eval/results/prompt_cmp_judge_judge-negation-opt_n28_20261011T135344Z.md)
+- Run 2: [`prompt_cmp_judge_judge-negation-opt_n28_20261011T152607Z`](../eval/results/prompt_cmp_judge_judge-negation-opt_n28_20261011T152607Z.md)
+- Report (`judge_variant_report`, vs baseline v3): [`prompt_cmp_judgevs_judge-negation-opt_20261012T071333Z`](../eval/results/prompt_cmp_judgevs_judge-negation-opt_20261012T071333Z.md)
+
+EXPLORATORY: n=28, below the n=50 threshold; no number here is
+decision-grade.
+
+| | Baseline v3 (run 1 / run 2) | `judge-negation-opt` (run 1 / run 2) |
+|---|---|---|
+| Gate | failed, 15/16 | failed, 15/16 |
+| — missed | Q008-p1-negation | Q008-p1-negation |
+| nan rows / unevaluated claims | 0/84 / 0 | 0/84 / 0 |
+| Faithful-class mean (higher = fewer false flags) | 0.671 / 0.666 | **0.175 / 0.174** |
+| Hallucinated-class mean (lower = correct) | 0.528 / 0.531 | 0.234 / 0.230 |
+| Flagged faithful statements (rows) | 73 / 74 | 138 / 139 |
+| Distinct flagged faithful statements | 27, across 8 items | 51, across all 12 items |
+| Verdict flips (pooled, 6 repeats) | 3 | 0 |
+| Noise floor | 0 on 24 of 28, max 0.111 | 0 on 26 of 28, max 0.067 |
+
+#### The negated claims: no verdict moves
+
+Verdict per repeat (1 = supported, 6 repeats) on each negated claim and on
+the gold's affirmative version:
+
+| Item | Baseline: gold / negation | Variant: gold / negation |
+|---|---|---|
+| Q008 (« sont solidaires ») | 111111 / 111111 | **000000** / 111111 |
+| Q004 (« le poète lui-même ») | 111111 / 000000 | **000000** / 000000 |
+| Q002 (« déterminés d'un seul coup ») | 000000 / 111111 | 000000 / 111111 |
+| Q010 (« processus parallèle ») | 000000 / 000000 | 000000 / 000000 |
+
+The variant doesn't reject one more negation. It now rejects the gold's
+correct claim on Q008, so the verdict is inverted there as on Q002, and on
+Q004, the only item where baseline v3 told the negation from the original.
+On Q008-p1 the reason still contradicts itself: « il est clair qu'il y a
+une relation entre les deux… L'affirmation est donc en accord avec le
+contexte ».
+
+#### The faithful class collapses: the judge turns literal
+
+Every gold but Q012 loses score, all outside the baseline floor (Q005
+1.000 → 0.000, Q011 0.889 → 0.000, Q001 and Q003 1.000 → 0.500). The new
+flags reject paraphrase and attribution: « il n'est pas explicitement
+mentionné que Bergson a retranscrit cette expérience » (Q005), « le
+contexte ne mentionne pas explicitement l'utilisation de l'image de la
+boule de neige » (Q001). The lower hallucinated-class mean and the zero
+flips come from that strictness, not from better detection: the judge
+rejects consistently, it doesn't discriminate better.
+
+#### Verdict
+
+**Rejected.** The gate is unchanged, no negated claim's verdict moves, and
+the faithful-class mean drops from 0.671 to 0.175. Our reading: the
+wording « even if every other word matches the context » pushes mistral
+toward word matching, not toward polarity. Baseline v3 remains the
+reference.
 
 ## Tests
 

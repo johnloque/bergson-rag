@@ -18,5 +18,8 @@ hypothesis: >-
 based_on:
   faithfulness.segment_claims: 1d73fc7146afd75e35f397af6ecbd2449f9be263f36ffd22b71209b668f3bdbd
   faithfulness.nli_verifier: 89e87a3d7dfbff708fda84fe52c33a33dcfe48b9f3d1d70cc3fb155eefb05f1e
-status: draft
-results: []
+status: rejected
+results:
+  - eval/results/prompt_cmp_judge_judge-negation-opt_n28_20261011T135344Z.json
+  - eval/results/prompt_cmp_judge_judge-negation-opt_n28_20261011T152607Z.json
+  - eval/results/prompt_cmp_judgevs_judge-negation-opt_20261012T071333Z.json

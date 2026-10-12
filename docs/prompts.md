@@ -1063,6 +1063,128 @@ list for 2+ generation results.
 The generation set is the gold dataset (n=12): every number is
 exploratory, as in judge mode.
 
+### Generation baseline (`exp/generation-baseline`)
+
+Measurement only: the **committed default** `generation.answer`,
+generation mode, judged by the frozen judge (baseline v3, accepted miss
+Q008-p1-negation; the header reports "matches frozen_judge.json"). Two
+identical runs of `--repeat 3`, commit `28f1e0d` (main after #65), temperature
+0, `ollama_chat/mistral` for generation and judging, hosted fallback
+disabled, judge input version 2, fingerprint `e67fae22348479f2`, one
+checkpoint file per run.
+
+- Run 1: [`prompt_cmp_generation_default_n12_20261012T082113Z`](../eval/results/prompt_cmp_generation_default_n12_20261012T082113Z.md)
+- Run 2 (rerun, for the noise floor): [`prompt_cmp_generation_default_n12_20261012T093211Z`](../eval/results/prompt_cmp_generation_default_n12_20261012T093211Z.md)
+- Report (`generation_variant_report --baseline`): [`prompt_cmp_genbase_default_20261012T103544Z`](../eval/results/prompt_cmp_genbase_default_20261012T103544Z.md)
+
+EXPLORATORY: n=12, below the n=50 threshold; no number here is
+decision-grade.
+
+| | run 1 | run 2 |
+|---|---|---|
+| Gate (fabricated title, title/year mismatch) | passed, 36/36 | passed, 36/36 |
+| nan / unevaluated claims / generation failures | 0 / 0 / 0 | 0 / 0 / 0 |
+| Faithfulness mean (higher = fewer unsupported claims) | 0.836 | 0.821 |
+| Unsupported claims (rows) | 53 | 58 |
+| Claims / characters per answer | 7.22 / 885 | 7.44 / 885 |
+| Citations per answer, answers with a citation | 0.56, 14/36 | 0.58, 15/36 |
+| Citations to a chunk not given | 0 | 0 |
+| Verdict flips | 1 | 1 |
+| Items whose answer is identical in every repeat | 10/12 | 12/12 |
+
+Pooled over 6 repeats: 10 of 12 answers are word-for-word identical
+(Q005 and Q007 have two versions each), 1 verdict flip, max per-item range
+0.222. Noise floor: 0 on 10 of 12 items, Q003 0.108 (one answer, judged
+differently), Q005 0.074; max 0.108, mean 0.015.
+
+Per item (run 1 / run 2): 1.000 on Q002, Q004, Q008, Q009; Q011 0.917,
+Q001 0.875, Q003 0.958 / 0.850, Q012 0.800, Q010 0.778, Q006 0.750,
+**Q005 0.519 / 0.444, Q007 0.436 / 0.436**.
+
+#### The unsupported claims, read against the chunks: mostly false flags
+
+25 distinct claims are flagged across both runs. Read against the gold
+chunks:
+
+- **21 are false flags**, all of them in the answer almost word for word
+  (or a close paraphrase) in a given chunk. Q007 alone accounts for 11:
+  « l'intelligence a pour essence de juger », « Le sujet, par cela seul
+  qu'on le nomme, est défini comme invariable », etc., copied from
+  1934_PM_c60, are rejected with reasons that describe 1934_PM_c68 or c45.
+  Q005 has 6 (« un être malicieux ou méchant », « rapproché de nous, avec
+  quelque chose de sociable et d'humain »: 1932_2S_c115 verbatim), with
+  reasons that describe only James's account (c105–c113). Same pattern
+  elsewhere: Q001 (« s'enfle continuellement de la durée qu'il ramasse »,
+  judged as implying the opposite), Q012 (the c225 sentence on « une
+  multiplicité indistincte »), Q006 and Q005 (« no mention of Bergson »,
+  the known reason: chunks never name their author), and Q011
+  (« ne considère pas les oscillations comme une fatalité historique »,
+  rejected although c224 and c225 say it: a correct negation flagged, the
+  mirror image of the frozen judge's blind spot).
+- **3 are real errors**: Q003 (« cette illusion se produit lorsque l'on a
+  une fausse reconnaissance », while the chunk says depersonalisation
+  « n'est pas indissolublement liée à la fausse reconnaissance ; elle s'y
+  rattache cependant »; flagged in some repeats only: this is the Q003
+  noise), and Q010 ×2 (see below).
+- **1 is borderline**: Q005 run 2's « la perception d'un tremblement de
+  terre est décrite comme une réaction défensive de la nature », a
+  compression of c103/c115.
+
+So **Q005's and Q007's low scores are mostly the judge's, not the
+generation's**: both have the longest contexts (9 and 4 chunks, Q007's
+source chunk third of four), and the judge's reasons cite another chunk
+than the one the claim comes from. Truncation doesn't explain it: the
+contexts are far below `JUDGE_NUM_CTX` (16384). Open lead, not
+investigated further.
+
+#### What the judge misses: misattributed theses, not polarity
+
+Polarity review (16 negated segments the judge accepted, read by hand): no
+segment inverts its source. One distorts it: Q009's « des virtualités sans
+nombre … qui ne conviennent pas à la matière inerte », where 1907_EC_c316
+says the categories of unity and multiplicity, « faites pour la matière
+inerte », don't suit those virtualities. One is incoherent: Q006's « la
+philosophie de Berkeley ressemble suffisamment à celle de Berkeley ».
+
+The generation errors that matter are **misattributed theses**: the
+answer presents as Bergson's own thesis a view that the source raises only
+to set aside or qualify. Each sentence can match the chunk; what is wrong
+is the status the answer gives the idea (a hypothesis he discards, stated
+as his conclusion). For example, the Q010 answer says the « forces
+éruptives » « ont suscité le développement rationnel de la philosophie
+grecque et l'ont conduite au-delà de la raison », while 1932_2S_c170 only
+says « De là on pourrait conclure que… » before « Mais une autre
+interprétation est possible ; et elle serait, à notre sens, plus
+vraisemblable ». Two cases in this baseline:
+
+- **Q010**: the example above. The interpretation Bergson prefers (Greek
+  thought was the work of reason alone, with a mystical effort running
+  beside it) is omitted. Two of its claims are flagged, but with reasons
+  that don't name the misreading.
+- **Q011**: « Il conclut en disant que la sagesse conseillerait une
+  coopération des deux tendances »: c225 says « il semble que la sagesse
+  conseillerait… Malheureusement… » and argues that full engagement in
+  each direction gives the « maximum de création ». Accepted by the judge.
+
+The judge has no way to catch these: each claim matches a sentence of the
+chunk, and only its role in the argument is wrong.
+
+#### Verdict
+
+**The committed `generation.answer` passes the gate in every repeat of both
+runs** (no fabricated title, no title/year mismatch, no failed generation),
+scores 0.836 / 0.821, and is near-deterministic (10 of 12 answers identical
+over 6 repeats, noise floor max 0.108). This is the baseline every
+generation variant is compared against (pass run 2 as the rerun).
+
+Reading the claims qualifies the score. About 21 of the 25 distinct
+unsupported claims are judge false flags, concentrated on Q007 and Q005,
+so **a faithfulness delta on those two items says more about the judge
+than about the variant**. The real errors (Q003, Q010, Q011, Q009's
+distortion) are mostly misattributed theses the frozen judge doesn't see. A
+variant aimed at them can only be assessed by reading the answers. Nothing
+here recommends a prompt change.
+
 ## Tests
 
 All fast (CI's `-m "not slow"` job):

@@ -1152,6 +1152,7 @@ def test_freeze_judge_writes_record_and_generation_mode_accepts_it(tmp_path, cap
     record = json.loads(frozen.read_text(encoding="utf-8"))
     assert set(record["faithfulness_prompts"]) == set(prompt_variants.FAITHFULNESS_IDS)
     assert record["judge_model"] == "ollama_chat/mistral" and record["gate"]["passed"]
+    assert record["gate"]["accepted_misses"] == []
     for key in ("ragas_version", "source_result", "commit", "date"):
         assert record[key]
     assert prompt_results.frozen_judge_status("ollama_chat/mistral", frozen)[0]
@@ -1162,6 +1163,68 @@ def test_freeze_judge_writes_record_and_generation_mode_accepts_it(tmp_path, cap
     frozen.write_text(json.dumps(record), encoding="utf-8")
     matches, why = prompt_results.frozen_judge_status("ollama_chat/mistral", frozen)
     assert not matches and "faithfulness.nli_verifier" in why
+
+
+def _missed_on(item_id: str, error: bool = False) -> list[dict]:
+    """judge_rows where `item_id`'s known claim is judged supported (or, with
+    `error`, its runs are nan) in every repeat; every other item is flagged."""
+    rows = []
+    for r in judge_rows():
+        if r["item_id"] == item_id:
+            r = {**r, "claims": [{**c, "supported": True} for c in r["claims"]]}
+            if error:
+                r = {**r, "score": None, "error": "parse failure", "claims": []}
+        rows.append(r)
+    return rows
+
+
+@pytest.mark.parametrize(
+    ("rows", "accepted", "message"),
+    [
+        (_missed_on("Q001-gen"), [], r"the gate failed \(missed: Q001-gen\)"),
+        (_missed_on("Q001-gen"), ["Q002-p1-proper_noun"], "Q002-p1-proper_noun: not missed"),
+        (_missed_on("Q001-gen"), ["Q001-gen", "Q001"], "Q001: not a hallucinated item"),
+        (_missed_on("Q001-gen", error=True), ["Q001-gen"], "missed for nan"),
+        (judge_rows(flag=False), ["Q001-gen"], r"missed: Q002-p1-proper_noun\)"),
+    ],
+)
+def test_freeze_judge_accept_miss_refusals(rows, accepted, message):
+    with pytest.raises(freeze_judge.FreezeRefused, match=message):
+        freeze_judge.check_freezable(_committed_result(rows=rows), accepted_misses=accepted)
+
+
+def test_freeze_judge_accept_miss_needs_a_justification(tmp_path, capsys):
+    source = _write(tmp_path / "r.json", _committed_result(rows=_missed_on("Q001-gen")))
+    with pytest.raises(SystemExit):
+        freeze_judge.main([str(source), "--accept-miss", "Q001-gen"])
+    assert "--justification" in capsys.readouterr().err
+
+
+def test_freeze_judge_records_an_accepted_miss(tmp_path):
+    calibration = {"items": judge_items()}
+    data = _committed_result(rows=_missed_on("Q001-gen"))
+    data["header"]["items"]["calibration_set_sha256"] = calibration_set.calibration_set_hash(
+        calibration
+    )
+    source = _write(tmp_path / "winner.json", data)
+    cal_path = tmp_path / "cal.json"
+    cal_path.write_text(json.dumps(calibration), encoding="utf-8")
+    frozen = tmp_path / "frozen_judge.json"
+    args = [str(source), "--output", str(frozen), "--calibration-set", str(cal_path)]
+    assert freeze_judge.main(args) == 2 and not frozen.exists()
+    args += ["--accept-miss", "Q001-gen", "--justification", "known limit"]
+    assert freeze_judge.main(args) == 0
+    gate = json.loads(frozen.read_text(encoding="utf-8"))["gate"]
+    assert gate["passed"] is False
+    assert gate["accepted_misses"] == [
+        {
+            "item": "Q001-gen",
+            "miss_reasons": ["judged supported", "judged supported"],
+            "justification": "known limit",
+        }
+    ]
+    matches, why = prompt_results.frozen_judge_status("ollama_chat/mistral", frozen)
+    assert matches and "accepted gate misses: Q001-gen" in why
 
 
 def test_generation_mode_refused_without_a_matching_frozen_judge(tmp_path, capsys):

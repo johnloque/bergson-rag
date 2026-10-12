@@ -94,9 +94,12 @@ def frozen_judge_status(judge_model: str, path: Path = FROZEN_JUDGE_PATH) -> tup
         problems.append(f"judge model: frozen {frozen.get('judge_model')}, this run {judge_model}")
     if problems:
         return False, "; ".join(problems)
+    accepted = [m["item"] for m in frozen.get("gate", {}).get("accepted_misses", [])]
+    caveat = f"; accepted gate misses: {', '.join(accepted)}" if accepted else ""
     return (
         True,
-        f"matches {path.name} (frozen {frozen.get('date')} from {frozen.get('source_result')})",
+        f"matches {path.name} (frozen {frozen.get('date')} from "
+        f"{frozen.get('source_result')}){caveat}",
     )
 
 

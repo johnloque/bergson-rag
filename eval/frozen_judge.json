@@ -1,0 +1,59 @@
+{
+  "description": "The frozen faithfulness judge (eval/scripts/freeze_judge.py, docs/prompts.md): the owner-designated winner of judge selection. Generation-mode comparisons only run against it; any change to a faithfulness prompt invalidates earlier ones.",
+  "faithfulness_prompts": {
+    "faithfulness.segment_claims": {
+      "version": "v1",
+      "hash": "1d73fc7146afd75e35f397af6ecbd2449f9be263f36ffd22b71209b668f3bdbd"
+    },
+    "faithfulness.nli_verifier": {
+      "version": "v1",
+      "hash": "89e87a3d7dfbff708fda84fe52c33a33dcfe48b9f3d1d70cc3fb155eefb05f1e"
+    }
+  },
+  "ragas_version": "0.3.9",
+  "judge_model": "ollama_chat/mistral",
+  "source_result": "eval/results/prompt_cmp_judge_default_n28_20261011T090042Z.json",
+  "gate": {
+    "passed": false,
+    "per_origin": {
+      "generated": [
+        2,
+        2
+      ],
+      "perturbed": [
+        13,
+        14
+      ]
+    },
+    "per_perturbation_type": {
+      "negation": [
+        3,
+        4
+      ],
+      "proper_noun": [
+        1,
+        1
+      ],
+      "unsupported_sentence": [
+        9,
+        9
+      ]
+    },
+    "repeat": 3,
+    "accepted_misses": [
+      {
+        "item": "Q008-p1-negation",
+        "miss_reasons": [
+          "judged supported",
+          "judged supported",
+          "judged supported"
+        ],
+        "justification": "Owner's exception (docs/prompts.md, 'Frozen judge: baseline v3'). Q008-p1-negation is judged supported in 6 of 6 repeats across both v3 runs (rerun: prompt_cmp_judge_default_n28_20261011T103203Z), with a self-contradicting reason; the only prompt fix tried (judge-negation-opt) moved no negation verdict and collapsed the faithful-class mean (0.671 -> 0.175). Known limitation: this judge does not reliably detect a negation that reverses a sentence's meaning; it rejects the negated claim itself on 1 of 4 negation items (Q004-p1 only; the gate's 3/4 credits Q002-p2 and Q010-p2 through collateral flags). Generation comparisons must not rely on it to catch that kind of error."
+      }
+    ]
+  },
+  "faithful_class_mean": 0.6708754208754208,
+  "result_commit": "45dd0b0d19951fc5cf337c29bc69629b7f291e4f",
+  "commit": "e909e20960148c0d6a743f4782c772ea0319edee",
+  "date": "2026-10-12T07:29:55Z"
+}

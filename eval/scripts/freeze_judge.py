@@ -9,13 +9,24 @@ It refuses when the result
 
 - is not a judge-mode result;
 - failed the gate (or covers only part of the calibration set: the gate
-  must rest on every hallucinated item);
+  must rest on every hallucinated item), unless every missed item is named
+  with --accept-miss (see below);
 - was run with --repeat < 2 (stability unmeasured);
 - has faithfulness prompt hashes other than the committed `prompts/`: a
   winning variant is promoted into `prompts/` first, in its own branch, so
   the frozen judge and the judge generation mode runs are the same thing.
 
+--accept-miss ITEM_ID (repeatable, with --justification) is the owner's
+explicit exception for a known miss: the gate itself is not loosened. Each
+accepted item must be missed in the result, and missed only because the
+judge gave the known claim a verdict ("judged supported" in every missed
+repeat: never a nan, unevaluated claim or missing run). Any other miss
+still refuses, and so does an accepted item the judge actually caught. The
+exception, its per-repeat reasons and the justification are written into
+the frozen record, whose `gate.passed` stays false.
+
 Usage: python -m eval.scripts.freeze_judge eval/results/prompt_cmp_judge_<...>.json
+       [--accept-miss Q008-p1-negation --justification "..."]
 """
 
 from __future__ import annotations
@@ -48,19 +59,48 @@ class FreezeRefused(Exception):
     pass
 
 
+# The only miss reason an exception can cover: a verdict the judge gave.
+ACCEPTABLE_MISS_REASON = "judged supported"
+
+
+def check_accepted_misses(gate: Mapping[str, Any], accepted: Sequence[str]) -> list[str]:
+    """Reasons the gate still refuses once the `accepted` misses are set
+    aside (empty if it passes, or fails only on accepted items)."""
+    reasons = []
+    missed = gate["missed"]
+    unaccepted = [item_id for item_id in missed if item_id not in accepted]
+    if not gate["detections"]:
+        reasons.append("the gate failed (missed: no hallucinated item)")
+    elif unaccepted:
+        reasons.append(f"the gate failed (missed: {', '.join(unaccepted)})")
+    for item_id in accepted:
+        if item_id not in gate["detections"]:
+            reasons.append(f"--accept-miss {item_id}: not a hallucinated item of this result")
+        elif item_id not in missed:
+            reasons.append(f"--accept-miss {item_id}: not missed (detected in every repeat)")
+        else:
+            per_repeat = gate["miss_reasons"][item_id]
+            other = sorted({r for r in per_repeat if r not in (None, ACCEPTABLE_MISS_REASON)})
+            if other:
+                reasons.append(
+                    f"--accept-miss {item_id}: missed for {', '.join(other)}, not only "
+                    f"'{ACCEPTABLE_MISS_REASON}' (only a verdict can be accepted)"
+                )
+    return reasons
+
+
 def check_freezable(
-    result: Mapping[str, Any], calibration: Mapping[str, Any] | None = None
+    result: Mapping[str, Any],
+    calibration: Mapping[str, Any] | None = None,
+    accepted_misses: Sequence[str] = (),
 ) -> dict[str, Any]:
     """The result's selection summary, recomputed from its rows; raises
     `FreezeRefused` naming every reason it can't be frozen."""
     header = result["header"]
     if header["mode"] != "judge":
         raise FreezeRefused(f"not a judge-mode result (mode: {header['mode']})")
-    reasons = []
     summary = summarize(result["items"], result["rows"], header["repeat"])
-    if not summary["gate"]["passed"]:
-        missed = ", ".join(summary["gate"]["missed"]) or "no hallucinated item"
-        reasons.append(f"the gate failed (missed: {missed})")
+    reasons = check_accepted_misses(summary["gate"], accepted_misses)
     if header["repeat"] < 2:
         reasons.append(f"--repeat {header['repeat']} < 2: stability was not measured")
     if calibration is not None:
@@ -82,7 +122,11 @@ def check_freezable(
 
 
 def frozen_record(
-    result: Mapping[str, Any], summary: Mapping[str, Any], source: Path
+    result: Mapping[str, Any],
+    summary: Mapping[str, Any],
+    source: Path,
+    accepted_misses: Sequence[str] = (),
+    justification: str | None = None,
 ) -> dict[str, Any]:
     header = result["header"]
     manifest = header["manifest"]
@@ -107,6 +151,14 @@ def frozen_record(
             "per_origin": gate["per_origin"],
             "per_perturbation_type": gate["per_perturbation_type"],
             "repeat": header["repeat"],
+            "accepted_misses": [
+                {
+                    "item": item_id,
+                    "miss_reasons": gate["miss_reasons"][item_id],
+                    "justification": justification,
+                }
+                for item_id in accepted_misses
+            ],
         },
         "faithful_class_mean": summary["faithful_class"]["mean"],
         "result_commit": header["git"]["commit"],
@@ -122,15 +174,31 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("result", type=Path, help="The winning candidate's judge-mode result.")
     parser.add_argument("--output", type=Path, default=FROZEN_JUDGE_PATH)
     parser.add_argument("--calibration-set", type=Path, default=CALIBRATION_SET_PATH)
+    parser.add_argument(
+        "--accept-miss",
+        action="append",
+        default=[],
+        metavar="ITEM_ID",
+        help="Freeze despite this known gate miss (repeatable; needs --justification).",
+    )
+    parser.add_argument(
+        "--justification",
+        help="Why the accepted misses are tolerated, written into the frozen record.",
+    )
     args = parser.parse_args(argv)
+    if args.accept_miss and not (args.justification or "").strip():
+        parser.error("--accept-miss needs a non-empty --justification")
+    if args.justification and not args.accept_miss:
+        parser.error("--justification only goes with --accept-miss")
+    accepted = list(dict.fromkeys(args.accept_miss))
 
     result = load_result(args.result)
     try:
-        summary = check_freezable(result, load_calibration_set(args.calibration_set))
+        summary = check_freezable(result, load_calibration_set(args.calibration_set), accepted)
     except FreezeRefused as refusal:
         print(f"REFUSED: {refusal}", file=sys.stderr)
         return 2
-    record = frozen_record(result, summary, args.result)
+    record = frozen_record(result, summary, args.result, accepted, args.justification)
     args.output.write_text(
         json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )

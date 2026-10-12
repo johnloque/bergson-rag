@@ -14,6 +14,13 @@ stay here and on disk: they're the record of what was tried.
 | `judge-parsing-opt` | faithfulness | JSON parse failures of the first judge baseline (Q001-p1, Q010-p1, Q002-gen), since repaired in code (#57) | rejected | [vs baseline v2](../results/prompt_cmp_judgevs_judge-parsing-opt_20261010T140431Z.md): gate 12/14 (newly misses Q002-gen), faithful mean 0.640 / 0.625 | `exp/prompt-judge-parsing-opt` |
 | `judge-negation-opt` | faithfulness | Q008-p1-negation accepted 6/6 in baseline v3 (negated claim itself rejected on 1 of 4 negation items) | rejected | [vs baseline v3](../results/prompt_cmp_judgevs_judge-negation-opt_20261012T071333Z.md): gate 15/16 (Q008-p1 still missed), faithful mean 0.175 / 0.174 | `exp/prompt-judge-negation-opt` |
 
+Generation variants (`generation/answer.md`) are judged by the frozen
+judge against a generation baseline (committed defaults, two runs):
+`eval/scripts/generation_variant_report.py`, rules in
+[`docs/prompts.md`, "Choosing a generation variant"](../../docs/prompts.md#choosing-a-generation-variant).
+Their faithfulness score can't show a polarity inversion: read the report's
+polarity review list.
+
 ## Layout
 
 ```

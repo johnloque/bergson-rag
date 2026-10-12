@@ -75,11 +75,21 @@ def committed_faithfulness_hashes() -> dict[str, str]:
 
 def frozen_judge_status(judge_model: str, path: Path = FROZEN_JUDGE_PATH) -> tuple[bool, str]:
     """(matches, explanation): whether `path` exists and records the
-    committed faithfulness prompts, the installed RAGAS and `judge_model`."""
+    committed faithfulness prompts, the installed RAGAS, `judge_model` and
+    the current judge input version (what the code gives the judge besides
+    its prompts, and how it reads its replies)."""
+    from src.generation.faithfulness import JUDGE_INPUT_VERSION
+
     if not path.is_file():
         return False, f"{path.name} not found: no judge has been frozen yet"
     frozen = json.loads(path.read_text(encoding="utf-8"))
     problems = []
+    if frozen.get("judge_input_version") != JUDGE_INPUT_VERSION:
+        problems.append(
+            f"judge input version: frozen {frozen.get('judge_input_version')}, code "
+            f"{JUDGE_INPUT_VERSION} (the code changed what the judge is given or how its replies "
+            "are read)"
+        )
     committed = committed_faithfulness_hashes()
     for pid, digest in committed.items():
         recorded = frozen.get("faithfulness_prompts", {}).get(pid, {}).get("hash")
@@ -101,6 +111,24 @@ def frozen_judge_status(judge_model: str, path: Path = FROZEN_JUDGE_PATH) -> tup
         f"matches {path.name} (frozen {frozen.get('date')} from "
         f"{frozen.get('source_result')}){caveat}",
     )
+
+
+def frozen_judge_record(path: Path = FROZEN_JUDGE_PATH) -> dict[str, Any] | None:
+    """What a generation-mode header keeps of the frozen judge: enough to
+    tell, later, which judge scored the run and what it is known to miss."""
+    if not path.is_file():
+        return None
+    frozen = json.loads(path.read_text(encoding="utf-8"))
+    return {
+        "faithfulness_prompts": frozen.get("faithfulness_prompts"),
+        "judge_input_version": frozen.get("judge_input_version"),
+        "source_result": frozen.get("source_result"),
+        "date": frozen.get("date"),
+        "accepted_misses": [
+            {"item": m["item"], "justification": m.get("justification")}
+            for m in frozen.get("gate", {}).get("accepted_misses", [])
+        ],
+    }
 
 
 def _jsonable(value: Any) -> Any:

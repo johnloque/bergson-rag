@@ -27,6 +27,7 @@ from eval.scripts import (
 from eval.scripts.calibration_set import GoldRow, MissingText
 from eval.scripts.judge_selection import Axes
 from eval.scripts.prompt_variants import VariantError
+from src.generation.faithfulness import JUDGE_INPUT_VERSION
 from src.prompts.loader import load_prompt
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -203,6 +204,7 @@ def result(
             "models": models or {"judge": "ollama_chat/mistral", "generation": None},
             "temperature": {"judge": 0.0, "generation": None},
             "retrieval": "none",
+            "judge_input_version": JUDGE_INPUT_VERSION,
             "items": {
                 "count": len(items),
                 "ids": [i["id"] for i in items],
@@ -1002,9 +1004,11 @@ def test_comparability_refusals(other, message):
 def test_results_from_another_judge_input_version_are_not_comparable():
     """A result without the field predates it (version 1): plain chunk texts,
     unrepaired replies."""
+    old = result()
+    del old["header"]["judge_input_version"]
     current = result(label="v", manifest_=manifest(faithfulness__nli_verifier="1" * 64))
     current["header"]["judge_input_version"] = 2
-    problems = compare_prompt_results.comparability_problems([result(), current])
+    problems = compare_prompt_results.comparability_problems([old, current])
     assert any("judge input version differs (1 vs 2)" in p for p in problems), problems
 
 
@@ -1163,6 +1167,28 @@ def test_freeze_judge_writes_record_and_generation_mode_accepts_it(tmp_path, cap
     frozen.write_text(json.dumps(record), encoding="utf-8")
     matches, why = prompt_results.frozen_judge_status("ollama_chat/mistral", frozen)
     assert not matches and "faithfulness.nli_verifier" in why
+
+
+def test_frozen_judge_records_and_checks_the_judge_input_version(tmp_path):
+    data = _committed_result()
+    summary = judge_selection.summarize(data["items"], data["rows"], data["header"]["repeat"])
+    record = freeze_judge.frozen_record(data, summary, tmp_path / "r.json")
+    assert record["judge_input_version"] == JUDGE_INPUT_VERSION
+    stale = _committed_result()
+    stale["header"]["judge_input_version"] = JUDGE_INPUT_VERSION - 1
+    with pytest.raises(freeze_judge.FreezeRefused, match="judge input version"):
+        freeze_judge.check_freezable(stale)
+
+
+def test_frozen_judge_from_another_judge_input_version_does_not_match(tmp_path):
+    frozen = tmp_path / "frozen_judge.json"
+    record = json.loads(prompt_results.FROZEN_JUDGE_PATH.read_text(encoding="utf-8"))
+    assert prompt_results.frozen_judge_status(record["judge_model"])[0]
+    for version in (JUDGE_INPUT_VERSION - 1, None):
+        record["judge_input_version"] = version
+        frozen.write_text(json.dumps(record), encoding="utf-8")
+        matches, why = prompt_results.frozen_judge_status(record["judge_model"], frozen)
+        assert not matches and "judge input version" in why
 
 
 def _missed_on(item_id: str, error: bool = False) -> list[dict]:

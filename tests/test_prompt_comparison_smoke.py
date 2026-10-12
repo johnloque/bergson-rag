@@ -86,3 +86,4 @@ def test_generation_mode_smoke(tmp_path):
     (row,) = result["rows"]
     assert row["answer"] and row["prompts_used"]["generation.answer"]["custom"] is True
     assert header["temperature"]["generation"] == 0.0
+    assert row["chunks_sha256"] and "polarity_review" in result["summary"]

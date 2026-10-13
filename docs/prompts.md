@@ -1352,6 +1352,73 @@ example), which the next variant on this branch tests; or attach each
 sentence to a chunk in code, after generation, which stops relying on the
 model. The committed `generation.answer` stays in production.
 
+### Variant `gen-citation-example` (`exp/prompt-gen-citation-inline`): partial, superseded by v2
+
+Same targeted failure as `gen-citation-inline`, run on the same branch at
+the owner's request. Since mistral doesn't follow a reworded format
+instruction, this variant shows the format instead: the committed citation
+instruction is kept as is, and one correctly cited example answer is added
+after the instructions, on another question, from real excerpts unrelated
+to the gold questions (1900_R_c12, c13, c18, the comic of a man falling).
+Four sentences, each ending with its bracket before the period, one with
+two brackets, no closing list, and a note not to reuse its content or
+chunk_ids. Nothing else changed.
+
+- Run: [`prompt_cmp_generation_gen-citation-example_n12_20261013T085532Z`](../eval/results/prompt_cmp_generation_gen-citation-example_n12_20261013T085532Z.md)
+- Report (`generation_variant_report --variant`): [`prompt_cmp_genvs_gen-citation-example_20261013T100728Z`](../eval/results/prompt_cmp_genvs_gen-citation-example_20261013T100728Z.md)
+
+| | baseline (run 1 / run 2) | `gen-citation-inline` | variant |
+|---|---|---|---|
+| Gate | passed 36/36, 36/36 | passed 36/36 | passed 36/36 |
+| Answers with a citation | 14/36 / 15/36 | 10/36 | **28/36** |
+| Citations per answer | 0.56 / 0.58 | 0.61 | 1.83 |
+| Citations to a chunk not given | 0 | 0 | 0 |
+| Faithfulness mean | 0.836 / 0.821 | 0.789 | 0.707 |
+| Unsupported claims (rows) | 53 / 58 | 57 | 74 |
+| Claims per answer | 7.22 / 7.44 | 7.53 | 6.94 |
+| Answers opening with « Selon Bergson » | 6 / 6 | 5 | **28** |
+
+#### Citations: a real gain, not yet per sentence
+
+Q001, Q009 and Q010, which never cited in the baseline, now do; Q003 and
+Q004 cite every sentence, as the example does. The stray formats are gone
+(no bare chunk_ids, no parentheses, no « Sources » list with title and
+pages). The example's content isn't reused: no answer cites 1900_R_c12,
+c13 or c18 (Q010's « élasticité » is in 1932_2S_c170). What remains: 42
+of 178 sentences carry a citation, most answers having one bracket at the
+end; Q005 (all 10 chunks), Q007 and Q011 group several chunk_ids in one
+bracket, which inflates citations per answer; Q002 and Q012 never cite.
+
+#### Faithfulness: the example's opener, copied
+
+The example opens with « Selon Bergson, … », and 28 of 36 answers now do
+(6 in the baseline). The judge often rejects a claim attributed to Bergson
+because the chunks never name their author (the known false flag): rejections
+whose reason is « Bergson not mentioned » rise from 15 to 27, about a dozen
+of the 16–21 extra rejections. Q012 appends « selon l'œuvre de Henri
+Bergson » to each sentence. Read against the chunks, the other new flags
+are mostly false too (Q003's two claims and Q004's are verbatim; Q006's
+« recette de cuisine » renders the chunk's « salade »); a few are small
+real distortions: Q002 (« rigoureusement déterminé » is said of the
+impatience in 1907_EC_c398, not of the duration), Q005 (« la conception
+scientifique… dangereuse », an extrapolation), Q009 (materiality equated
+with the movement of matter).
+
+Unplanned: **Q010 is partly fixed**. The answer now gives the other
+interpretation (Greek thought the work of reason alone, a mystical effort
+beside it), though without saying Bergson finds it « plus vraisemblable ».
+Q011 still states « la sagesse conseillerait une coopération » as his
+conclusion.
+
+#### Verdict
+
+**Partial, not promotable as is.** Showing the format is the lever that
+works (answers with a citation 14–15 → 28 of 36), but the example also
+imposes an opener that trips the judge. Next: `gen-citation-example-v2`,
+the same example without the attribution opener, plus sentences drawn from
+several excerpts, one citing two in separate brackets (aimed at Q005, Q007,
+Q011's grouped brackets).
+
 ## Tests
 
 All fast (CI's `-m "not slow"` job):

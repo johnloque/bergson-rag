@@ -23,5 +23,7 @@ hypothesis: >-
   owner's request (same targeted failure).
 based_on:
   generation.answer: ea95d3d10495485dea95b1ca03e59b4c4fef124fc079325fd8ec1fc28348ff32
-status: draft
-results: []
+status: tested
+results:
+  - eval/results/prompt_cmp_generation_gen-citation-example_n12_20261013T085532Z.json
+  - eval/results/prompt_cmp_genvs_gen-citation-example_20261013T100728Z.json

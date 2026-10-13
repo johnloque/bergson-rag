@@ -1,0 +1,24 @@
+name: gen-citation-example-v2
+hypothesis: >-
+  Observed failure: gen-citation-example
+  (eval/results/prompt_cmp_genvs_gen-citation-example_20261013T100728Z.md,
+  read by hand in docs/prompts.md, "Variant gen-citation-example") raised
+  answers with a citation from 14-15 to 28 of 36, but 28 answers copied the
+  example's « Selon Bergson » opener (6 in the baseline), and the frozen
+  judge's « Bergson not mentioned » false flags rose from 15 to 27
+  (faithfulness 0.707); Q005, Q007 and Q011 still grouped several chunk_ids
+  in one bracket, and most answers cited once, at the end. Variant: the
+  same example, against the committed generation.answer, with two
+  changes: no attribution to Bergson anywhere in it, and one more sentence
+  (from 1900_R_c18) so that it shows three excerpts each cited on its own
+  and a synthesis sentence citing two in separate brackets. Nothing else
+  changed. Question: do answers keep citing as often, stop opening with
+  « Selon Bergson », cite per sentence and one chunk per bracket, with the
+  faithfulness back near the baseline (outside Q005/Q007), no example
+  chunk_id reused and no gate failure? Citations are stripped before
+  judging: count them and read them. Run on exp/prompt-gen-citation-inline
+  at the owner's request.
+based_on:
+  generation.answer: ea95d3d10495485dea95b1ca03e59b4c4fef124fc079325fd8ec1fc28348ff32
+status: draft
+results: []

@@ -1419,6 +1419,91 @@ the same example without the attribution opener, plus sentences drawn from
 several excerpts, one citing two in separate brackets (aimed at Q005, Q007,
 Q011's grouped brackets).
 
+### Variant `gen-citation-example-v2` (`exp/prompt-gen-citation-inline`): tested, candidate for promotion
+
+`gen-citation-example` with its two failures addressed, run on the same
+branch at the owner's request. Same example, against the committed
+`generation.answer`, with two changes: no attribution to Bergson anywhere
+in it (it now opens « Ce n'est pas le changement brusque d'attitude qui
+fait rire… »), and one more sentence, from 1900_R_c18, so that it shows
+three excerpts each cited on its own and a synthesis sentence citing two
+in separate brackets. Nothing else changed.
+
+Two runs of `--repeat 3` (the second with its own checkpoint), same models
+and settings as the baseline:
+
+- Run 1: [`prompt_cmp_generation_gen-citation-example-v2_n12_20261013T101340Z`](../eval/results/prompt_cmp_generation_gen-citation-example-v2_n12_20261013T101340Z.md)
+- Run 2: [`prompt_cmp_generation_gen-citation-example-v2_n12_20261013T113959Z`](../eval/results/prompt_cmp_generation_gen-citation-example-v2_n12_20261013T113959Z.md)
+- Report (`generation_variant_report --variant`, both runs): [`prompt_cmp_genvs_gen-citation-example-v2_20261013T124502Z`](../eval/results/prompt_cmp_genvs_gen-citation-example-v2_20261013T124502Z.md)
+
+| | baseline (run 1 / run 2) | `gen-citation-example` | variant (run 1 / run 2) |
+|---|---|---|---|
+| Gate | passed 36/36, 36/36 | passed 36/36 | passed 36/36, 36/36 |
+| Answers with a citation | 14/36 / 15/36 | 28/36 | **28/36** / 28/36 |
+| Sentences followed by a citation | 14/160 (run 1) | 42/178 | 28/155 |
+| Brackets grouping several chunks | 0 | 8 | 7 (Q002, Q005, Q007) |
+| Citations to a chunk not given, example chunk_ids reused | 0, — | 0, 0 | 0, 0 |
+| Answers opening with « Selon Bergson » | 6 / 6 | 28 | **3** |
+| Rejections « Bergson not mentioned » | 15 / 15 | 27 | 17 |
+| Faithfulness mean | 0.836 / 0.821 | 0.707 | **0.860 / 0.862** |
+| Claims per answer | 7.22 / 7.44 | 6.94 | 6.22 |
+| Noise floor (max) | 0.108 | — | 0.133 (Q002) |
+| Answers identical over 6 repeats, max per-item range | 10/12, 0.222 | — | 7/12, 0.333 |
+
+No dominance: the report gives a trade-off (the variant has the higher
+faithfulness mean, the baseline is more stable), and warns that the higher
+score comes with fewer claims per answer.
+
+#### Citations
+
+The first change does what it was for: without an attribution in the
+example, the « Selon Bergson » opener is gone (3 of 36) and the judge's
+« Bergson not mentioned » false flags fall back to the baseline's level.
+The citation gain holds: 28 of 36 answers cite, with no stray format (bare
+chunk_ids, parentheses, title and pages) and no example chunk_id reused.
+The second change has no effect: Q002, Q005 and Q007 still group their
+chunks in one bracket, and Q012 (repeat 1) lists them on separate lines at
+the end. Citations are not per sentence: nearly every answer has one
+bracket, at the end (Q003 and Q004 cited per sentence in
+`gen-citation-example`, no longer here). Q007, Q009, Q011 and Q012 don't
+cite in at least one repeat.
+
+#### Errors, read against the chunks
+
+| | baseline | variant |
+|---|---|---|
+| Q003: depersonalisation tied to false recognition, overstated | some repeats | fixed |
+| Q010: the reading Bergson sets aside, given as his thesis | present | partly fixed (the other interpretation is given, not his preference for it) |
+| « La sagesse conseillerait une coopération » given as his conclusion | Q011 | moved to Q012 (repeats 2, 3) |
+| Q006: the ironic « salade » given as his method | incoherent sentence | present |
+| Q011: « accentuer les dangers », where 1932_2S_c225 says « supprime le danger » | — | new (repeat 1), accepted by the judge |
+
+Roughly even. The rest of the flagged claims are mostly the known false
+flags (Q001, Q002, Q005, Q010).
+
+#### Determinism: the second run measures the judge only
+
+Run 2's 36 answers are byte-identical to run 1's, repeat for repeat
+(baseline: 34/36); on them, the judge rewords 33 reasons, segments 3 rows
+differently and flips 5 verdicts out of about 220 claims. So the variant's
+noise floor is the judge's alone. Both run greedy at temperature 0, but
+small numerical differences on the Ollama server (plausibly prompt-prefix
+cache reuse, `q8_0` KV cache, flash attention) change a token at near-ties,
+which generation, one call mostly copying the excerpts, rarely meets, and
+the judge, about 8 calls of free-form reasons over up to 16k tokens, often
+does. The server's state matters (within a run, generation repeats differ
+on 5 items, yet repeat *n* is identical across runs); why the judge's
+sequential calls don't replay identically is not explained.
+
+#### Verdict
+
+**Tested, candidate for promotion** (the owner's call), on citation
+presence: answers with a citation 14–15 → 28 of 36, stray formats gone,
+faithfulness not lower beyond the noise, real errors roughly even. Not a
+fix for per-sentence citation: mistral takes « one citation at the end »
+from the example, not « one per sentence »; that would need attaching
+sentences to chunks in code, after generation.
+
 ## Tests
 
 All fast (CI's `-m "not slow"` job):

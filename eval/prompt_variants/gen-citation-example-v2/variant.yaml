@@ -20,5 +20,8 @@ hypothesis: >-
   at the owner's request.
 based_on:
   generation.answer: ea95d3d10495485dea95b1ca03e59b4c4fef124fc079325fd8ec1fc28348ff32
-status: draft
-results: []
+status: tested
+results:
+  - eval/results/prompt_cmp_generation_gen-citation-example-v2_n12_20261013T101340Z.json
+  - eval/results/prompt_cmp_generation_gen-citation-example-v2_n12_20261013T113959Z.json
+  - eval/results/prompt_cmp_genvs_gen-citation-example-v2_20261013T124502Z.json

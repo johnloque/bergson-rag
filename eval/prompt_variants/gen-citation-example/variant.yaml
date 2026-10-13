@@ -1,0 +1,29 @@
+name: gen-citation-example
+hypothesis: >-
+  Observed failure: citations in the generation baseline
+  (eval/results/prompt_cmp_generation_default_n12_20261012T082113Z.json and
+  its rerun 20261012T093211Z): 21-22 of 36 answers cite nothing; Q001,
+  Q002, Q009, Q010, Q011 never cite in any of 9 repeats; no citation is
+  followed by more prose; formats vary (bare chunk_ids, closing lists,
+  title and pages, one bracket for 9 chunks). gen-citation-inline
+  (20261013T073443Z) showed that a concrete reworded instruction is not
+  followed by mistral at temperature 0 (answers with a citation fell to
+  10/36). Variant: the committed citation instruction is kept as is, and
+  one example of a correctly cited answer is added after the instructions
+  (another question, real 1900_R excerpts c12, c13, c18 on the comic of a
+  man falling, unrelated to the gold questions): four sentences, each
+  ending with its bracket before the period, one with two brackets, no
+  closing list; it says not to reuse its content or chunk_ids. Nothing
+  else changed. Question: do more answers cite, per sentence, in the
+  bracket format, naming the right chunk, without citing the example's
+  chunk_ids, a gate failure, a faithfulness drop beyond the noise floor
+  outside Q005/Q007 (judge false flags) or fewer claims per answer?
+  Citations are stripped before judging: count them and read them. Run on
+  exp/prompt-gen-citation-inline, after gen-citation-inline, at the
+  owner's request (same targeted failure).
+based_on:
+  generation.answer: ea95d3d10495485dea95b1ca03e59b4c4fef124fc079325fd8ec1fc28348ff32
+status: tested
+results:
+  - eval/results/prompt_cmp_generation_gen-citation-example_n12_20261013T085532Z.json
+  - eval/results/prompt_cmp_genvs_gen-citation-example_20261013T100728Z.json

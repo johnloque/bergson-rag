@@ -1,0 +1,26 @@
+name: gen-citation-inline
+hypothesis: >-
+  Observed failure: citations in the generation baseline
+  (eval/results/prompt_cmp_generation_default_n12_20261012T082113Z.json and
+  its rerun 20261012T093211Z) and in gen-thesis-attribution
+  (20261012T140612Z). Baseline: 21-22 of 36 answers cite nothing; Q001,
+  Q002, Q009, Q010, Q011 never cite in any of 9 repeats; 0 of 20 citations
+  are inline, all at the end of the answer. Formats vary: bare chunk_ids
+  without brackets (Q008), a closing « (Citations : …) » block (Q007), a
+  list of brackets followed by title and pages (Q012), one bracket grouping
+  all 9 chunks (Q005). The committed instruction asks to tie each claim to
+  a passage only in abstract terms. Variant: the first instruction is
+  replaced by a concrete one (bracket at the end of each sentence that
+  reports an excerpt, before the period, with an example; cite even with a
+  single excerpt; one bracket per excerpt; chunk_id only; no closing
+  reference list); nothing else changed. Question: do more answers cite,
+  inline, with the cited chunk being the right one, without a gate failure,
+  a faithfulness drop beyond the noise floor outside Q005/Q007 (judge false
+  flags) or fewer claims per answer? Citations are stripped before judging,
+  so the judge doesn't see them: count them and read them.
+based_on:
+  generation.answer: ea95d3d10495485dea95b1ca03e59b4c4fef124fc079325fd8ec1fc28348ff32
+status: rejected
+results:
+  - eval/results/prompt_cmp_generation_gen-citation-inline_n12_20261013T073443Z.json
+  - eval/results/prompt_cmp_genvs_gen-citation-inline_20261013T084827Z.json

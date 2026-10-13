@@ -1185,6 +1185,96 @@ distortion) are mostly misattributed theses the frozen judge doesn't see. A
 variant aimed at them can only be assessed by reading the answers. Nothing
 here recommends a prompt change.
 
+### Variant `gen-thesis-attribution` (`exp/prompt-gen-thesis-attribution`): rejected
+
+The misattributed-thesis lead from the generation baseline (Q010, Q011).
+`generation.answer` gains one fixed instruction, after the two existing
+ones: « Marque une distinction claire entre une thèse que Bergson affirme
+et une thèse qu'il ne fait que considérer (supposition, hypothèse
+vraisemblable, ou thèse affirmée par un autre auteur). » Nothing else
+changed.
+
+One run of `--repeat 3` (generation mode, frozen judge, same models and
+settings as the baseline), compared with both baseline runs:
+
+- Run: [`prompt_cmp_generation_gen-thesis-attribution_n12_20261012T140612Z`](../eval/results/prompt_cmp_generation_gen-thesis-attribution_n12_20261012T140612Z.md)
+- Report (`generation_variant_report --variant`): [`prompt_cmp_genvs_gen-thesis-attribution_20261012T151120Z`](../eval/results/prompt_cmp_genvs_gen-thesis-attribution_20261012T151120Z.md)
+
+| | baseline (run 1 / run 2) | variant |
+|---|---|---|
+| Gate | passed 36/36, 36/36 | passed 36/36 |
+| Faithfulness mean | 0.836 / 0.821 | 0.856 |
+| Unsupported claims (rows) | 53 / 58 | 31 |
+| Claims per answer | 7.22 / 7.44 | 6.00 |
+| Citations per answer, answers with a citation | 0.56, 14/36 / 0.58, 15/36 | 1.67, 21/36 |
+| Verdict flips | 1 / 1 | 0 |
+| Unevaluated claims | 0 | 1 (Q005, repeat 1) |
+
+The report warns that the higher score comes with fewer claims per answer.
+11 of 12 answers changed; the per-item deltas mix real changes and judge
+false flags (Q004's drop, 1.000 → 0.810, is « la vie ne se recompose pas…
+se laisse regarder simplement », verbatim in 1900_R_c170).
+
+#### The two targeted items: one fixed, one not
+
+- **Q010: not fixed.** The answer still attributes the « forces
+  extra-rationnelles » reading to Bergson and still omits the
+  interpretation he finds « plus vraisemblable ». Its score rises from
+  0.778 to 1.000 only because the answer is shorter: it lost the two
+  flagged claims, not the error. The question itself (« Quelle métaphore
+  géologique Bergson utilise-t-il… ? », gold `difficile`) frames the
+  metaphor as his, and the correct answer has to map it onto the
+  interpretation he prefers.
+- **Q011: fixed.** « La sagesse conseillerait une coopération » is gone;
+  the answer now says that « la tendance simple aurait peut-être mieux
+  fait de croître sans se dédoubler, mais que cela aurait empêché le
+  maximum de création », as 1932_2S_c225 does.
+
+#### Elsewhere: as many errors introduced as removed
+
+Removed: Q003's overstatement (now « liée à la fausse reconnaissance, mais
+… pas indissolublement »), Q009's distortion of the « virtualités », Q006's
+incoherent sentence.
+
+Introduced:
+
+- **Q002**: a question turned into an ungrammatical statement (« Il
+  souligne que pourquoi l'univers déroule-t-il… »), and the core thesis
+  (time an absolute, not an abstraction; the universe creating the new)
+  partly lost.
+- **Q009**: an asserted thesis hedged (« Bergson suggère que la conscience
+  est essentiellement libre », where 1907_EC_c316 says « elle est la
+  liberté même »), and a new misattributed thesis: « une continuité entre
+  les espèces », an objection the chunk raises against spiritualism,
+  presented as « cette thèse ».
+- **Q011**: « ces lois sont immanentes à la liberté », where c225 says
+  « N'abusons pas du mot "loi" dans un domaine qui est celui de la
+  liberté ».
+- **Q012**: the law of dichotomy assigned to the evolution of life and
+  double frenzy to social life, a split c225 doesn't make.
+
+The polarity review lists no inverted negation.
+
+#### Verdict
+
+**Rejected.** One of the two targeted errors is fixed, the main one (Q010)
+isn't, and the side effects cancel the gains. Our reading: mistral applies
+the abstract instruction as a general hedging style (« suggère », « peut
+être interprétée »), not by finding the source's own markers: it hedges a
+thesis Bergson asserts (Q009) and leaves alone the hypothesis he sets aside
+(Q010). Rewording the instruction is unlikely to change that much: at
+temperature 0 any change moves almost every answer, so with two targeted
+items and one run a fix can't be told apart from that perturbation (Q011's
+may be one). Naming the literal markers (« on pourrait conclure », « il
+semble que », « une autre interprétation … plus vraisemblable ») is the one
+rewording with a real chance, but it would be written from Q010 and tested
+on Q010.
+
+Side effect worth noting: answers cite almost three times as often
+(1.67 citations per answer, against 0.56), though the format varies (a list
+at the end, « (Citations : …) »), rarely inline. The committed
+`generation.answer` stays in production.
+
 ## Tests
 
 All fast (CI's `-m "not slow"` job):

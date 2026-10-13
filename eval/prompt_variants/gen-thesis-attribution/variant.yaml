@@ -1,0 +1,23 @@
+name: gen-thesis-attribution
+hypothesis: >-
+  Observed failure: generation baseline
+  (eval/results/prompt_cmp_genbase_default_20261012T103544Z.md, read by
+  hand in docs/prompts.md, "Generation baseline") presents as Bergson's
+  thesis a view he only considers. Q010 gives the « forces éruptives »
+  reading (1932_2S_c170: « De là on pourrait conclure que… ») as his
+  thesis and omits the interpretation he finds « plus vraisemblable »;
+  Q011 turns « Il semble que la sagesse conseillerait… Malheureusement… »
+  (1932_2S_c225) into his conclusion. The committed instructions never ask
+  to tell an asserted thesis from a considered one. Variant: one fixed
+  instruction asking for a clear distinction between a thesis Bergson
+  asserts and one he only considers (supposition, plausible hypothesis, or
+  another author's thesis); nothing else changed. Question: do the Q010
+  and Q011 answers state Bergson's own position, without a gate failure, a
+  faithfulness drop outside Q005/Q007 (judge false flags) or fewer claims
+  per answer? The frozen judge can't see this error: read the answers.
+based_on:
+  generation.answer: ea95d3d10495485dea95b1ca03e59b4c4fef124fc079325fd8ec1fc28348ff32
+status: rejected
+results:
+  - eval/results/prompt_cmp_generation_gen-thesis-attribution_n12_20261012T140612Z.json
+  - eval/results/prompt_cmp_genvs_gen-thesis-attribution_20261012T151120Z.json

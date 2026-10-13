@@ -6,7 +6,10 @@ templates. The rendered prompt always includes the
 mandatory citation and interpretive-framing instructions, then appends
 exactly one work-structure instruction and one convergence instruction
 (chosen by the corresponding signal), and optionally an epistemic-caution
-instruction when reranking confidence is low. This is the generation
+instruction when reranking confidence is low. A fixed example of a
+correctly cited answer, on an unrelated question, follows the instructions
+(promoted from the `gen-citation-example-v2` variant, docs/prompts.md):
+the local model follows a shown citation format, not a described one. This is the generation
 pipeline's own conditioning reaction to weak evidence, not the
 anti-hallucination guardrail — no refusal / "no reliable answer" handling
 here, that's Sprint 6 (docs/ROADMAP.md).

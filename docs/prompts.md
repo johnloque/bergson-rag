@@ -1174,8 +1174,9 @@ chunk, and only its role in the argument is wrong.
 **The committed `generation.answer` passes the gate in every repeat of both
 runs** (no fabricated title, no title/year mismatch, no failed generation),
 scores 0.836 / 0.821, and is near-deterministic (10 of 12 answers identical
-over 6 repeats, noise floor max 0.108). This is the baseline every
-generation variant is compared against (pass run 2 as the rerun).
+over 6 repeats, noise floor max 0.108). This was the baseline every
+generation variant was compared against (pass run 2 as the rerun), until
+`gen-citation-example-v2`'s promotion (whose two runs are now the baseline).
 
 Reading the claims qualifies the score. About 21 of the 25 distinct
 unsupported claims are judge false flags, concentrated on Q007 and Q005,
@@ -1419,7 +1420,7 @@ the same example without the attribution opener, plus sentences drawn from
 several excerpts, one citing two in separate brackets (aimed at Q005, Q007,
 Q011's grouped brackets).
 
-### Variant `gen-citation-example-v2` (`exp/prompt-gen-citation-inline`): tested, candidate for promotion
+### Variant `gen-citation-example-v2` (`exp/prompt-gen-citation-inline`): promoted
 
 `gen-citation-example` with its two failures addressed, run on the same
 branch at the owner's request. Same example, against the committed
@@ -1503,6 +1504,24 @@ faithfulness not lower beyond the noise, real errors roughly even. Not a
 fix for per-sentence citation: mistral takes « one citation at the end »
 from the example, not « one per sentence »; that would need attaching
 sentences to chunks in code, after generation.
+
+#### Promotion (`feat/promote-gen-citation-example-v2`)
+
+The variant's `generation/answer.md` is now `prompts/generation/answer.md`,
+version `v2` (description updated; the body is the variant's, byte for
+byte, so its hash, `c2b0419a…`, is the one both variant runs recorded).
+The golden snapshots gain the 4 lines of the example in each
+`generation.user.txt`, nothing else. Before/after numbers are the two
+tables above (baseline vs variant, two runs each).
+
+Consequence: the generation baseline (`exp/generation-baseline`) measured
+`generation.answer` v1. **The two variant runs above are the new
+baseline**: they measured this exact body (same hash), and comparability
+is checked per prompt on (hash, version), so a next variant differs from
+them in `generation.answer` only. Pass them as `--baseline RUN1.json
+RUN2.json`; their noise floor is the judge's alone (see "Determinism"
+above). A fresh run of the committed v2 would show as differing from them
+(version `v2` vs `v1`, same hash): only needed to re-measure the noise.
 
 ## Tests
 

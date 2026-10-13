@@ -1,7 +1,7 @@
 ---
 id: generation.answer
-version: v1
-description: 'Evidence-conditioned user prompt: fixed instructions, plus one instruction per evidence signal, then the excerpts and the question.'
+version: v2
+description: 'Evidence-conditioned user prompt: fixed instructions, plus one instruction per evidence signal, a correctly cited example answer, then the excerpts and the question.'
 variables:
 - query
 - chunks
@@ -41,6 +41,10 @@ CONSIGNES :
 {% if chunks | selectattr("judgment") | list %}
 - Certains extraits sont accompagnés d'un jugement de pertinence préalable (étiquette et justification) : prends-le en compte comme signal supplémentaire sur la pertinence du passage, sans t'y limiter.
 {% endif %}
+
+EXEMPLE DE RÉPONSE CORRECTEMENT CITÉE (sur une autre question et d'autres extraits : il montre seulement où et comment placer les citations ; n'en reprends ni le contenu ni les chunk_id) :
+Question : Pourquoi rions-nous d'un homme qui tombe dans la rue ?
+Réponse : Ce n'est pas le changement brusque d'attitude qui fait rire, mais ce qu'il a d'involontaire : la maladresse [1900_R_c12]. Les muscles ont continué d'accomplir le même mouvement quand les circonstances demandaient autre chose [1900_R_c12]. La victime d'une farce d'atelier, qui continue machinalement sur sa lancée, est comique pour la même raison [1900_R_c13]. La vie et la société exigent au contraire une attention constamment en éveil et une certaine élasticité du corps et de l'esprit [1900_R_c18]. Dans les deux cas, le rire vise donc une raideur mécanique là où l'on attendait cette souplesse [1900_R_c13] [1900_R_c18].
 
 EXTRAITS SOURCES :
 {% if is_multi_work %}

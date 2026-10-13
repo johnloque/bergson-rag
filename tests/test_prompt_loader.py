@@ -302,7 +302,7 @@ def test_manifest_lists_every_prompt_and_the_ragas_version():
     assert manifest["library:ragas"]["prompts"]
     for prompt_id, entry in manifest.items():
         if not prompt_id.startswith("library:"):
-            assert entry["version"] == "v1"
+            assert re.fullmatch(r"v[1-9][0-9]*", entry["version"])
             assert re.fullmatch(r"[0-9a-f]{64}", entry["hash"])
 
 

@@ -1275,6 +1275,83 @@ Side effect worth noting: answers cite almost three times as often
 at the end, « (Citations : …) »), rarely inline. The committed
 `generation.answer` stays in production.
 
+### Variant `gen-citation-inline` (`exp/prompt-gen-citation-inline`): rejected
+
+The citation lead from the generation baseline and `gen-thesis-attribution`.
+In the baseline, 21–22 of 36 answers cite nothing; Q001, Q002, Q009, Q010
+and Q011 never cite in any of 9 repeats; no citation is followed by more
+prose (all sit at the end of the answer). The formats vary: chunk_ids
+without brackets (Q008), a closing « (Citations : …) » block (Q007), a
+list of brackets followed by title and pages (Q012), one bracket grouping
+all 9 chunks (Q005). The variant replaces the first instruction (the
+abstract « chaque affirmation doit être rattachée à un passage précis »)
+with a concrete one: « Cite tes sources dans le corps du texte : chaque
+phrase qui rapporte le contenu d'un extrait se termine par le chunk_id de
+cet extrait entre crochets, juste avant le point (ex. : « La durée est
+invention [1907_EC_c5]. »). Cite même lorsqu'il n'y a qu'un seul extrait.
+Si une phrase s'appuie sur deux extraits, mets un crochet par extrait
+([1907_EC_c5] [1907_EC_c6]) ; ne regroupe jamais plusieurs extraits dans
+un même crochet. Le crochet ne contient que le chunk_id, sans titre ni
+page, et la réponse ne se termine par aucune liste de références. »
+Nothing else changed.
+
+One run of `--repeat 3`, same models and settings as the baseline:
+
+- Run: [`prompt_cmp_generation_gen-citation-inline_n12_20261013T073443Z`](../eval/results/prompt_cmp_generation_gen-citation-inline_n12_20261013T073443Z.md)
+- Report (`generation_variant_report --variant`): [`prompt_cmp_genvs_gen-citation-inline_20261013T084827Z`](../eval/results/prompt_cmp_genvs_gen-citation-inline_20261013T084827Z.md)
+
+| | baseline (run 1 / run 2) | variant |
+|---|---|---|
+| Gate | passed 36/36, 36/36 | passed 36/36 |
+| Faithfulness mean | 0.836 / 0.821 | 0.789 |
+| Unsupported claims (rows) | 53 / 58 | 57 |
+| Claims / characters per answer | 7.22 / 7.44, 885 | 7.53, 982 |
+| Citations per answer, answers with a citation | 0.56, 14/36 / 0.58, 15/36 | 0.61, 10/36 |
+| Citations followed by more prose | 0 / 0 | 10 (all Q005, lines of a closing list) |
+| Citations to a chunk not given | 0 | 0 |
+| Verdict flips | 1 / 1 | 2 |
+
+#### Citations: the opposite of the target
+
+Fewer answers cite (10/36 against 14–15), and no answer puts a bracket at
+the end of each sentence. Every clause is broken somewhere:
+
+- **Closing list with title and pages**: Q005 repeat 1 lists the 10 chunks
+  under « Sources : », each followed by work, section and pages.
+- **Parentheses instead of brackets**: Q006 writes `(1934_PM_c96)` in all
+  3 repeats, which `CITATION_PATTERN` doesn't count; the baseline cited it
+  in brackets.
+- **All brackets at the end**: Q008 puts `[1896_MM_c7] [1919_ES_c32]` after
+  the last sentence only.
+- **Citations lost** where the baseline had them: Q003, Q006, Q012.
+- Q002, Q009, Q010, Q011 still never cite. Only Q001 improves (one
+  citation, at the end).
+
+The citations that remain name the right chunk.
+
+#### Faithfulness
+
+Lower, with longer answers (7.53 claims per answer): the drop isn't a
+shorter answer's. Q001, Q002, Q006, Q012 drop outside the noise floor;
+Q005 and Q010 rise. Read by hand: Q006's drop (0.750 → 0.458) is mostly
+judge false flags (« no mention of Bergson »), but « Bergson reconstitue
+la pensée de Berkeley » takes the ironic « salade » that 1934_PM_c96 sets
+aside for his own method, a misattributed thesis. Q012 now states
+« Il semble que la sagesse conseillerait une coopération des deux
+tendances » as Bergson's conclusion: the baseline's Q011 error, moved to
+another item. Q010's 1.000 is worthless: the « forces extra-rationnelles…
+au-delà de la raison » misreading is still there. The polarity review lists
+no inverted negation.
+
+#### Verdict
+
+**Rejected.** Mistral 7B at temperature 0 doesn't follow a detailed format
+instruction, and the rewording unsettled the formats that worked (Q003,
+Q006, Q012). Two leads: show the format (a short, fully cited answer as an
+example), which the next variant on this branch tests; or attach each
+sentence to a chunk in code, after generation, which stops relying on the
+model. The committed `generation.answer` stays in production.
+
 ## Tests
 
 All fast (CI's `-m "not slow"` job):

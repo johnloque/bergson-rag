@@ -20,5 +20,7 @@ hypothesis: >-
   so the judge doesn't see them: count them and read them.
 based_on:
   generation.answer: ea95d3d10495485dea95b1ca03e59b4c4fef124fc079325fd8ec1fc28348ff32
-status: draft
-results: []
+status: rejected
+results:
+  - eval/results/prompt_cmp_generation_gen-citation-inline_n12_20261013T073443Z.json
+  - eval/results/prompt_cmp_genvs_gen-citation-inline_20261013T084827Z.json

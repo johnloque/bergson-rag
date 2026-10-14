@@ -384,7 +384,9 @@ sub-page, and the "Sources" sidebar sub-page (publisher per work extracted
 from the raw TEI corpus, `scripts/extract_source_metadata.py`; the two
 anthology works' individual texts expandable via a shared `Disclosure`
 component, extracted from `StepLine`'s pre-existing chevron interaction
-rather than a third bespoke copy). **Still pending**: the settings panel —
+rather than a third bespoke copy). Sources later gained citation codes per
+work and per anthology text, plus a legend (`feat/sources-citation-codes`).
+**Still pending**: the settings panel —
 "Réglages" is a content-free placeholder, deferred to `feat/settings-panel`.
 Full design,
 current status per item, and test coverage: [`docs/frontend.md`](frontend.md).

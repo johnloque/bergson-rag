@@ -76,7 +76,12 @@ def _raw_divs(xml_path: Path) -> list[tuple[str | None, str | None]]:
     return divs
 
 
-def extract_texts(work_id: str) -> list[dict]:
+def extract_texts(work_id: str, include_excluded: bool = False) -> list[dict]:
+    """One entry per qualifying `<div>`, in document order. A div with no
+    @xml:id or no unambiguous year is logged and dropped — unless
+    `include_excluded`, in which case it is kept with `year` None (still
+    logged): the Sources page lists such a text by title, without a year or
+    citation range (`scripts/extract_source_metadata.py`)."""
     xml_path = RAW_SRC_DIR / f"{work_id}.xml"
     meta = load_metadata(RAW_SRC_DIR / "metadata.csv")
     work = parse_work(xml_path, meta[work_id])
@@ -107,6 +112,8 @@ def extract_texts(work_id: str) -> list[dict]:
                 div_type,
                 section.label,
             )
+            if include_excluded:
+                entries.append(_entry(work_id, xml_id, div_type, section, None))
             continue
 
         year = extract_year_from_xml_id(xml_id)
@@ -117,21 +124,25 @@ def extract_texts(work_id: str) -> list[dict]:
                 work_id,
                 xml_id,
             )
+            if include_excluded:
+                entries.append(_entry(work_id, xml_id, div_type, section, None))
             continue
 
-        entries.append(
-            {
-                "work_id": work_id,
-                "xml_id": xml_id,
-                "div_type": div_type,
-                "title": section.label,
-                "year": year,
-                "paragraph_start": section.paragraph_ids[0],
-                "paragraph_end": section.paragraph_ids[-1],
-            }
-        )
+        entries.append(_entry(work_id, xml_id, div_type, section, year))
 
     return entries
+
+
+def _entry(work_id: str, xml_id: str | None, div_type: str, section, year: int | None) -> dict:
+    return {
+        "work_id": work_id,
+        "xml_id": xml_id,
+        "div_type": div_type,
+        "title": section.label,
+        "year": year,
+        "paragraph_start": section.paragraph_ids[0],
+        "paragraph_end": section.paragraph_ids[-1],
+    }
 
 
 def main() -> None:

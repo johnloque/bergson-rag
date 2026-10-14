@@ -1,7 +1,14 @@
 import { IconBook2 } from '@tabler/icons-react'
 import { Disclosure } from '../components/Disclosure'
 import { ANTHOLOGY_WORK_IDS, TEXTS, WORKS } from '../lib/works'
-import { KNOWN_SOURCE_DESC_MISMATCHES, PUBLISHERS } from '../lib/sourceMetadata'
+import {
+  type TextCitationRange,
+  ANTHOLOGY_TEXT_RANGES,
+  KNOWN_SOURCE_DESC_MISMATCHES,
+  PUBLISHERS,
+  WORK_CODES,
+  formatChunkRange,
+} from '../lib/sourceMetadata'
 
 const ZENODO_URL = 'https://zenodo.org/records/5075704#.YORkTjo6-Uk'
 
@@ -20,10 +27,40 @@ if (KNOWN_SOURCE_DESC_MISMATCHES.length > 0) {
   )
 }
 
+const LEGEND_EXAMPLE_WORK = WORKS.find((w) => w.id === '1907_EC')!
+
+// A citation code, `--ink-3` monospace — shared by work rows and text ranges.
+function Code({ children }: { children: string }) {
+  return (
+    <span className="font-mono text-[11px]" style={{ color: 'var(--ink-3)' }}>
+      {children}
+    </span>
+  )
+}
+
+// One individual text of an anthology: "L'effort intellectuel (1902) ·
+// 1919_ES_c153 à 1919_ES_c203". Year from lib/works.ts:TEXTS; a text excluded from
+// TEXTS has neither year nor range and renders as its bare title.
+function TextLine({ workId, title, chunkRange }: { workId: string } & TextCitationRange) {
+  const year = TEXTS[workId]?.find((t) => t.title === title)?.year
+  return (
+    <li>
+      {title}
+      {year !== undefined && ` (${year})`}
+      {chunkRange && (
+        <>
+          <span style={{ color: 'var(--ink-3)' }}> · </span>
+          <Code>{formatChunkRange(chunkRange)}</Code>
+        </>
+      )}
+    </li>
+  )
+}
+
 function SourceRow({ workId, isFirst }: { workId: string; isFirst: boolean }) {
   const work = WORKS.find((w) => w.id === workId)!
   const publisher = PUBLISHERS[workId]
-  const texts = TEXTS[workId]
+  const texts = ANTHOLOGY_TEXT_RANGES[workId]
   const isAnthology = ANTHOLOGY_WORK_IDS.includes(workId)
 
   const titleAndYear = (
@@ -34,6 +71,10 @@ function SourceRow({ workId, isFirst }: { workId: string; isFirst: boolean }) {
       <span className="text-[12px]" style={{ color: 'var(--ink-3)' }}>
         ({work.year})
       </span>
+      <span className="text-[12px]" style={{ color: 'var(--ink-3)' }}>
+        {' · '}
+      </span>
+      <Code>{workId}</Code>
     </span>
   )
 
@@ -51,17 +92,14 @@ function SourceRow({ workId, isFirst }: { workId: string; isFirst: boolean }) {
             chevronSize={13}
             rowClassName="flex items-center gap-1.5"
           >
-            <p
+            <ul
               className="mt-1.5 pl-[19px] text-[11.5px]"
               style={{ color: 'var(--ink-2)', lineHeight: 1.9 }}
             >
-              {texts.map((text, i) => (
-                <span key={text.title}>
-                  {i > 0 && ' · '}
-                  {text.title} ({text.year})
-                </span>
+              {texts.map((text) => (
+                <TextLine key={text.title} workId={workId} {...text} />
               ))}
-            </p>
+            </ul>
           </Disclosure>
         ) : (
           <div className="flex items-center gap-1.5">{titleAndYear}</div>
@@ -100,9 +138,20 @@ export function Sources() {
         Bergson de son vivant.
       </p>
 
+      <p
+        className="mx-auto mb-8 max-w-[560px] text-center text-[12px]"
+        style={{ color: 'var(--ink-3)', lineHeight: 1.6 }}
+        data-testid="citation-legend"
+      >
+        Dans les réponses, une référence comme <Code>{`${LEGEND_EXAMPLE_WORK.id}_c5`}</Code>{' '}
+        désigne l'ouvrage (<Code>{LEGEND_EXAMPLE_WORK.id}</Code> = {LEGEND_EXAMPLE_WORK.title}) puis
+        le numéro du passage dans cet ouvrage. Pour les deux recueils, la plage indiquée sous chaque
+        texte permet de retrouver de quel texte vient un passage.
+      </p>
+
       <div className="mx-auto mb-8 max-w-[560px]">
-        {WORKS.map((work, i) => (
-          <SourceRow key={work.id} workId={work.id} isFirst={i === 0} />
+        {WORK_CODES.map((workId, i) => (
+          <SourceRow key={workId} workId={workId} isFirst={i === 0} />
         ))}
       </div>
 

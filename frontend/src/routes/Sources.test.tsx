@@ -3,7 +3,13 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Sources } from './Sources'
 import { ANTHOLOGY_WORK_IDS, TEXTS, WORKS } from '../lib/works'
-import { KNOWN_SOURCE_DESC_MISMATCHES, PUBLISHERS } from '../lib/sourceMetadata'
+import {
+  ANTHOLOGY_TEXT_RANGES,
+  KNOWN_SOURCE_DESC_MISMATCHES,
+  PUBLISHERS,
+  WORK_CODES,
+  formatChunkRange,
+} from '../lib/sourceMetadata'
 
 // Design-mockup placeholder this feature must not ship as a hardcoded
 // stand-in for real extraction — it happens to land on the same string for
@@ -85,5 +91,82 @@ describe('Sources', () => {
     expect(link).toHaveAttribute('href', 'https://zenodo.org/records/5075704#.YORkTjo6-Uk')
     expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
+  })
+
+  describe('citation codes (feat/sources-citation-codes)', () => {
+    it('lists exactly the works in WORK_CODES, which match lib/works.ts', () => {
+      expect([...WORK_CODES]).toEqual(WORKS.map((w) => w.id))
+    })
+
+    it("shows each work's code next to its title and year", () => {
+      render(<Sources />)
+      for (const workId of WORK_CODES) {
+        const work = WORKS.find((w) => w.id === workId)!
+        const row = screen.getByText(work.title).parentElement!
+        expect(row).toHaveTextContent(`${work.title} (${work.year}) · ${workId}`)
+      }
+    })
+
+    it('shows a legend whose example names a real work code and title', () => {
+      render(<Sources />)
+      const legend = screen.getByTestId('citation-legend')
+      expect(legend).toHaveTextContent('1907_EC_c5')
+      expect(legend).toHaveTextContent("1907_EC = L'Évolution créatrice")
+    })
+
+    for (const workId of ANTHOLOGY_WORK_IDS) {
+      it(`shows each ${workId} text's citation range once expanded`, async () => {
+        const user = userEvent.setup()
+        render(<Sources />)
+        const work = WORKS.find((w) => w.id === workId)!
+        await user.click(screen.getByRole('button', { name: `Afficher les textes de ${work.title}` }))
+
+        const lines = screen.getAllByRole('listitem')
+        for (const { title, chunkRange } of ANTHOLOGY_TEXT_RANGES[workId]) {
+          const year = TEXTS[workId].find((t) => t.title === title)!.year
+          expect(chunkRange).not.toBeNull()
+          expect(lines.map((li) => li.textContent)).toContain(
+            `${title} (${year}) · ${formatChunkRange(chunkRange!)}`,
+          )
+        }
+      })
+    }
+
+    it('formats a range as both full chunk_ids joined by "à"', () => {
+      expect(formatChunkRange(['1919_ES_c153', '1919_ES_c203'])).toBe('1919_ES_c153 à 1919_ES_c203')
+      expect(formatChunkRange(['1919_ES_c7', '1919_ES_c7'])).toBe('1919_ES_c7')
+    })
+
+    it('renders a text excluded from TEXTS without a range or placeholder', async () => {
+      vi.resetModules()
+      vi.doMock('../lib/sourceMetadata', async (importOriginal) => {
+        const actual = await importOriginal<typeof import('../lib/sourceMetadata')>()
+        return {
+          ...actual,
+          ANTHOLOGY_TEXT_RANGES: {
+            ...actual.ANTHOLOGY_TEXT_RANGES,
+            '1919_ES': [
+              ...actual.ANTHOLOGY_TEXT_RANGES['1919_ES'],
+              { title: 'Un texte sans date', chunkRange: null },
+            ],
+          },
+        }
+      })
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { Sources: MockedSources } = await import('./Sources')
+      const user = userEvent.setup()
+      render(<MockedSources />)
+      await user.click(
+        screen.getByRole('button', { name: "Afficher les textes de L'énergie spirituelle" }),
+      )
+
+      const line = screen.getByText('Un texte sans date', { exact: false })
+      expect(line.textContent).toBe('Un texte sans date')
+      for (const li of screen.getAllByRole('listitem')) {
+        expect(li.textContent).not.toMatch(/·\s*$|\sà\s*$|null|undefined/)
+      }
+      warnSpy.mockRestore()
+      vi.doUnmock('../lib/sourceMetadata')
+    })
   })
 })

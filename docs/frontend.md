@@ -849,6 +849,9 @@ is the clickable button, not an icon next to static text) and is
 deliberately left as its own implementation rather than forced onto this
 component.
 
+Citation codes per work and per anthology text, plus a legend, were added
+later; see "Addendum — citation codes on the Sources page" below.
+
 Test coverage: `routes/Sources.test.tsx` — all 8 works render with the
 correct title/year (cross-checked against `lib/works.ts`) and a publisher
 sourced from `lib/sourceMetadata.ts`; both anthology rows expand/collapse
@@ -1125,6 +1128,80 @@ Test coverage: `AnswerCard.test.tsx` (sentence inside bold, list items,
 continuation indent, citation link inside a sentence, popover contents,
 keyboard/Escape, outside click, legend, collapse reason),
 `lib/segmentVerdicts.test.ts`, `lib/segmentPlugin.test.ts`.
+
+## Addendum — citation codes on the Sources page (`feat/sources-citation-codes`)
+
+Display-only: makes inline citations like `[1919_ES_c160]` readable from
+the Sources page. No identifier is renamed anywhere (gold dataset,
+calibration set, eval results, persisted turns and `prompts_used` depend
+on current ids); citation links keep their `chunk_id` text, and no tooltip
+is added.
+
+### Checked before building
+
+Against the real Qdrant index (`bergson_chunks`, 2164 points) and 799 real
+generated answers (`eval/results/*.json` + `data/app.db` generations):
+
+- Citations and indexed chunk_ids are `{work_id}_c{n}`: every index point
+  matches, and all citation tokens in real answers have that shape. No
+  answer cites a `{work_id}_p{n}` paragraph_id (the gold dataset's format).
+- Under the current 1 chunk = 1 paragraph chunking, `c{n}` = `p{n}` for
+  all 2164 chunks. The page still never assumes it: ranges go through the
+  paragraph_id → chunk_id mapping, and the legend says "passage", not
+  "paragraphe", so it stays true after a re-chunking.
+- For 1919_ES and 1934_PM, citations carry only the work code and `n`.
+  No `xml:id` (e.g. `ES_1902_EI`) appears in any answer, so none is shown.
+- Every text's chunk range is contiguous and no two overlap. No text is
+  currently excluded from `src/works.py`'s `TEXTS`. 1934_PM_c1–c3 is the
+  Avant-propos, front matter and not a text, so it gets no entry.
+
+### What the page shows
+
+- **Legend** under the intro, centered, two sentences: "Dans les réponses, une
+  référence comme 1907_EC_c5 désigne l'ouvrage (1907_EC = L'Évolution
+  créatrice) puis le numéro du passage dans cet ouvrage. Pour les deux
+  recueils, la plage indiquée sous chaque texte permet de retrouver de
+  quel texte vient un passage." The example's title is read from
+  `lib/works.ts`, not typed into the copy.
+- **Work rows**: "L'Évolution créatrice (1907) · 1907_EC", with the code in
+  `--ink-3` monospace. Rows iterate `WORK_CODES` from
+  `lib/sourceMetadata.ts`, not a second list in the component.
+- **Anthology texts**: one per line (previously a single ` · `-joined
+  run, which would have been ambiguous with ranges added), e.g.
+  "L'effort intellectuel (1902) · 1919_ES_c153 à 1919_ES_c203". Both
+  endpoints are written as full chunk_ids, exactly as citations show them
+  (`formatChunkRange`). A text excluded from
+  `TEXTS` (no extractable year) renders as its bare title, with no year,
+  range or separator.
+
+### Data
+
+`scripts/extract_source_metadata.py` now also prints `WORK_CODES` (the
+`work_id`s of `src/works.py:WORKS`, in order) and `ANTHOLOGY_TEXT_RANGES`.
+Both are hand-transcribed into `lib/sourceMetadata.ts`, the same convention
+as `PUBLISHERS`. Each range is that text's `TEXTS`
+`paragraph_start`/`paragraph_end` run through
+`src/paragraph_chunk_map.py:resolve_chunk_id` against
+`data/processed/chunks/`. It is not recomputed from XML. The script
+raises `MisleadingChunkRange` instead of printing a range when a text's
+chunks are not numbered contiguously or overlap a sibling's. Excluded divs
+come from `scripts/extract_text_metadata.py:extract_texts(...,
+include_excluded=True)`, which is new and keeps them with `year` None.
+**Re-run the script after any re-chunking**, because chunk numbers are not
+stable across chunkings. `test_text_ranges_match_fresh_computation` fails
+until the table is updated.
+
+Test coverage: `tests/test_source_metadata.py`. Fast, no data needed:
+`WORK_CODES` equals `WORKS`; each code is the key
+`resolve_paragraph_metadata` resolves; the range titles equal `TEXTS`;
+there are no malformed or empty ranges and no overlaps; and synthetic
+corpus/chunk fixtures cover the excluded-text, non-contiguous and overlap
+paths. Skipped without `data/processed/chunks`: every chunk_id prefix in
+the index has a code; both endpoints of every range exist and resolve to
+that text's title; the committed ranges match a fresh computation. The
+frontend side is in `routes/Sources.test.tsx`: code next to each work,
+legend, each text's range once expanded, `formatChunkRange`, and a mocked
+excluded text rendering without any range or placeholder.
 
 ## Known gap, not a finished feature: dark mode and full responsive layout
 

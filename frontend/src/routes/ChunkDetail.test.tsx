@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { ChunkDetail } from './ChunkDetail'
 import { ChunkRail } from '../components/ChunkRail'
+import { api } from '../api/client'
 import { formatCitation } from '../lib/citation'
 import { TurnUiProvider } from '../state/turnUi'
 
@@ -236,5 +237,37 @@ describe('ChunkDetail — master-detail', () => {
       expect(within(card).getByTestId('chunk-citation')).toHaveTextContent(formatCitation(NEIGHBOR_C3))
     }
     expect(screen.getAllByTestId('neighbor-rail')).toHaveLength(2)
+  })
+})
+
+// fix/empty-chunk-selection: ChunkRail's persistence sync used to fire 300ms
+// after mount whatever the rail held — on a direct visit to this route,
+// that's before GET /turns/{id} resolves, so `chunks` is still [] and it
+// overwrote the turn's persisted selection with empty lists.
+describe('ChunkDetail — persistence sync waits for a late GET /turns/{id}', () => {
+  it('never writes an empty selection, then persists the restored one', async () => {
+    stubFetch()
+    let resolveTurn!: (detail: unknown) => void
+    vi.spyOn(api, 'getTurn').mockImplementation(
+      () => new Promise((resolve) => (resolveTurn = resolve as (detail: unknown) => void)),
+    )
+    const setIncludedChunks = vi.spyOn(api, 'setIncludedChunks').mockResolvedValue({ chunk_ids: [] })
+    const setNeighborChunks = vi.spyOn(api, 'setNeighborChunks').mockResolvedValue({ chunk_ids: [] })
+    renderChunkDetail('1907_EC_c1')
+
+    // Well past the rail's 300ms debounce, turn still loading.
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    expect(setIncludedChunks).not.toHaveBeenCalled()
+    expect(setNeighborChunks).not.toHaveBeenCalled()
+
+    resolveTurn({ ...TURN_DETAIL, included_chunk_ids: ['1907_EC_c2'], neighbor_chunks: [] })
+
+    await waitFor(() =>
+      expect(setIncludedChunks).toHaveBeenCalledWith(1, { chunk_ids: ['1907_EC_c2'] }),
+    )
+    expect(setIncludedChunks).not.toHaveBeenCalledWith(1, { chunk_ids: [] })
+    expect(setIncludedChunks).toHaveBeenCalledTimes(1)
+    expect(setNeighborChunks).toHaveBeenCalledWith(1, { chunk_ids: [] })
+    expect(setNeighborChunks).toHaveBeenCalledTimes(1)
   })
 })

@@ -80,8 +80,16 @@ export function ChunkRail({ chunks, turnId, conversationId, onInspect }: ChunkRa
   // than surfaced, matching confidence-preview's own "advisory, not
   // blocking" failure handling; the rail stays fully usable either way,
   // just without the reload guarantee until the next successful sync.
+  //
+  // Only once the turn's data is actually loaded: before that, `chunks` is
+  // still [] (ChunkDetail's GET /turns/{id} not resolved yet) or initTurn
+  // hasn't seeded this turn (getIncluded's permissive `?? true` fallback
+  // then reports every chunk as included) — syncing either snapshot would
+  // overwrite the persisted selection with an empty or bogus one.
+  const turnLoaded =
+    turnId !== null && chunks.length > 0 && turnUi.isRetrieved(turnId, chunks[0].chunk_id)
   useEffect(() => {
-    if (turnId === null) return
+    if (turnId === null || !turnLoaded) return
     const handle = window.setTimeout(() => {
       void api
         .setIncludedChunks(turnId, { chunk_ids: includedChunks.map((c) => c.chunk_id) })
@@ -92,7 +100,7 @@ export function ChunkRail({ chunks, turnId, conversationId, onInspect }: ChunkRa
     }, CHUNK_RAIL_DEBOUNCE_MS)
     return () => window.clearTimeout(handle)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [turnId, includedKey])
+  }, [turnId, turnLoaded, includedKey])
 
   if (chunks.length === 0) return null
 

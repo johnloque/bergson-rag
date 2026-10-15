@@ -20,22 +20,22 @@ describe('GuideUtilisation', () => {
 
     const step3 = screen.getByTestId('guide-step-3')
     expect(step3).not.toHaveAttribute('data-side')
-    expect(step3).toHaveTextContent('3 · Analyser les passages récupérés')
+    expect(step3).toHaveTextContent('3 · Analyser les passages pertinents')
 
     const bullets = step3.querySelectorAll('li')
     expect(bullets).toHaveLength(4)
     expect(step3).toHaveTextContent('indicateur de confiance du retrieval')
-    expect(step3).toHaveTextContent('demandez une explication de sa pertinence')
+    expect(step3).toHaveTextContent('générez une explication automatique de sa pertinence')
     expect(step3).toHaveTextContent('paragraphes voisins dans le corpus')
-    expect(step3).toHaveTextContent('les 3 premiers sont sélectionnés par défaut')
+    expect(step3).toHaveTextContent('jusqu\'à 5 paragraphes')
   })
 
   it('renders the closing "À garder en tête" section below the step sequence with its three items', () => {
     render(<GuideUtilisation />)
 
     const closeout = screen.getByTestId('guide-closeout')
-    expect(closeout).toHaveTextContent('sans mémoire des')
-    expect(closeout).toHaveTextContent("n'est pas déterministe")
+    expect(closeout).toHaveTextContent('pas de mémoire des échanges précédents')
+    expect(closeout).toHaveTextContent("ne sera sans doute jamais rédigée deux fois")
     expect(closeout).toHaveTextContent('La performance varie selon les questions')
   })
 })

@@ -112,6 +112,6 @@ describe('FilterControl — mode toggle', () => {
 
   it('shows a hint that it only affects the two anthology works', async () => {
     await openPanel()
-    expect(screen.getByText(/L'énergie spirituelle.*La Pensée et le Mouvant/)).toBeInTheDocument()
+    expect(screen.getByText(/L'Énergie spirituelle.*La Pensée et le Mouvant/)).toBeInTheDocument()
   })
 })

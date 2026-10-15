@@ -107,5 +107,5 @@ def test_judge_context_puts_each_chunk_under_its_source_header():
 def test_judge_context_without_work_id_or_paragraphs_degrades_gracefully():
     assert _context_for_judge([_chunk("Passage.")]) == "Passage."
     assert _context_for_judge([_chunk("Passage.", "1919_ES")]) == (
-        "[1919_ES — L'énergie spirituelle (1919)]\nPassage."
+        "[1919_ES — L'Énergie spirituelle (1919)]\nPassage."
     )

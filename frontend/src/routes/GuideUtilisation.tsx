@@ -26,14 +26,14 @@ const STEPS: StepData[] = [
     side: 'left',
     icon: <IconMessage2 size={15} style={{ color: 'var(--red)' }} />,
     title: '1 · Poser une question',
-    body: 'Une phrase complète (« En quoi la métaphore de la boule de neige représente-t-elle la conception bergsonienne du changement ? ») ou de simples mots-clés (« religion statique dynamique »).',
+    body: 'Une phrase complète (« En quoi la métaphore de la boule de neige représente-t-elle la conception bergsonienne du changement ? ») ou de simples mots-clés pour explorer une thématique (« religion statique dynamique »).',
   },
   {
     n: 2,
     side: 'right',
     icon: <IconAdjustmentsHorizontal size={15} style={{ color: 'var(--red)' }} />,
     title: '2 · Filtrer les sources (optionnel)',
-    body: "Tout le corpus est considéré par défaut. Restreignez par œuvre, ou par période — mode « Publication », ou « Texte » pour dater individuellement les textes de L'Énergie spirituelle et de La Pensée et le Mouvant.",
+    body: "Par défaut, les paragraphes pertinents sont cherchés dans tous les ouvrages. Limitez la recherche à certains textes en les cochant explicitement ou en définissant une plage chronologique.",
   },
 ]
 
@@ -42,7 +42,7 @@ const STEP_4: StepData = {
   side: 'left',
   icon: <IconSparkles size={15} style={{ color: 'var(--red)' }} />,
   title: '4 · Générer la réponse',
-  body: "La synthèse porte sur les paragraphes inclus à l'étape 3. Elle reste voilée (mais lisible) jusqu'à son évaluation, qui repère les risques d'hallucination. Sélectionnez d'autres paragraphes et régénérez à volonté.",
+  body: "La réponse opère la synthèse des paragraphes inclus à l'étape 3 en fonction de votre question. Elle reste voilée (mais lisible) jusqu'à ce que vous génériez son évaluation (une fonctionnalité dédiée repère les risques d'hallucination). Régénérez d'autres réponses à volonté, en sélectionnant d'autres paragraphes ou en gardant les mêmes.",
 }
 
 function StepMarker({ icon }: { icon: ReactNode }) {
@@ -100,19 +100,18 @@ function Step3Card() {
       <div className="flex items-center gap-2">
         <IconEye size={18} style={{ color: 'var(--red)' }} />
         <p className="text-sm font-medium" style={{ color: 'var(--ink)' }}>
-          3 · Analyser les passages récupérés
+          3 · Analyser les passages pertinents
         </p>
       </div>
       <ul className="flex list-disc flex-col gap-1 pl-5 text-[12.5px] leading-[1.8]" style={{ color: 'var(--ink-2)' }}>
         <li>
-          Un rail affiche les paragraphes triés par score de similarité, avec un indicateur de
+          Les paragraphes pertinents sont ordonnés par score de similarité, avec un indicateur de
           confiance du retrieval.
         </li>
-        <li>Inspectez le contenu de chacun, demandez une explication de sa pertinence.</li>
-        <li>Naviguez vers les paragraphes voisins dans le corpus, inspectables de la même façon.</li>
+        <li>Inspectez le contenu de chaque paragraphe ; optionnellement, générez une explication automatique de sa pertinence par rapport à votre question.</li>
+        <li>Depuis un paragraphe pertinent, naviguez vers les paragraphes voisins dans le corpus, inspectables de la même façon.</li>
         <li>
-          Incluez/excluez jusqu'à 5 paragraphes (les 3 premiers sont sélectionnés par défaut) — un
-          second rail distingue les paragraphes voisins ajoutés de ceux issus de la recherche.
+          Incluez/excluez manuellement jusqu'à 5 paragraphes à prendre en compte dans la génération (étape 4).
         </li>
       </ul>
     </div>
@@ -153,22 +152,22 @@ export function GuideUtilisation() {
           <div className="flex flex-col items-center gap-2 text-center">
             <IconMessageOff size={16} style={{ color: 'var(--ink-3)' }} />
             <p className="text-[11.5px]" style={{ color: 'var(--ink-2)' }}>
-              Chaque question d'une conversation est traitée indépendamment, sans mémoire des
-              précédentes.
+              Chaque question est indépendante — pas de mémoire des échanges précédents.
             </p>
           </div>
           <div className="flex flex-col items-center gap-2 text-center">
             <IconDice5 size={16} style={{ color: 'var(--ink-3)' }} />
             <p className="text-[11.5px]" style={{ color: 'var(--ink-2)' }}>
-              Une réponse n'est pas déterministe, ni jamais parfaite — même sans hallucination
-              détectée.
+              Une réponse n'est jamais parfaite, même sans hallucination détectée, et ne sera sans
+              doute jamais rédigée deux fois de la même manière, y compris avec la même sélection de
+              paragraphes.
             </p>
           </div>
           <div className="flex flex-col items-center gap-2 text-center">
             <IconChartArrowsVertical size={16} style={{ color: 'var(--ink-3)' }} />
             <p className="text-[11.5px]" style={{ color: 'var(--ink-2)' }}>
-              La performance varie selon les questions — certaines réponses sont dispersées
-              au-delà de ce que couvre le retrieval.
+              La performance varie selon les questions — certaines questions font appel à des informations dispersées
+              au-delà de ce que le retrieval peut couvrir.
             </p>
           </div>
         </div>

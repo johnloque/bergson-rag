@@ -39,7 +39,7 @@ def _chunk(work_id: str, chunk_id: str, paragraph_ids: list[str]) -> RetrievedCh
 def test_chunk_inside_dated_text_shows_both_work_and_text_title_year():
     chunk = _chunk("1919_ES", "1919_ES_c1", ["1919_ES_p153", "1919_ES_p154"])
     header = _header(chunk)
-    assert "L'énergie spirituelle (1919)" in header
+    assert "L'Énergie spirituelle (1919)" in header
     assert "L'effort intellectuel" in header
     assert "(1902)" in header
     assert "1919_ES" in header

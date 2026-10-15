@@ -16,7 +16,7 @@ export const WORKS: WorkOption[] = [
   { id: '1896_MM', title: 'Matière et mémoire', year: 1896 },
   { id: '1900_R', title: 'Le rire', year: 1900 },
   { id: '1907_EC', title: "L'Évolution créatrice", year: 1907 },
-  { id: '1919_ES', title: "L'énergie spirituelle", year: 1919 },
+  { id: '1919_ES', title: "L'Énergie spirituelle", year: 1919 },
   { id: '1922_DS', title: 'Durée et simultanéité', year: 1922 },
   { id: '1932_2S', title: 'Les deux sources de la morale et de la religion', year: 1932 },
   { id: '1934_PM', title: 'La Pensée et le Mouvant', year: 1934 },

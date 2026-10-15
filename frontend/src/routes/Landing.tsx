@@ -34,7 +34,7 @@ export function Landing() {
       <AbstractGraphic />
       <Wordmark size={34} />
       <p className="max-w-xs text-center text-sm" style={{ color: 'var(--ink-2)' }}>
-        Explorez la pensée de Bergson, une source à la fois
+        Plongez dans la pensée de Bergson : obtenez des réponses ancrées dans ses textes.
       </p>
       {/* Goes to the Presentation screen, which lives inside the app shell
           (AppShell) alongside the sidebar — there's no separate "enter the

@@ -144,7 +144,7 @@ export function Conversation() {
 
       {hasPriorTurn && (
         <p className="-mt-4 text-xs" style={{ color: 'var(--ink-3)' }}>
-          Chaque question est traitée indépendamment, sans mémoire des échanges précédents.
+          Chaque question est indépendante — pas de mémoire des échanges précédents.
         </p>
       )}
     </div>

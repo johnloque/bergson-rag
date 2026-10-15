@@ -110,7 +110,7 @@ The popover holds three controls:
   the corpus's real year span, `src/lib/works.ts:WORK_YEAR_RANGE`, derived
   from `WORKS` rather than hardcoded.
 - **Mode toggle** ("Publication"/"Texte") with an inline hint noting it
-  only changes results for *L'énergie spirituelle* (1919) and *La Pensée
+  only changes results for *L'Énergie spirituelle* (1919) and *La Pensée
   et le Mouvant* (1934) — the two anthology works `date_range`'s `"text"`
   mode is meaningful for (`src/lib/works.ts:ANTHOLOGY_WORK_IDS`,
   `docs/backend_api.md`'s Sprint 11 write-up); toggling it has no effect

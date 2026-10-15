@@ -111,7 +111,7 @@ describe('Sources', () => {
       render(<Sources />)
       const legend = screen.getByTestId('citation-legend')
       expect(legend).toHaveTextContent('1907_EC_c5')
-      expect(legend).toHaveTextContent("1907_EC = L'Évolution créatrice")
+      expect(legend).toHaveTextContent("le cinquième paragraphe de L'Évolution créatrice")
     })
 
     for (const workId of ANTHOLOGY_WORK_IDS) {
@@ -157,7 +157,7 @@ describe('Sources', () => {
       const user = userEvent.setup()
       render(<MockedSources />)
       await user.click(
-        screen.getByRole('button', { name: "Afficher les textes de L'énergie spirituelle" }),
+        screen.getByRole('button', { name: "Afficher les textes de L'Énergie spirituelle" }),
       )
 
       const line = screen.getByText('Un texte sans date', { exact: false })

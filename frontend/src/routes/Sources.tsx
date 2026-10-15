@@ -134,8 +134,7 @@ export function Sources() {
         className="mx-auto mb-8 max-w-[480px] text-center text-[13px]"
         style={{ color: 'var(--ink-2)' }}
       >
-        Le corpus interrogé par Bergson-RAG couvre l'intégralité des grandes œuvres publiées par
-        Bergson de son vivant.
+        Le corpus interrogé par Bergson-RAG est constitué de six essais et deux recueils de textes (L'Énergie spirituelle et La Pensée et le Mouvant).
       </p>
 
       <p
@@ -143,10 +142,10 @@ export function Sources() {
         style={{ color: 'var(--ink-3)', lineHeight: 1.6 }}
         data-testid="citation-legend"
       >
-        Dans les réponses, une référence comme <Code>{`${LEGEND_EXAMPLE_WORK.id}_c5`}</Code>{' '}
-        désigne l'ouvrage (<Code>{LEGEND_EXAMPLE_WORK.id}</Code> = {LEGEND_EXAMPLE_WORK.title}) puis
-        le numéro du passage dans cet ouvrage. Pour les deux recueils, la plage indiquée sous chaque
-        texte permet de retrouver de quel texte vient un passage.
+        Les textes portent un identifiant unique qui permet de savoir de quel ouvrage provient une citation.
+        Exemple : <Code>{`${LEGEND_EXAMPLE_WORK.id}_c5`}</Code> désigne le cinquième paragraphe de {LEGEND_EXAMPLE_WORK.title}. Pour les deux
+        recueils, la plage indiquée sous chaque texte permet de retrouver de quel texte vient un
+        paragraphe.
       </p>
 
       <div className="mx-auto mb-8 max-w-[560px]">
@@ -162,7 +161,7 @@ export function Sources() {
         <IconBook2 size={20} className="mt-0.5 shrink-0" style={{ color: 'var(--ink-3)' }} />
         <p className="text-[12.5px]" style={{ color: 'var(--ink-2)', lineHeight: 1.6 }}>
           Les textes ont été collectés sur le site de l'UQAC (Université du Québec à Chicoutimi),
-          puis encodés en XML pour préserver la structure des ouvrages, dans le cadre d'un mémoire
+          puis encodés en XML pour préserver la structure des ouvrages. Ce travail préalable a été réalisé dans le cadre d'un mémoire
           de recherche en humanités numériques —{' '}
           <a
             href={ZENODO_URL}

@@ -33,8 +33,8 @@ export function Presentation() {
           borderBottom: '0.5px solid var(--hairline)',
         }}
       >
-        Elle ne remplace pas une lecture rapprochée de ses textes : elle en propose une approche
-        algorithmique complémentaire, capable de faire émerger des régularités à l'échelle de
+        Bergson-RAG ne remplace pas une lecture rapprochée des textes : il en propose une approche
+        interactive complémentaire, capable de faire émerger des motifs sémantiques à l'échelle de
         l'œuvre complète — une tâche impossible à réaliser à la main.
       </blockquote>
 
@@ -48,8 +48,8 @@ export function Presentation() {
             Le retrieval
           </p>
           <p className="text-xs" style={{ color: 'var(--ink-2)' }}>
-            Un moteur de recherche sémantique : il retrouve, pour votre question, les passages les
-            plus pertinents du corpus — les chunks — classés par score de similarité.
+            Un moteur de recherche sémantique : pour une question donnée, il retrouve les passages les
+            plus pertinents du corpus — les chunks — ordonnés par score de similarité décroissant.
           </p>
         </div>
         <div
@@ -61,7 +61,7 @@ export function Presentation() {
             La génération
           </p>
           <p className="text-xs" style={{ color: 'var(--ink-2)' }}>
-            Une synthèse en langage naturel des passages que vous avez retenus à l'étape
+            Une synthèse en français des passages que vous avez retenus à l'étape
             précédente.
           </p>
         </div>

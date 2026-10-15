@@ -31,7 +31,7 @@ describe('formatCitation — anthology work, text-level data resolved', () => {
     // within 1919_ES (src/works.py's TEXTS).
     const c = chunk({ work_id: '1919_ES', paragraph_ids: ['1919_ES_p160'] })
     expect(formatCitation(c)).toBe(
-      "L'énergie spirituelle (1919) — L'effort intellectuel (1902), paragraphe 160",
+      "L'Énergie spirituelle (1919) — L'effort intellectuel (1902), paragraphe 160",
     )
   })
 
@@ -39,7 +39,7 @@ describe('formatCitation — anthology work, text-level data resolved', () => {
     // Paragraph 10 falls inside "La conscience et la vie" (1911, range 1-27).
     const c = chunk({ work_id: '1919_ES', paragraph_ids: ['1919_ES_p10'] })
     expect(formatCitation(c)).toBe(
-      "L'énergie spirituelle (1919) — La conscience et la vie (1911), paragraphe 10",
+      "L'Énergie spirituelle (1919) — La conscience et la vie (1911), paragraphe 10",
     )
   })
 })
@@ -50,7 +50,7 @@ describe('formatCitation — anthology work, front-matter fallback (no covering 
     // i.e. back matter with no individually-dated text covering it.
     const c = chunk({ work_id: '1919_ES', paragraph_ids: ['1919_ES_p231'] })
     const result = formatCitation(c)
-    expect(result).toBe("L'énergie spirituelle (1919), paragraphe 231")
+    expect(result).toBe("L'Énergie spirituelle (1919), paragraphe 231")
     expect(result).not.toContain('—')
   })
 

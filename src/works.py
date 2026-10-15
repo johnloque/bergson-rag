@@ -23,7 +23,7 @@ need a data-driven lookup.
 
 ## Text-level dates (Sprint 11, `feat/backend-reference-data`)
 
-Two of the 8 works, 1919_ES ("L'énergie spirituelle") and 1934_PM ("La
+Two of the 8 works, 1919_ES ("L'Énergie spirituelle") and 1934_PM ("La
 Pensée et le Mouvant"), are anthologies: each is a collection of
 individually-dated articles/conferences/etc. (`<div>` `@type` one of
 art/conf/discours/essai/notice), first published years apart from each
@@ -74,7 +74,7 @@ WORKS: dict[str, WorkMetadata] = {
     "1896_MM": WorkMetadata("Matière et mémoire", (), 1896),
     "1900_R": WorkMetadata("Le rire", ("Essai sur la signification du comique",), 1900),
     "1907_EC": WorkMetadata("L'Évolution créatrice", (), 1907),
-    "1919_ES": WorkMetadata("L'énergie spirituelle", (), 1919),
+    "1919_ES": WorkMetadata("L'Énergie spirituelle", (), 1919),
     "1922_DS": WorkMetadata("Durée et simultanéité", ("A propos de la théorie d'Einstein",), 1922),
     "1932_2S": WorkMetadata("Les deux sources de la morale et de la religion", (), 1932),
     "1934_PM": WorkMetadata("La Pensée et le Mouvant", (), 1934),

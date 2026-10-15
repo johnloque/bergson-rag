@@ -48,7 +48,7 @@ For a chunk whose paragraphs fall inside one of 1919_ES's or 1934_PM's
 individually-dated texts (`src.works.TEXTS`), the chunk's evidence header also
 shows that text's own real title and year, alongside (not instead of) the
 work-level title/year above — e.g. a chunk from 1919_ES's "L'effort
-intellectuel" article shows both `L'énergie spirituelle (1919)` (the
+intellectuel" article shows both `L'Énergie spirituelle (1919)` (the
 anthology) and `L'effort intellectuel (1902)` (the actual text), since the
 anthology's own 1919 publication date is not the year the model should
 attribute a specific article's ideas to. Resolved via

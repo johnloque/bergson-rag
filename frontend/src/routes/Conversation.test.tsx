@@ -137,7 +137,7 @@ describe('Conversation — draft turn stays on one controller instance', () => {
   })
 })
 
-const NOTE_TEXT = 'Chaque question est traitée indépendamment, sans mémoire des échanges précédents.'
+const NOTE_TEXT = 'Chaque question est indépendante — pas de mémoire des échanges précédents.'
 
 // Sprint 8 addendum: no cross-turn context — the transparency note must
 // only appear once a prior turn already exists in the conversation, not on

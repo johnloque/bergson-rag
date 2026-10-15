@@ -117,14 +117,14 @@ describe('TurnCard — expandable "sources considered" detail', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Afficher les sources prises en compte' }))
     const list = screen.getByTestId('considered-sources')
-    expect(list).toHaveTextContent("L'énergie spirituelle (1919)")
+    expect(list).toHaveTextContent("L'Énergie spirituelle (1919)")
 
     // Collapsed by default — a clear chevron affordance next to the work's
     // title signals there's a narrowed set of texts to inspect, but nothing
     // is shown until it's clicked.
     expect(list).not.toHaveTextContent("L'effort intellectuel (1902)")
     const worksToggle = within(list).getByRole('button', {
-      name: "Afficher les textes datés pris en compte pour L'énergie spirituelle",
+      name: "Afficher les textes datés pris en compte pour L'Énergie spirituelle",
     })
     await user.click(worksToggle)
 
@@ -132,7 +132,7 @@ describe('TurnCard — expandable "sources considered" detail', () => {
 
     await user.click(
       within(list).getByRole('button', {
-        name: "Masquer les textes datés pris en compte pour L'énergie spirituelle",
+        name: "Masquer les textes datés pris en compte pour L'Énergie spirituelle",
       }),
     )
     expect(list).not.toHaveTextContent("L'effort intellectuel (1902)")

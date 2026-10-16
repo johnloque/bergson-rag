@@ -212,7 +212,7 @@ directly: it is a positive, specific attribution claim, not an omission.
 1919_ES and 1934_PM are anthologies of individually-dated texts, each with
 its own real title distinct from the anthology's (`src.works.TEXTS`) — e.g.
 "L'effort intellectuel" (1902) is a real article title within 1919_ES
-("L'énergie spirituelle", 1919), not a fabrication. Before this branch,
+("L'Énergie spirituelle", 1919), not a fabrication. Before this branch,
 `check_title_fabrication` had no notion of these: an answer correctly
 naming "L'effort intellectuel" as an "intitulé(e)"-cued title would have
 been flagged as fabricated, since only the 8 work-level titles were known.

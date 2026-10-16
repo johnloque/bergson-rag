@@ -62,7 +62,7 @@ describe('computeConsideredSources — "text" mode date_range', () => {
       date_range: { ...range, mode: 'publication' },
     })
     const textResult = computeConsideredSources({ work_ids: ['1919_ES'], date_range: { ...range, mode: 'text' } })
-    expect(publicationResult).toEqual([{ workId: '1919_ES', title: "L'énergie spirituelle", year: 1919 }])
+    expect(publicationResult).toEqual([{ workId: '1919_ES', title: "L'Énergie spirituelle", year: 1919 }])
     expect(textResult).toEqual([])
   })
 

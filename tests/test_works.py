@@ -39,7 +39,7 @@ def test_known_example_es_1902_ei():
     result = resolve_paragraph_metadata("1919_ES", "1919_ES_p153")
     assert result.text_title == "L'effort intellectuel"
     assert result.text_year == 1902
-    assert result.work_title == "L'énergie spirituelle"
+    assert result.work_title == "L'Énergie spirituelle"
     assert result.work_year == 1919
 
 

@@ -227,7 +227,7 @@ export function FilterControl({ state, onChange, disabled }: FilterControlProps)
               ))}
             </div>
             <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
-              Ne change les résultats que pour L'énergie spirituelle (1919) et La Pensée et le Mouvant
+              Ne change les résultats que pour L'Énergie spirituelle (1919) et La Pensée et le Mouvant
               (1934) — identique aux 6 autres œuvres.
             </p>
           </div>

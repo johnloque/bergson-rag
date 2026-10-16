@@ -503,13 +503,13 @@ regression coverage for the blind spot above).
 
 `fix/title-year-grounding`'s `src.works.WORKS` table resolves title/year at
 the *work* level only — fine for 6 of the corpus's 8 works, but 1919_ES
-("L'énergie spirituelle") and 1934_PM ("La Pensée et le Mouvant") are
+("L'Énergie spirituelle") and 1934_PM ("La Pensée et le Mouvant") are
 anthologies of individually-dated articles/conferences/etc., each with its
 own real title and first-publication year, sometimes decades apart from
 the anthology's own. Before this branch, that finer identity was invisible
 to both the prompt and Layer 1: a chunk from 1919_ES's real 1902 article
 "L'effort intellectuel" was shown to the model only as
-`1919_ES — L'énergie spirituelle (1919)`, and an answer correctly naming
+`1919_ES — L'Énergie spirituelle (1919)`, and an answer correctly naming
 that article's real title would have been flagged by
 `check_title_fabrication` as fabricated (it wasn't among the known 8 work
 titles), while `check_title_year_mismatch` had no way to validate its real
@@ -541,7 +541,7 @@ work-level-only lookup:
 - **`src/generation/prompt.py`**: `_format_chunk`'s per-chunk header now
   shows the text-level title/year alongside (not instead of) the
   work-level one when applicable, e.g. a chunk from "L'effort intellectuel"
-  shows both `L'énergie spirituelle (1919)` and `texte « L'effort
+  shows both `L'Énergie spirituelle (1919)` and `texte « L'effort
   intellectuel » (1902)` — the same root-cause mitigation
   `fix/title-year-grounding` applied at the work level, now precise enough
   that the model no longer needs to (mis)attribute a specific article's

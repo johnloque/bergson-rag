@@ -624,6 +624,13 @@ docstring for why: citation omission/presence isn't gated, but resolution
 correctness for citations that *are* present still feeds this new link
 behavior regardless).
 
+> `feat/citations-clickable-at-generation`: the frontend now checks each
+> citation against the generation's own `chunk_ids` directly instead of
+> reading `unknown_citations`, so links appear before (or without) an
+> evaluation. `/evaluate` passes `check_structure` that same
+> `generation.chunk_ids` set, so the linked/unlinked split is unchanged —
+> only its timing is (`docs/frontend.md`'s matching addendum).
+
 ## `fix/answer-verification`: closing the resume-tracking gap `/evaluate` never got, plus a DB-level idempotency guarantee
 
 Real-usage reports of two symptoms — verification status appearing lost

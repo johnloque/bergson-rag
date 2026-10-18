@@ -1214,3 +1214,40 @@ responsive utilities are in place; the layout has not been comprehensively
 designed or tested for mobile/tablet widths. Both remain explicitly open,
 to be picked up in a later, dedicated design pass rather than assumed
 complete from this sprint.
+
+## Addendum — citations clickable at generation, without brackets (`feat/citations-clickable-at-generation`)
+
+Revises three points of the clickable-inline-citations addendum above, on
+user report (a conversation whose citations "respected the expected format
+but weren't clickable"): the answer simply hadn't been evaluated yet, and
+since evaluation became manual many answers never are.
+
+- **Gating no longer waits for `/evaluate`.** `rehypeLinkCitations` now
+  takes the generation's own input chunk ids (`GenerationEntry.chunkIds`,
+  threaded `GenerationBlock` → `AnswerCard`'s `chunkIds` prop) and links a
+  token iff it is in that set. This is the same set `/evaluate` hands
+  `check_structure` (`generation.chunk_ids`, `src/api/main.py`), so a
+  linked token is exactly one Layer 1 will not list in
+  `unknown_citations` — the result is identical to the previous gating,
+  just available as soon as the answer is. Without chunk ids (a
+  reattached in-flight generation, whose entry starts with `chunkIds: []`
+  until the turn is reloaded) nothing is linked.
+- **Brackets dropped.** A bracket with at least one known token renders as
+  just its pill(s): `[`/`]` and the `,`/`;` separators were visual noise
+  next to the pill. Multi-id pills are separated by a plain space so the
+  line can wrap between them. An unknown token in a mixed bracket keeps its
+  own brackets as plain text (`[9999_XX_c1]`), matching how `CitationFlag`
+  names it; a bracket with no known token (`[sic]`, an unknown citation
+  alone) is left exactly as written. Punctuation written flush against
+  the bracket — the model's frequent `([1907_EC_c16]).` — is wrapped with
+  its neighboring pill in a `whitespace-nowrap` span (`(` with the first
+  pill, `).`/`),` with the last), so a line never ends on a lone `(` or
+  starts on a lone `)`; the glue stops at whitespace and at a following
+  `[`.
+- **Blue pill instead of red.** Red is the "unsupported claim" color of
+  `feat/segment-claims`'s sentence coloring, so a red citation pill read as
+  a warning. Citation pills now use `--blue`/`--blue-bg`, the palette's
+  link/focus color, distinct from all three segment verdict colors
+  (green/red/gray). `--ink-3` (the chunk cards' "Paragraphe n" color) was
+  considered but is too low-contrast for small text on a tinted pill, and
+  its gray would blend with the "non vérifié" segment background.

@@ -410,10 +410,11 @@ describe('AnswerCard manual evaluation trigger', () => {
 })
 
 // `feat/clickable-citations`: a `[chunk_id]` inline citation becomes a
-// clickable link to Screen 4 (routes/ChunkDetail.tsx), gated strictly on
-// whether Layer 1 (src/generation/guardrail.py's check_structure) confirmed
-// that chunk_id is present in the generation's own input chunk set — reused
-// directly via `evaluation.structural.unknown_citations`, not recomputed.
+// clickable link to Screen 4 (routes/ChunkDetail.tsx), gated on whether
+// that chunk_id is one of the generation's own input chunk ids — the same
+// set Layer 1 (src/generation/guardrail.py's check_structure) checks it
+// against. Since `feat/citations-clickable-at-generation` this no longer
+// waits for an evaluation, and the pill replaces the brackets.
 describe('AnswerCard citation links', () => {
   function evaluationWith(
     opts: {
@@ -440,7 +441,11 @@ describe('AnswerCard citation links', () => {
   // Renders AnswerCard at /c/1, with Screen 4's real route target next to
   // it, so a click can be asserted to actually land on the right chunk —
   // not just that an <a> with a plausible-looking href exists.
-  function renderAtConversation(answer: string, evaluation: EvaluateResponse | null) {
+  function renderAtConversation(
+    answer: string,
+    evaluation: EvaluateResponse | null,
+    chunkIds: string[] | null = ['1907_EC_c5', '1888_EDIC_c1'],
+  ) {
     function ChunkDetailStub() {
       const params = useParams()
       return <div data-testid="screen4">{`${params.conversationId}/${params.turnId}/${params.chunkId}`}</div>
@@ -454,11 +459,12 @@ describe('AnswerCard citation links', () => {
               <AnswerCard
                 answer={answer}
                 evaluation={evaluation}
-                evaluationStatus="done"
+                evaluationStatus={evaluation ? 'done' : 'idle'}
                 revealed={true}
                 onReveal={() => {}}
                 conversationId={1}
                 turnId={2}
+                chunkIds={chunkIds}
               />
             }
           />
@@ -468,7 +474,7 @@ describe('AnswerCard citation links', () => {
     )
   }
 
-  it('renders a citation confirmed present in the input chunk set as a clickable link, text unchanged', () => {
+  it('renders a citation present in the generation chunk set as a link, brackets dropped', () => {
     renderAtConversation('Une affirmation [1907_EC_c5].', evaluationWith())
     const link = screen.getByTestId('citation-link')
     expect(link.tagName).toBe('A')
@@ -476,20 +482,27 @@ describe('AnswerCard citation links', () => {
     // written — never reformatted to the work+year+paragraph citation
     // format used elsewhere (lib/citation.ts's formatCitation).
     expect(link.textContent).toBe('1907_EC_c5')
-    // The surrounding brackets stay as plain text, next to the link, so the
-    // paragraph still reads "[1907_EC_c5]" overall.
+    expect(screen.getByTestId('answer-content').textContent).toBe('Une affirmation 1907_EC_c5.')
+  })
+
+  it('links citations right after generation, before any evaluation', () => {
+    renderAtConversation('Une affirmation [1907_EC_c5].', null)
+    expect(screen.getByTestId('citation-link').textContent).toBe('1907_EC_c5')
+  })
+
+  it('does not link anything when the generation chunk ids are unknown', () => {
+    renderAtConversation('Une affirmation [1907_EC_c5].', null, null)
+    expect(screen.queryByTestId('citation-link')).not.toBeInTheDocument()
     expect(screen.getByTestId('answer-content').textContent).toBe('Une affirmation [1907_EC_c5].')
   })
 
-  // Restyled from plain red/underlined text to a red pill on direct
-  // request (docs/frontend.md's "Styling, revised after initial review") —
-  // reuses the same rounded-full `--red-bg`/`--red` pill convention as
-  // StatusPill.tsx/RelevancePill.tsx elsewhere in this app.
-  it('styles the link as a red pill, not plain underlined text', () => {
+  // Blue rather than red: red marks unsupported claims
+  // (SEGMENT_STYLES.unsupported), so a red pill read as a warning.
+  it('styles the link as a blue pill, not plain underlined text', () => {
     renderAtConversation('Une affirmation [1907_EC_c5].', evaluationWith())
     const link = screen.getByTestId('citation-link')
     expect(link.className).toContain('rounded-full')
-    expect(link).toHaveStyle({ background: 'var(--red-bg)', color: 'var(--red)' })
+    expect(link).toHaveStyle({ background: 'var(--blue-bg)', color: 'var(--blue)' })
   })
 
   it('navigates to Screen 4 with the correct chunk focused on click', async () => {
@@ -499,28 +512,22 @@ describe('AnswerCard citation links', () => {
     expect(await screen.findByTestId('screen4')).toHaveTextContent('1/2/1907_EC_c5')
   })
 
-  it('does not link a citation Layer 1 flagged as unknown — existing flag treatment only', () => {
-    renderAtConversation('Une affirmation [1907_EC_c5].', evaluationWith({ unknownCitations: ['1907_EC_c5'] }))
+  it('does not link a citation outside the generation chunk set — existing flag treatment only', () => {
+    renderAtConversation('Une affirmation [9999_XX_c1].', evaluationWith({ unknownCitations: ['9999_XX_c1'] }))
     expect(screen.queryByTestId('citation-link')).not.toBeInTheDocument()
-    expect(screen.getByTestId('answer-content').textContent).toBe('Une affirmation [1907_EC_c5].')
+    expect(screen.getByTestId('answer-content').textContent).toBe('Une affirmation [9999_XX_c1].')
     expect(
-      screen.getByText('La citation [1907_EC_c5] ne correspond à aucun passage fourni.'),
+      screen.getByText('La citation [9999_XX_c1] ne correspond à aucun passage fourni.'),
     ).toBeInTheDocument()
-  })
-
-  it('does not link anything when there is no evaluation yet (no confirmed exists-in-set result)', () => {
-    renderAtConversation('Une affirmation [1907_EC_c5].', null)
-    expect(screen.queryByTestId('citation-link')).not.toBeInTheDocument()
   })
 
   it('renders correctly as both bold and a link when the citation sits inside a bolded phrase', () => {
     renderAtConversation('**Une affirmation [1907_EC_c5]** notable.', evaluationWith())
-    const { container } = { container: screen.getByTestId('answer-content') }
-    const strong = container.querySelector('strong')
+    const strong = screen.getByTestId('answer-content').querySelector('strong')
     expect(strong).not.toBeNull()
     const link = strong!.querySelector('a')
     expect(link?.textContent).toBe('1907_EC_c5')
-    expect(strong!.textContent).toBe('Une affirmation [1907_EC_c5]')
+    expect(strong!.textContent).toBe('Une affirmation 1907_EC_c5')
   })
 
   it('renders the citation link inside a colored sentence, and clicking it navigates without opening the popover', async () => {
@@ -539,11 +546,22 @@ describe('AnswerCard citation links', () => {
       .find(Boolean)
     expect(link!.textContent).toBe('1907_EC_c5')
     // Sentence and link compose: the sentence's runs still cover the whole
-    // text (bracket included), the link nests inside one of them.
-    expect(Array.from(runs, (r) => r.textContent).join('')).toBe(answer)
+    // text (minus the dropped brackets), the link nests inside one of them.
+    expect(Array.from(runs, (r) => r.textContent).join('')).toBe(
+      'Le texte affirme une chose surprenante 1907_EC_c5, à vérifier.',
+    )
     await user.click(link!)
     expect(screen.queryByTestId('segment-popover')).not.toBeInTheDocument()
     expect(await screen.findByTestId('screen4')).toHaveTextContent('1/2/1907_EC_c5')
+  })
+
+  it('renders a parenthesized citation with its parentheses unbreakably attached to the pill', () => {
+    renderAtConversation('Un registre ([1907_EC_c5]). Suite.', null)
+    const link = screen.getByTestId('citation-link')
+    const glued = link.parentElement!
+    expect(glued.tagName).toBe('SPAN')
+    expect(glued.className).toBe('whitespace-nowrap')
+    expect(glued.textContent).toBe('(1907_EC_c5).')
   })
 
   it('links each known chunk_id independently within a multi-id bracket', () => {
@@ -555,7 +573,7 @@ describe('AnswerCard citation links', () => {
     expect(links).toHaveLength(1)
     expect(links[0].textContent).toBe('1888_EDIC_c1')
     expect(screen.getByTestId('answer-content').textContent).toBe(
-      'Plusieurs passages convergent [1888_EDIC_c1, 1934_PM_c23].',
+      'Plusieurs passages convergent 1888_EDIC_c1 [1934_PM_c23].',
     )
   })
 })

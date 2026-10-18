@@ -31,15 +31,17 @@ import { StatusPill } from './StatusPill'
 // tags this component's own rehype plugins introduce
 // (lib/segmentPlugin.ts, lib/citationLinkPlugin.ts) — a `span` carrying
 // `data-segment-id` is a checked answer sentence, rendered by `SegmentSpan`
-// below; `a` is styled as a small red pill (on user request, `feat/clickable-citations`: a plain
-// red/underlined link read as too subtle inline) — same rounded-full
-// `--red`/`--red-bg` pill convention as `StatusPill.tsx`/`RelevancePill.tsx`
-// elsewhere in this app, reused rather than a third, bespoke pill style —
-// and rendered via `Link` (`react-router-dom`) for client-side navigation
-// rather than a full page reload; `rehypeLinkCitations` already bakes the
-// full in-app path into `href`, so this just forwards it as `to`. The
-// surrounding `[`/`]`/separators stay plain text either way (unchanged, see
-// lib/citationLinkPlugin.ts) — only the chunk_id token itself is the pill.
+// below; `a` is a citation, styled as a small pill (`feat/clickable-citations`:
+// a plain underlined link read as too subtle inline) — same rounded-full
+// `--X`/`--X-bg` pill convention as `StatusPill.tsx`/`RelevancePill.tsx`.
+// Blue, not red (`feat/citations-clickable-at-generation`): red marks
+// unsupported claims (`SEGMENT_STYLES.unsupported`), so a red citation pill
+// read as a warning; blue is the palette's link/focus color and clashes
+// with none of the segment verdict colors. Rendered via `Link`
+// (`react-router-dom`) for client-side navigation rather than a full page
+// reload; `rehypeLinkCitations` already bakes the full in-app path into
+// `href`, so this just forwards it as `to`. The pill replaces the
+// surrounding `[`/`]` (lib/citationLinkPlugin.ts).
 const markdownComponents = {
   p: ({ children }: { children?: ReactNode }) => <p className="mb-2 last:mb-0">{children}</p>,
   ul: ({ children }: { children?: ReactNode }) => (
@@ -54,7 +56,7 @@ const markdownComponents = {
       to={href ?? '#'}
       data-testid="citation-link"
       className="mx-0.5 inline-flex items-center rounded-full px-2 py-0.5 align-middle text-xs font-medium no-underline"
-      style={{ background: 'var(--red-bg)', color: 'var(--red)' }}
+      style={{ background: 'var(--blue-bg)', color: 'var(--blue)' }}
     >
       {children}
     </Link>
@@ -164,6 +166,10 @@ interface AnswerCardProps {
   // elsewhere in this feature (components/ChunkRail.tsx).
   conversationId?: number | null
   turnId?: number | null
+  // The generation's own input chunk ids — a citation is linked only when
+  // it names one of them (lib/citationLinkPlugin.ts). Absent disables
+  // linkification, same as a null conversationId/turnId.
+  chunkIds?: readonly string[] | null
 }
 
 export function AnswerCard({
@@ -175,6 +181,7 @@ export function AnswerCard({
   onEvaluate,
   conversationId = null,
   turnId = null,
+  chunkIds = null,
 }: AnswerCardProps) {
   const expanded = revealed || evaluation?.should_auto_expand === true
   const claims = useMemo(() => evaluation?.faithfulness.claims ?? [], [evaluation])
@@ -278,20 +285,20 @@ export function AnswerCard({
   // runs over whatever text leaves remain, including inside the sentence
   // spans — this is what makes a citation bracket inside a checked sentence
   // still become a link nested inside it rather than one transform
-  // clobbering the other (explicit regression test, AnswerCard.test.tsx). Citation links are gated on `evaluation` being
-  // present at all (no evaluation yet = no confirmed exists-in-input-set
-  // result to gate on, so nothing is linked) and on `conversationId`/
-  // `turnId` being known (needed to build Screen 4's route).
+  // clobbering the other (explicit regression test, AnswerCard.test.tsx).
+  // Citation links don't wait for an evaluation: they're checked against
+  // the generation's own chunk ids, the same set Layer 1 would check them
+  // against. They only need `conversationId`/`turnId` (Screen 4's route).
   const rehypePlugins: PluggableList = []
   if (hasColoredSegments) {
     rehypePlugins.push([rehypeSegments, answer, evaluation!.faithfulness.segments, statusBySegment])
   }
-  if (evaluation && conversationId !== null && turnId !== null) {
+  if (chunkIds && conversationId !== null && turnId !== null) {
     const targetConversationId = conversationId
     const targetTurnId = turnId
     rehypePlugins.push([
       rehypeLinkCitations,
-      evaluation.structural.unknown_citations,
+      chunkIds,
       (chunkId: string) => `/c/${targetConversationId}/turn/${targetTurnId}/chunk/${chunkId}`,
     ])
   }

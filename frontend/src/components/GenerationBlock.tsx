@@ -84,6 +84,7 @@ export function GenerationBlock({
             onEvaluate={onEvaluate}
             conversationId={conversationId}
             turnId={turnId}
+            chunkIds={entry.chunkIds}
           />
 
           {entry.evaluationStatus !== 'idle' && (

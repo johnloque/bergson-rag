@@ -19,12 +19,12 @@ branch in Sprint 6) — this module has no dict-shaped entry point itself, and
 no persistence: durable storage of judgments across sessions remains a
 separate, still-deferred Sprint 7 concern (docs/ROADMAP.md), not built here.
 
-Same default judge as `generate_evaluation`'s faithfulness check
-(`DEFAULT_JUDGE_MODEL`, `src/generation/faithfulness.py` — local 7B via
-Ollama by default): the Sprint 6 judge calibration found the hosted Mistral
-judge rates confirmed hallucinations as faithful, so the local judge is
-preferred wherever a judge-shaped decision is made in this project. No
-established reason to pick a different judge for this adjacent signal.
+Its own default judge, `CHUNK_JUDGE_MODEL` (local mistral-nemo 12B via
+Ollama), not the faithfulness check's `DEFAULT_JUDGE_MODEL` (local mistral
+7B, frozen in eval/frozen_judge.json): the 7B judge answered "partiellement
+pertinent" for nearly every chunk, while nemo uses the whole label scale.
+A pragmatic baseline for future experiments, not a validated judge — see
+docs/judge_chunk.md, "Judge model choice".
 
 Not a RAGAS metric: `check_faithfulness` (src/generation/faithfulness.py)
 already covers claim-vs-evidence entailment via `ragas.metrics.Faithfulness`.
@@ -59,7 +59,7 @@ import litellm
 from litellm import ModelResponse
 
 from src.generation.chunk_judgment import ChunkJudgment, ChunkJudgmentLabel
-from src.generation.faithfulness import DEFAULT_JUDGE_MODEL, JUDGE_NUM_CTX, JUDGE_TEMPERATURE
+from src.generation.faithfulness import JUDGE_NUM_CTX, JUDGE_TEMPERATURE
 from src.generation.signals import GenerationChunk
 from src.prompts.loader import load_prompt, prompts_used
 
@@ -68,6 +68,10 @@ from src.prompts.loader import load_prompt, prompts_used
 # JUDGE_NUM_CTX is an Ollama-specific request param, invalid on a hosted
 # provider like the Mistral API fallback.
 _OLLAMA_PROVIDERS = ("ollama", "ollama_chat")
+
+# Deliberately not DEFAULT_JUDGE_MODEL: that one is the frozen faithfulness
+# judge, and changing it would invalidate the generation baseline.
+CHUNK_JUDGE_MODEL = "ollama_chat/mistral-nemo"
 
 _VALID_LABELS: frozenset[str] = frozenset({"pertinent", "partiellement pertinent", "non pertinent"})
 
@@ -102,7 +106,7 @@ def _parse_response(content: str) -> ChunkJudgment:
 def judge_chunk(
     query: str,
     chunk: GenerationChunk,
-    model: str = DEFAULT_JUDGE_MODEL,
+    model: str = CHUNK_JUDGE_MODEL,
 ) -> ChunkJudgment:
     """One relevance judgment for one (query, chunk) pair — see the module
     docstring for why this is singular rather than the earlier, unbuilt

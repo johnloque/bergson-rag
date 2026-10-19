@@ -28,8 +28,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from src.generation.chunk_judge import CHUNK_JUDGE_MODEL
 from src.generation.chunk_judgment import ChunkJudgment
-from src.generation.faithfulness import DEFAULT_JUDGE_MODEL
 from src.generation.generate import DEFAULT_MODEL
 from src.generation.signals import RetrievalConfidenceTier
 
@@ -314,7 +314,7 @@ class JudgeChunkRequest(BaseModel):
     query: str = Field(min_length=1)
     chunk: ChunkInput
     turn_id: int
-    model: str = DEFAULT_JUDGE_MODEL
+    model: str = CHUNK_JUDGE_MODEL
 
 
 class JudgeChunkResponse(BaseModel):

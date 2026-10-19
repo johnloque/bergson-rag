@@ -36,6 +36,7 @@ from src.api.db import get_session
 from src.api.main import app
 from src.api.models import Conversation, Evaluation, Generation, RetrievedChunkRow, Turn
 from src.api.schemas import ChunkInput
+from src.generation.chunk_judge import CHUNK_JUDGE_MODEL
 from src.generation.faithfulness import DEFAULT_JUDGE_MODEL
 from src.generation.signals import retrieval_confidence_tier
 from src.indexing.qdrant_index import COLLECTION_NAME, point_id_for
@@ -90,14 +91,22 @@ def _collection_populated() -> bool:
         return False
 
 
-def _model_reachable(model: str) -> bool:
+def _model_reachable(model: str, timeout: float = 5) -> bool:
     try:
         litellm.completion(
-            model=model, messages=[{"role": "user", "content": "ping"}], max_tokens=1, timeout=5
+            model=model,
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=1,
+            timeout=timeout,
         )
         return True
     except Exception:
         return False
+
+
+# On a 16 GB machine Ollama can't keep mistral and mistral-nemo loaded
+# together: every switch reloads nemo, which takes longer than 5 s cold.
+CHUNK_JUDGE_PING_TIMEOUT = 60
 
 
 _qdrant_skip = pytest.mark.skipif(
@@ -106,10 +115,15 @@ _qdrant_skip = pytest.mark.skipif(
     "and scripts/build_index.py first",
 )
 
+# These tests call /evaluate (faithfulness judge) and/or /judge-chunk (chunk
+# judge), which default to two different models.
 _judge_skip = pytest.mark.skipif(
-    not _model_reachable(DEFAULT_JUDGE_MODEL),
-    reason=f"no reachable judge model ({DEFAULT_JUDGE_MODEL}) — start Ollama with the "
-    "default model pulled, or set MISTRAL_API_KEY / BERGSON_LLM_FALLBACK_MODEL",
+    not (
+        _model_reachable(DEFAULT_JUDGE_MODEL)
+        and _model_reachable(CHUNK_JUDGE_MODEL, timeout=CHUNK_JUDGE_PING_TIMEOUT)
+    ),
+    reason=f"no reachable judge models ({DEFAULT_JUDGE_MODEL}, {CHUNK_JUDGE_MODEL}) — start "
+    "Ollama with both models pulled, or set MISTRAL_API_KEY / BERGSON_LLM_FALLBACK_MODEL",
 )
 
 

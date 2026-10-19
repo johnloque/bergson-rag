@@ -49,32 +49,23 @@ Q007_QUERY = (
 )
 Q007_CHUNK_IDS = ("1888_EDIC_c1", "1934_PM_c45", "1934_PM_c68")
 
-# Read from the real, indexed chunk text (1888_EDIC_c1's full paragraph):
-# it argues that spatialized language installs a "confusion" between duration
-# and extension, succession and simultaneity, quality and quantity, at the
-# root of the free-will problem specifically — these terms are concrete to
-# that argument and absent from Q007_QUERY itself (which only says
-# "langage"/"philosophie"/"problèmes"). Verified empirically (this branch)
-# that judge_chunk(Q007_QUERY, this chunk) reliably (2/2 runs at
-# temperature=0) returns "pertinent" against the local 7B judge — of Q007's
-# three gold chunks, the other two (1934_PM_c45, 1934_PM_c68) were found to
-# reliably score "partiellement pertinent" instead against this same judge:
-# a real judge-leniency/strictness calibration finding (this local judge
-# rarely commits to the extremes of its own label scale), not a bug in
-# judge_chunk, so those two are not used as the "clearly pertinent" fixture
-# here.
-Q007_CHUNK_ID = "1888_EDIC_c1"
-Q007_CHUNK_DISTINCTIVE_TERMS = (
-    "liberté",
-    "durée",
-    "étendue",
-    "succession",
-    "simultanéité",
-    "qualité",
-    "quantité",
-    "juxtapos",
-    "discontinuité",
+# Q010 (eval/gold_dataset.csv) — its single gold chunk, also the top-1 of the
+# real /retrieve pipeline for Q010_QUERY (hybrid + rerank, default top_k).
+# Chosen as the "clearly pertinent" fixture because the answer is stated
+# verbatim in the chunk: "les phénomènes lents et réguliers de sédimentation
+# [...] sont conditionnés par d'invisibles forces éruptives qui, en soulevant
+# [...] l'écorce terrestre, impriment sa direction à l'activité
+# sédimentaire". The distinctive terms are that metaphor's own words, absent
+# from Q010_QUERY (which only says "métaphore géologique"). Against the local
+# 7B judge it scores "partiellement pertinent" (3/3 runs, judge_chunk.relevance
+# v1 and v2 alike), with a justification claiming the chunk does not mention
+# the geological metaphor — hence the calibration xfail below.
+Q010_QUERY = (
+    "Quelle métaphore géologique Bergson utilise-t-il pour comprendre le "
+    "développement de la philosophie grecque ?"
 )
+Q010_CHUNK_ID = "1932_2S_c170"
+Q010_CHUNK_DISTINCTIVE_TERMS = ("sédiment", "érupti", "écorce")
 
 # Q001 (eval/gold_dataset.csv) — its own real gold chunk, about the
 # continuous, self-renewing flux of inner psychological states (the "boule
@@ -94,9 +85,7 @@ Q001_CHUNK_DISTINCTIVE_TERMS = ("durée",)
 # Q005 (eval/gold_dataset.csv) — a real gold chunk about the 1906 San
 # Francisco earthquake as a case study in how perception personifies
 # catastrophe, topically unrelated to Q001's claim about the continuous
-# flux of inner states: no shared vocabulary with Q001_QUERY. Verified
-# empirically (2/2 runs) that judge_chunk(Q001_QUERY, this chunk) reliably
-# returns "non pertinent".
+# flux of inner states: no shared vocabulary with Q001_QUERY.
 UNRELATED_CHUNK_ID = "1932_2S_c115"
 UNRELATED_CHUNK_DISTINCTIVE_TERMS = ("tremblement de terre", "san francisco")
 
@@ -141,13 +130,13 @@ _judge_skip = pytest.mark.skipif(
 
 # Known failure since the 1 chunk = 1 paragraph reindexing: with its current
 # prompt, the local judge rarely commits to the extremes of its label scale
-# — none of Q007's gold paragraphs scores "pertinent" on its own, and most
-# off-topic chunks for Q001 score "partiellement pertinent" instead of "non
-# pertinent". Fixtures to be re-picked after the judge-prompt experiment.
+# — none of Q007's gold paragraphs scores "pertinent" on its own, Q010's gold
+# chunk scores "partiellement pertinent" although it states the answer
+# verbatim, and most off-topic chunks for Q001 score "partiellement
+# pertinent" instead of "non pertinent".
 _judge_calibration_xfail = pytest.mark.xfail(
     strict=False,
-    reason="judge label calibration under 1-paragraph chunks — pending the judge-prompt "
-    "experiment",
+    reason="judge label calibration under 1-paragraph chunks",
 )
 
 RESOLVED_FALLBACK_MODEL = os.environ.get(FALLBACK_MODEL_ENV_VAR, DEFAULT_FALLBACK_MODEL)
@@ -185,12 +174,12 @@ def _has_distinctive_term(justification: str, terms: tuple[str, ...]) -> bool:
 @_judge_skip
 @_judge_calibration_xfail
 def test_judge_chunk_pertinent_for_matching_chunk(client):
-    chunk = _load_chunk(client, Q007_CHUNK_ID)
-    judgment: ChunkJudgment = judge_chunk(Q007_QUERY, chunk)
+    chunk = _load_chunk(client, Q010_CHUNK_ID)
+    judgment: ChunkJudgment = judge_chunk(Q010_QUERY, chunk)
 
     assert judgment["label"] == "pertinent"
     assert judgment["justification"].strip()
-    assert _has_distinctive_term(judgment["justification"], Q007_CHUNK_DISTINCTIVE_TERMS), judgment[
+    assert _has_distinctive_term(judgment["justification"], Q010_CHUNK_DISTINCTIVE_TERMS), judgment[
         "justification"
     ]
 

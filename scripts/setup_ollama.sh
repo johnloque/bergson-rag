@@ -8,11 +8,13 @@ set -euo pipefail
 # Docker-based -- it installs and runs Ollama directly on the host.
 #
 # Usage: ./scripts/setup_ollama.sh
-# Env overrides: OLLAMA_MODEL (default mistral), OLLAMA_HOST (default
-# http://localhost:11434, used only for the readiness poll and the final
-# verification request below).
+# Env overrides: OLLAMA_MODEL (default mistral), OLLAMA_CHUNK_JUDGE_MODEL
+# (default mistral-nemo, src/generation/chunk_judge.py's CHUNK_JUDGE_MODEL),
+# OLLAMA_HOST (default http://localhost:11434, used only for the readiness
+# poll and the final verification request below).
 
 MODEL="${OLLAMA_MODEL:-mistral}"
+CHUNK_JUDGE_MODEL="${OLLAMA_CHUNK_JUDGE_MODEL:-mistral-nemo}"
 HOST_URL="${OLLAMA_HOST:-http://localhost:11434}"
 
 wait_for_server() {
@@ -90,6 +92,9 @@ wait_for_server
 echo "Pulling model '${MODEL}'..."
 ollama pull "${MODEL}"
 
+echo "Pulling chunk judge model '${CHUNK_JUDGE_MODEL}'..."
+ollama pull "${CHUNK_JUDGE_MODEL}"
+
 # Verify with a real request/response, not just a successful pull exit
 # code -- a pulled-but-unloadable model, or a server that accepts
 # connections but can't actually serve, wouldn't be caught otherwise.
@@ -104,4 +109,5 @@ fi
 echo "OK: '${MODEL}' responded:"
 echo "${response}"
 echo ""
-echo "Native Ollama ready at ${HOST_URL}, model '${MODEL}' pulled and verified."
+echo "Native Ollama ready at ${HOST_URL}, model '${MODEL}' pulled and verified,"
+echo "chunk judge '${CHUNK_JUDGE_MODEL}' pulled."

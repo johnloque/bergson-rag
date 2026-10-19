@@ -39,6 +39,7 @@ from src.api.db import get_session
 from src.api.main import app
 from src.api.models import Conversation, Evaluation, Generation, RetrievedChunkRow, Turn
 from src.api.schemas import ChunkInput
+from src.generation.chunk_judge import CHUNK_JUDGE_MODEL
 from src.generation.faithfulness import DEFAULT_JUDGE_MODEL
 from src.generation.generate import (
     DEFAULT_FALLBACK_MODEL,
@@ -114,14 +115,22 @@ def _collection_populated() -> bool:
         return False
 
 
-def _model_reachable(model: str) -> bool:
+def _model_reachable(model: str, timeout: float = 5) -> bool:
     try:
         litellm.completion(
-            model=model, messages=[{"role": "user", "content": "ping"}], max_tokens=1, timeout=5
+            model=model,
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=1,
+            timeout=timeout,
         )
         return True
     except Exception:
         return False
+
+
+# On a 16 GB machine Ollama can't keep mistral and mistral-nemo loaded
+# together: every switch reloads nemo, which takes longer than 5 s cold.
+CHUNK_JUDGE_PING_TIMEOUT = 60
 
 
 _qdrant_skip = pytest.mark.skipif(
@@ -157,15 +166,20 @@ _judge_skip = pytest.mark.skipif(
     "default model pulled, or set MISTRAL_API_KEY / BERGSON_LLM_FALLBACK_MODEL",
 )
 
+_chunk_judge_skip = pytest.mark.skipif(
+    not _model_reachable(CHUNK_JUDGE_MODEL, timeout=CHUNK_JUDGE_PING_TIMEOUT),
+    reason=f"no reachable chunk judge ({CHUNK_JUDGE_MODEL}) — start Ollama with "
+    "mistral-nemo pulled",
+)
+
 # Known failure since the 1 chunk = 1 paragraph reindexing: with its current
 # prompt, the local judge rarely commits to the extremes of its label scale
 # — none of Q007's gold paragraphs scores "pertinent" on its own, and most
 # off-topic chunks for Q001 score "partiellement pertinent" instead of "non
-# pertinent". Fixtures to be re-picked after the judge-prompt experiment.
+# pertinent". Both pass with mistral-nemo (CHUNK_JUDGE_MODEL), docs/judge_chunk.md.
 _judge_calibration_xfail = pytest.mark.xfail(
     strict=False,
-    reason="judge label calibration under 1-paragraph chunks — pending the judge-prompt "
-    "experiment",
+    reason="judge label calibration under 1-paragraph chunks",
 )
 
 
@@ -744,7 +758,7 @@ def test_evaluate_second_call_for_same_generation_id_reuses_existing_row(client,
 
 @pytest.mark.slow
 @_qdrant_skip
-@_judge_skip
+@_chunk_judge_skip
 @_judge_calibration_xfail
 def test_judge_chunk_pertinent_for_matching_chunk(client, qdrant_client, engine):
     chunk = _load_chunk_input(qdrant_client, Q007_CHUNK_ID)
@@ -760,7 +774,7 @@ def test_judge_chunk_pertinent_for_matching_chunk(client, qdrant_client, engine)
 
 @pytest.mark.slow
 @_qdrant_skip
-@_judge_skip
+@_chunk_judge_skip
 @_judge_calibration_xfail
 def test_judge_chunk_non_pertinent_for_unrelated_chunk(client, qdrant_client, engine):
     chunk = _load_chunk_input(qdrant_client, UNRELATED_CHUNK_ID)

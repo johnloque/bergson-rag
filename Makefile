@@ -57,6 +57,7 @@ run:
 run-with-ollama:
 	OLLAMA_API_BASE=http://ollama:11434 docker compose --profile with-ollama up -d --build
 	docker compose exec ollama ollama pull mistral
+	docker compose exec ollama ollama pull mistral-nemo
 
 # Dependency order actually implemented: fetch-data -> build-index ->
 # setup-ollama -> setup-ml-service -> run.
